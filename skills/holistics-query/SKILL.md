@@ -7,6 +7,13 @@ description: Query Holistics datasets via the Semantic API using AMQL expression
 
 Query Holistics datasets programmatically using their Semantic API. The API handles joins, aggregations, relationships, and permissions — you specify dimensions and metrics, and get clean results back.
 
+Reference link for updates:
+
+- https://docs.holistics.io/docs/semantic-api/query-data
+- AQL Cheatsheet:
+  - https://docs.holistics.io/as-code/aql/aql-cheatsheet/functions
+  - https://docs.holistics.io/as-code/aql/aql-cheatsheet/operators
+
 ## Authentication
 
 Every request requires an API key in the `X-Holistics-Key` header. The user must provide their key (from **User Settings** in Holistics).
@@ -17,6 +24,8 @@ Every request requires an API key in the `X-Holistics-Key` header. The user must
 # Store the key (user provides this)
 HOLISTICS_API_KEY="<user-provided-key>"
 ```
+
+The key is usually stored in `.env` or `.envrc`.
 
 ## Regional Base URLs
 
@@ -198,7 +207,7 @@ Response:
 }
 ```
 
-### generate_sql (synchronous)
+### generate_sql (synchronous, optional)
 
 ```bash
 curl -s -X POST \
@@ -338,7 +347,7 @@ Response:
 When the user asks to query a Holistics dataset:
 
 1. **Get credentials:** Ask for the API key and region if not already provided. Never echo the key.
-2. **Identify the dataset:** Parse from a URL, or list datasets via `GET /data_sets`.
+2. **Identify the dataset id:** Parse from a URL, or list datasets via `GET /data_sets`.
 3. **Discover fields:** Call `GET /data_sets/{id}` to see available dimensions and metrics. Show them to the user.
 4. **Build the query:** Construct the JSON body with dimensions (with `id`s), metrics, filters, order, and limit.
 5. **Choose endpoint:** Use `submit_query` for data, `generate_sql` for SQL.
