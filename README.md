@@ -8,6 +8,7 @@ Reusable Claude Code and [Amp](https://ampcode.com) skills from @lelouvincx.
 | ---------------------------------------------- | ----------------------------------------------------- |
 | [slackcli](skills/slackcli/SKILL.md)           | Interact with Slack workspaces via the `slackcli` CLI |
 | [sql-formatter](skills/sql-formatter/SKILL.md) | Enforce internal SQL style guide                      |
+| [holistics-query](skills/holistics-query/SKILL.md) | Query Holistics datasets via Semantic API (AMQL)  |
 
 ## Setup
 
