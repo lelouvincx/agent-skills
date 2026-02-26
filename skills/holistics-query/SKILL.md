@@ -207,6 +207,52 @@ Response:
 }
 ```
 
+### Combined submit + poll + fetch script (recommended)
+
+Complex queries can take 30–60+ seconds. **Always use a polling loop** instead of separate manual calls. This single-command pattern handles submit, polling, and result fetching:
+
+```bash
+source .envrc  # loads HOLISTICS_API_KEY
+
+BASE_URL="https://<region>.holistics.io/api/v2"
+DATASET_ID="<id>"
+
+# Submit query
+JOB_RESPONSE=$(curl -s -X POST \
+  -H "X-Holistics-Key: $HOLISTICS_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"query": { ... }}' \
+  "$BASE_URL/data_sets/$DATASET_ID/submit_query")
+
+echo "$JOB_RESPONSE"
+JOB_ID=$(echo "$JOB_RESPONSE" | python3 -c "import sys,json; print(json.load(sys.stdin)['job']['id'])")
+
+# Poll until complete (up to ~100s)
+for i in $(seq 1 20); do
+  sleep 5
+  STATUS=$(curl -s -H "X-Holistics-Key: $HOLISTICS_API_KEY" \
+    "$BASE_URL/jobs/$JOB_ID" \
+    | python3 -c "import sys,json; print(json.load(sys.stdin)['job']['status'])")
+  echo "Poll $i: status=$STATUS"
+  if [ "$STATUS" = "success" ]; then
+    curl -s -H "X-Holistics-Key: $HOLISTICS_API_KEY" \
+      "$BASE_URL/jobs/$JOB_ID/result" | python3 -m json.tool
+    break
+  elif [ "$STATUS" = "failure" ] || [ "$STATUS" = "cancelled" ]; then
+    echo "Job $STATUS"
+    curl -s -H "X-Holistics-Key: $HOLISTICS_API_KEY" "$BASE_URL/jobs/$JOB_ID"
+    break
+  fi
+done
+```
+
+**Key notes:**
+
+- Poll every 5 seconds, up to 20 attempts (~100s max). Increase interval for very heavy queries.
+- Status transitions: `created` → `running` → `success`/`failure`/`cancelled`.
+- Jobs may briefly show `cancelling` before transitioning — just keep polling through it.
+- If the result is cached, `submit_query` returns data directly (no job polling needed).
+
 ### generate_sql (synchronous, optional)
 
 ```bash
@@ -370,6 +416,7 @@ When the user wants to see the SQL behind a query:
 - For boolean operators (`is_true`, `is_false`, `is_null`, `not_null`), pass an empty array `[]` as the value.
 - Use `generate_sql` first when debugging query issues — it shows exactly what SQL Holistics will run.
 - Rate limiting applies: check `RateLimit-Remaining` response header if you hit 429 errors.
+- The `last` filter operator may reject `[N, "period"]` for some period types. If it fails, use `between` with explicit ISO dates instead (e.g., `"between": ["2025-11-27", "2026-02-26"]`).
 
 ---
 
