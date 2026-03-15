@@ -4,15 +4,10 @@ set -euo pipefail
 REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
 SKILLS_DIR="$REPO_DIR/skills"
 BIN_DIR="$REPO_DIR/bin"
-AGENTS_DIR="$HOME/.config/agents/skills"
-OPENCODE_DIR="$HOME/.opencode/skills"
+CLAUDE_SKILLS_DIR="$HOME/.claude/skills"
 LOCAL_BIN="$HOME/.local/bin"
-SKILL_TARGET_DIRS=(
-	"$AGENTS_DIR"
-	"$OPENCODE_DIR"
-)
 
-mkdir -p "${SKILL_TARGET_DIRS[@]}" "$LOCAL_BIN"
+mkdir -p "$CLAUDE_SKILLS_DIR" "$LOCAL_BIN"
 
 # --- Skills ---
 
@@ -46,10 +41,8 @@ sync_skill_links() {
 	done
 }
 
-for target_dir in "${SKILL_TARGET_DIRS[@]}"; do
-	remove_stale_skill_links "$target_dir"
-	sync_skill_links "$target_dir"
-done
+remove_stale_skill_links "$CLAUDE_SKILLS_DIR"
+sync_skill_links "$CLAUDE_SKILLS_DIR"
 
 # --- CLI scripts (~/.local/bin) ---
 
