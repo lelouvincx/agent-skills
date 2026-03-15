@@ -17,7 +17,16 @@ parse_yaml() {
 	local skill_name=""
 	local skill_url=""
 	local skill_enabled=""
-	
+
+	_flush_skill() {
+		if [[ -n "$skill_name" && -n "$skill_url" && -n "$skill_enabled" ]]; then
+			echo "$skill_name|$skill_url|$skill_enabled"
+		fi
+		skill_name=""
+		skill_url=""
+		skill_enabled=""
+	}
+
 	while IFS= read -r line; do
 		# Skip comments and empty lines
 		[[ "$line" =~ ^[[:space:]]*# ]] && continue
@@ -25,23 +34,15 @@ parse_yaml() {
 		
 		# Parse skill entries
 		if [[ "$line" =~ ^[[:space:]]*-[[:space:]]*name:[[:space:]]*(.+)$ ]]; then
+			_flush_skill
 			skill_name="${BASH_REMATCH[1]}"
-			skill_url=""
-			skill_enabled=""
 		elif [[ "$line" =~ ^[[:space:]]*url:[[:space:]]*(.+)$ ]]; then
 			skill_url="${BASH_REMATCH[1]}"
 		elif [[ "$line" =~ ^[[:space:]]*enabled:[[:space:]]*(.+)$ ]]; then
 			skill_enabled="${BASH_REMATCH[1]}"
-			
-			# When we have all three values, output them
-			if [[ -n "$skill_name" && -n "$skill_url" && -n "$skill_enabled" ]]; then
-				echo "$skill_name|$skill_url|$skill_enabled"
-				skill_name=""
-				skill_url=""
-				skill_enabled=""
-			fi
 		fi
 	done < "$yaml_file"
+	_flush_skill
 }
 
 # --- Remote Skills Sync ---
@@ -80,7 +81,11 @@ sync_remote_skills() {
 		
 		# Calculate hash of remote content
 		local new_hash
-		new_hash=$(shasum -a 256 "$tmp_file" | awk '{print $1}')
+		if command -v sha256sum &>/dev/null; then
+			new_hash=$(sha256sum "$tmp_file" | awk '{print $1}')
+		else
+			new_hash=$(shasum -a 256 "$tmp_file" | awk '{print $1}')
+		fi
 		
 		# Check if content changed
 		local old_hash=""
@@ -88,7 +93,12 @@ sync_remote_skills() {
 			old_hash=$(grep "^REMOTE_HASH=" "$remote_source" | cut -d'=' -f2)
 		fi
 		
-		if [ "$new_hash" = "$old_hash" ] && [ -f "$skill_file" ]; then
+		local personal_changed=false
+		if [ -f "$personal_file" ] && [ -f "$skill_file" ] && [ "$personal_file" -nt "$skill_file" ]; then
+			personal_changed=true
+		fi
+
+		if [ "$new_hash" = "$old_hash" ] && [ -f "$skill_file" ] && [ "$personal_changed" = false ]; then
 			echo "✓ up-to-date"
 			rm -f "$tmp_file"
 			continue
@@ -96,16 +106,49 @@ sync_remote_skills() {
 		
 		echo -n "downloaded, "
 		
-		# Build final SKILL.md: PERSONAL.md (if exists) + remote content
-		{
-			if [ -f "$personal_file" ]; then
+		# Build final SKILL.md: frontmatter + PERSONAL.md (if exists) + remote body
+		if [ -f "$personal_file" ]; then
+			# Extract frontmatter and body from remote file
+			local in_frontmatter=false
+			local frontmatter_done=false
+			local frontmatter_lines=()
+			local body_lines=()
+
+			while IFS= read -r fmline; do
+				if [ "$frontmatter_done" = true ]; then
+					body_lines+=("$fmline")
+				elif [ "$in_frontmatter" = false ] && [[ "$fmline" == "---" ]]; then
+					in_frontmatter=true
+					frontmatter_lines+=("$fmline")
+				elif [ "$in_frontmatter" = true ] && [[ "$fmline" == "---" ]]; then
+					frontmatter_lines+=("$fmline")
+					frontmatter_done=true
+				elif [ "$in_frontmatter" = true ]; then
+					frontmatter_lines+=("$fmline")
+				else
+					# No frontmatter in file
+					body_lines+=("$fmline")
+				fi
+			done < "$tmp_file"
+
+			{
+				# Write frontmatter first (if any)
+				for fmline in "${frontmatter_lines[@]+"${frontmatter_lines[@]}"}"; do
+					echo "$fmline"
+				done
+				echo ""
 				cat "$personal_file"
 				echo ""
 				echo "---"
 				echo ""
-			fi
-			cat "$tmp_file"
-		} > "$skill_file"
+				# Write remote body
+				for fmline in "${body_lines[@]+"${body_lines[@]}"}"; do
+					echo "$fmline"
+				done
+			} > "$skill_file"
+		else
+			cp "$tmp_file" "$skill_file"
+		fi
 		
 		# Update metadata
 		cat > "$remote_source" <<-EOF
