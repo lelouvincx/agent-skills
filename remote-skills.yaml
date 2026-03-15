@@ -17,7 +17,7 @@ skills:
     url: https://raw.githubusercontent.com/lox/notion-cli/refs/heads/main/skills/notion/SKILL.md
     enabled: true
 
-  - name: linear
+  - name: linear-cli
     url: https://raw.githubusercontent.com/schpet/linear-cli/refs/heads/main/skills/linear-cli/SKILL.md
     enabled: true
     files:
