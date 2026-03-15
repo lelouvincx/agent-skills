@@ -7,12 +7,8 @@ BIN_DIR="$REPO_DIR/bin"
 REMOTE_SKILLS_CONFIG="$REPO_DIR/remote-skills.yaml"
 CLAUDE_SKILLS_DIR="$HOME/.claude/skills"
 LOCAL_BIN="$HOME/.local/bin"
-SKILL_TARGET_DIRS=(
-	"$AGENTS_DIR"
-	"$OPENCODE_DIR"
-)
 
-mkdir -p "${SKILL_TARGET_DIRS[@]}" "$LOCAL_BIN"
+mkdir -p "$CLAUDE_SKILLS_DIR" "$LOCAL_BIN"
 
 # --- Parse YAML (simple parser for our needs) ---
 
