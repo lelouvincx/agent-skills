@@ -1,0 +1,21 @@
+# Remote Skills Configuration
+# Format:
+#   name: skill-directory-name (must match directory under skills/)
+#   url: raw URL to remote SKILL.md file
+#   enabled: true/false (set to false to temporarily disable syncing)
+#
+# The sync process will:
+#   1. Fetch the remote SKILL.md from the URL
+#   2. Prepend PERSONAL.md content if it exists in skills/<name>/PERSONAL.md
+#   3. Generate skills/<name>/SKILL.md (this file is gitignored)
+#   4. Store metadata in skills/<name>/.remote-source
+
+skills:
+  - name: notion
+    url: https://raw.githubusercontent.com/lox/notion-cli/refs/heads/main/skills/notion/SKILL.md
+    enabled: true
+
+  # Add more remote skills here:
+  # - name: example-skill
+  #   url: https://raw.githubusercontent.com/user/repo/main/skills/example/SKILL.md
+  #   enabled: true
