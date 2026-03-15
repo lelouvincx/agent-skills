@@ -7,7 +7,6 @@ Reusable Claude Code and [Amp](https://ampcode.com) skills from @lelouvincx.
 | Skill                                              | Type   | Description                                           |
 | -------------------------------------------------- | ------ | ----------------------------------------------------- |
 | [slackcli](skills/slackcli/SKILL.md)               | Local  | Interact with Slack workspaces via the `slackcli` CLI |
-| [sql-formatter](skills/sql-formatter/SKILL.md)     | Local  | Enforce internal SQL style guide                      |
 | [holistics-query](skills/holistics-query/SKILL.md) | Local  | Query Holistics datasets via Semantic API (AMQL)      |
 | [bigquery-query](skills/bigquery-query/SKILL.md)   | Local  | Query Google BigQuery datasets using the bq CLI       |
 | [notion](skills/notion/SKILL.md)                   | Remote | Manage Notion pages, databases, and comments          |
