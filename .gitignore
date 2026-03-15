@@ -3,6 +3,11 @@
 skills/notion/SKILL.md
 skills/notion/.remote-source
 
+skills/linear/SKILL.md
+skills/linear/.remote-source
+skills/linear/references/
+skills/linear/scripts/
+
 # Add other remote skills here as they are added
 # Example:
 # skills/example-remote-skill/SKILL.md

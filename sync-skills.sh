@@ -17,14 +17,18 @@ parse_yaml() {
 	local skill_name=""
 	local skill_url=""
 	local skill_enabled=""
+	local skill_files=""
+	local in_files=false
 
 	_flush_skill() {
 		if [[ -n "$skill_name" && -n "$skill_url" && -n "$skill_enabled" ]]; then
-			echo "$skill_name|$skill_url|$skill_enabled"
+			echo "$skill_name|$skill_url|$skill_enabled|$skill_files"
 		fi
 		skill_name=""
 		skill_url=""
 		skill_enabled=""
+		skill_files=""
+		in_files=false
 	}
 
 	while IFS= read -r line; do
@@ -38,8 +42,21 @@ parse_yaml() {
 			skill_name="${BASH_REMATCH[1]}"
 		elif [[ "$line" =~ ^[[:space:]]*url:[[:space:]]*(.+)$ ]]; then
 			skill_url="${BASH_REMATCH[1]}"
+			in_files=false
 		elif [[ "$line" =~ ^[[:space:]]*enabled:[[:space:]]*(.+)$ ]]; then
 			skill_enabled="${BASH_REMATCH[1]}"
+			in_files=false
+		elif [[ "$line" =~ ^[[:space:]]*files:[[:space:]]*$ ]]; then
+			in_files=true
+		elif [[ "$in_files" == true ]] && [[ "$line" =~ ^[[:space:]]*-[[:space:]]*(.+)$ ]]; then
+			local file_entry="${BASH_REMATCH[1]}"
+			if [[ -n "$skill_files" ]]; then
+				skill_files="$skill_files,$file_entry"
+			else
+				skill_files="$file_entry"
+			fi
+		else
+			in_files=false
 		fi
 	done < "$yaml_file"
 	_flush_skill
@@ -56,7 +73,7 @@ sync_remote_skills() {
 	echo "Syncing remote skills..."
 	echo ""
 	
-	while IFS='|' read -r name url enabled; do
+	while IFS='|' read -r name url enabled files; do
 		[[ "$enabled" != "true" ]] && {
 			echo "⊘ $name: disabled, skipping"
 			continue
@@ -163,6 +180,25 @@ sync_remote_skills() {
 			echo "✓ merged with PERSONAL.md"
 		else
 			echo "✓ generated"
+		fi
+		
+		# Fetch companion files
+		if [[ -n "$files" ]]; then
+			local base_url="${url%/*}"
+			IFS=',' read -ra file_list <<< "$files"
+			for file_path in "${file_list[@]}"; do
+				local file_url="$base_url/$file_path"
+				local file_dest="$skill_dir/$file_path"
+				local file_dir
+				file_dir="$(dirname "$file_dest")"
+				mkdir -p "$file_dir"
+				echo -n "  ↳ $file_path: "
+				if curl -fsSL "$file_url" -o "$file_dest" 2>/dev/null; then
+					echo "✓"
+				else
+					echo "✗ failed"
+				fi
+			done
 		fi
 		
 	done < <(parse_yaml "$REMOTE_SKILLS_CONFIG")

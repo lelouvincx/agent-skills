@@ -3,17 +3,28 @@
 #   name: skill-directory-name (must match directory under skills/)
 #   url: raw URL to remote SKILL.md file
 #   enabled: true/false (set to false to temporarily disable syncing)
+#   files: (optional) list of companion files relative to SKILL.md URL
 #
 # The sync process will:
 #   1. Fetch the remote SKILL.md from the URL
 #   2. Prepend PERSONAL.md content if it exists in skills/<name>/PERSONAL.md
 #   3. Generate skills/<name>/SKILL.md (this file is gitignored)
 #   4. Store metadata in skills/<name>/.remote-source
+#   5. Fetch any listed companion files into skills/<name>/
 
 skills:
   - name: notion
     url: https://raw.githubusercontent.com/lox/notion-cli/refs/heads/main/skills/notion/SKILL.md
     enabled: true
+
+  - name: linear
+    url: https://raw.githubusercontent.com/schpet/linear-cli/refs/heads/main/skills/linear-cli/SKILL.md
+    enabled: true
+    files:
+      - references/issue.md
+      - references/project.md
+      - references/team.md
+      - references/commands.md
 
   # Add more remote skills here:
   # - name: example-skill
