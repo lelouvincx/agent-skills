@@ -1,6 +1,6 @@
 ---
 name: bigquery-query
-description: Query Google BigQuery datasets using the bq CLI. Use when the user asks to query, explore, or extract data from BigQuery, or run SQL against Google Cloud data warehouse.
+description: Query Google BigQuery datasets using the bq CLI. Use when the user asks to query, explore, or extract data from BigQuery.
 ---
 
 # bigquery-query – Google BigQuery CLI
@@ -36,8 +36,7 @@ gcloud config set project holistics-data-294707   # development
 
 1. **Check project** — `gcloud config get-value project` to confirm environment.
 2. **Discover** — List datasets and tables, inspect schemas before writing queries.
-3. **Estimate** — Use `--dry_run` to check bytes processed before running large queries.
-4. **Query** — Run the query with appropriate `LIMIT` for exploration.
+3. **Query** — Run the query.
 
 ## Core Commands
 
@@ -86,7 +85,7 @@ bq show --format=json PROJECT_ID:dataset.table | jq '{rows: .numRows, bytes: .nu
 - **Check your active project first** — run `gcloud config get-value project` before querying.
 - **Always filter on partition columns** to avoid full table scans and reduce costs.
 - **Use `--dry_run`** before running queries on large tables to check estimated bytes.
-- **Use `LIMIT`** during exploration; remove it only for final queries.
+- **Use `LIMIT 10`** during exploration; remove it only for final queries.
 - **Fully qualify table names** as `project.dataset.table` to avoid ambiguity.
 - **Use `SAFE_` prefix functions** (e.g., `SAFE_DIVIDE`, `SAFE_CAST`) to avoid query failures on bad data.
 - BigQuery charges by bytes scanned; `SELECT *` on wide tables is expensive. Select only needed columns.
