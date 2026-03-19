@@ -11,6 +11,7 @@ Reusable Claude Code and [Amp](https://ampcode.com) skills from @lelouvincx.
 | [bigquery-query](skills/bigquery-query/SKILL.md)   | Local  | Query Google BigQuery datasets using the bq CLI       |
 | [notion](skills/notion/SKILL.md)                   | Remote | Manage Notion pages, databases, and comments          |
 | [linear-cli](skills/linear/SKILL.md)               | Remote | Manage Linear issues from the command line            |
+| [shadcn](skills/shadcn/SKILL.md)                   | Remote | Manage shadcn/ui components — adding, styling, composing UI |
 
 ## Setup
 
