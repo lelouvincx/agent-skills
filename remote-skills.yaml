@@ -26,6 +26,19 @@ skills:
       - references/team.md
       - references/commands.md
 
+  - name: shadcn
+    url: https://raw.githubusercontent.com/shadcn-ui/ui/refs/heads/main/skills/shadcn/SKILL.md
+    enabled: true
+    files:
+      - cli.md
+      - customization.md
+      - mcp.md
+      - rules/styling.md
+      - rules/forms.md
+      - rules/composition.md
+      - rules/icons.md
+      - rules/base-vs-radix.md
+
   # Add more remote skills here:
   # - name: example-skill
   #   url: https://raw.githubusercontent.com/user/repo/main/skills/example/SKILL.md
