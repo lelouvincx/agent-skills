@@ -1,6 +1,6 @@
 ---
 name: holistics-query
-description: Query Holistics datasets via the Semantic API using AMQL expressions. Use when the user asks to query, explore, or extract data from Holistics datasets, or generate SQL from a Holistics semantic layer.
+description: Query Holistics datasets via the Semantic API using AMQL expressions. Use when the user asks to query, explore, or extract data from Holistics datasets; generate SQL from an explore query; publish AMQL assets to production.
 ---
 
 # holistics-query – Holistics Semantic API
@@ -407,6 +407,41 @@ When the user wants to see the SQL behind a query:
 1. Follow steps 1–4 from above.
 2. POST to `/data_sets/{id}/generate_sql` with the query body.
 3. Present the returned SQL, formatted for readability.
+
+## Workflow: Auto-Publish AML Project on Master Branch
+
+When the user wants to publish their Holistics AML project after merging to `master`:
+
+**Step 1: Submit publish request**
+
+```bash
+curl -s -X POST \
+  -H "X-Holistics-Key: $HOLISTICS_API_KEY" \
+  "https://<region>.holistics.io/api/v2/aml_studio/projects/submit_deploy"
+```
+
+This triggers publishing at the latest commit on the `master` branch and returns a job:
+
+```json
+{ "job_id": 12345, "status": "created" }
+```
+
+**Step 2: Poll for job completion**
+
+```bash
+# Poll until status is no longer "running"
+for i in $(seq 1 30); do
+  sleep 5
+  RESULT=$(curl -s -H "X-Holistics-Key: $HOLISTICS_API_KEY" \
+    "https://<region>.holistics.io/api/v2/jobs/$JOB_ID/result")
+  STATUS=$(echo "$RESULT" | python3 -c "import sys,json; print(json.load(sys.stdin).get('status','unknown'))")
+  echo "Poll $i: status=$STATUS"
+  if [ "$STATUS" != "running" ]; then
+    echo "$RESULT" | python3 -m json.tool
+    break
+  fi
+done
+```
 
 ## Tips
 
