@@ -12,6 +12,7 @@ Reusable Claude Code and [Amp](https://ampcode.com) skills from @lelouvincx.
 | [notion](skills/notion/SKILL.md)                   | Remote | Manage Notion pages, databases, and comments          |
 | [linear-cli](skills/linear/SKILL.md)               | Remote | Manage Linear issues from the command line            |
 | [shadcn](skills/shadcn/SKILL.md)                   | Remote | Manage shadcn/ui components — adding, styling, composing UI |
+| [playwright-skill](skills/playwright-skill/SKILL.md) | Remote | Browser automation for web projects using playwright-cli |
 
 ## Setup
 

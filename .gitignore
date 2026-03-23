@@ -12,3 +12,8 @@ skills/linear/scripts/
 # Example:
 # skills/example-remote-skill/SKILL.md
 # skills/example-remote-skill/.remote-source
+
+skills/playwright-skill/SKILL.md
+skills/playwright-skill/.remote-source
+skills/playwright-skill/bin/
+skills/playwright-skill/skill/
