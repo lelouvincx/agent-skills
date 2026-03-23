@@ -39,6 +39,28 @@ skills:
       - rules/icons.md
       - rules/base-vs-radix.md
 
+  - name: playwright-skill
+    url: https://raw.githubusercontent.com/willmarple/playwright-skill/main/SKILL.md
+    enabled: true
+    files:
+      - skill/INSTALL.md
+      - skill/CONFIG.md
+      - skill/AUTH.md
+      - skill/REFERENCE.md
+      - skill/worktrees.example.json
+      - skill/secrets.example.json
+      - bin/open
+      - bin/close
+      - bin/click-css
+      - bin/fill-css
+      - bin/upload
+      - bin/auth-save
+      - bin/auth-load
+      - bin/context
+      - bin/inject-capture
+      - bin/cache-query
+      - bin/_resolve-session
+
   # Add more remote skills here:
   # - name: example-skill
   #   url: https://raw.githubusercontent.com/user/repo/main/skills/example/SKILL.md
