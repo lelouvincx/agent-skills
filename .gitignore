@@ -17,3 +17,7 @@ skills/playwright-skill/SKILL.md
 skills/playwright-skill/.remote-source
 skills/playwright-skill/bin/
 skills/playwright-skill/skill/
+skills/playwright-skill/.playwright-cli
+
+skills/caveman/SKILL.md
+skills/caveman/.remote-source
