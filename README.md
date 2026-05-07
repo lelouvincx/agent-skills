@@ -40,3 +40,15 @@ skills:
 - Optionally add personal context in `skills/my-remote-skill/PERSONAL.md`.
 - It gets prepended to the fetched SKILL.md.
 - Run `./sync-skills.sh --remote` to sync.
+
+## Removing Skills
+
+**Local:** Delete `skills/my-skill/`, remove its row from the skills table above.
+
+**Remote:** Remove the entry from `remote-skills.yaml` and delete the skill directory:
+```bash
+rm -rf skills/my-remote-skill
+./sync-skills.sh --remote   # cleans up stale entries
+```
+
+If the skill was gitignored (check `.gitignore`), remove those lines too. Remove its row from the skills table above.
