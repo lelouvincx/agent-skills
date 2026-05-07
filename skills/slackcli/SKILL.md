@@ -5,183 +5,77 @@ description: Interact with Slack workspaces via the slackcli CLI. Use when the u
 
 # slackcli – Slack Workspace CLI
 
-You have access to `slackcli`, a CLI tool installed at `/Users/lelouvincx/.local/bin/slackcli` for interacting with Slack workspaces.
-
-## Authentication
-
-The user already has authenticated workspaces. Before performing any action, verify auth is working:
+`slackcli` is on `PATH`. Verify auth before any action:
 
 ```bash
 slackcli auth list
 ```
 
-If no workspaces are configured, guide the user through the easiest login flow:
+If empty, prefer browser-token extraction: open Slack in browser → DevTools → Network → right-click any Slack API request → Copy as cURL → `slackcli auth parse-curl --from-clipboard --login`. **Never log or echo tokens.**
 
-1. **Browser token extraction (recommended):**
-   - Open Slack in a browser → DevTools (Cmd+Option+I) → Network tab
-   - Right-click any Slack API request → Copy → Copy as cURL
-   - Run: `slackcli auth parse-curl --from-clipboard --login`
+## Reading messages (most common)
 
-2. **Standard token login (currently using):** `slackcli auth login-browser --xoxd <xoxd-token> --xoxc <xoxc-token> --workspace-url <url>`
-
-**NEVER log, echo, or expose tokens in output.** Pass them directly to the CLI.
-
-## Reading Messages (Primary Command)
-
-This is the most frequently used command. Master it first.
-
-```
+```bash
 slackcli conversations read <channel-id> [options]
 ```
 
-### Parsing Slack URLs (Most Common Flow)
+### Parsing Slack URLs
 
-Users will often paste a Slack message URL. You must parse it into a channel ID and thread timestamp.
+`https://<workspace>.slack.com/archives/<channel-id>/p<ts-no-dot>` → insert a dot before the last 6 digits of the timestamp.
 
-**URL format:**
+Example: `.../C02RC5RG4AD/p1771556130161929` → channel `C02RC5RG4AD`, `--thread-ts 1771556130.161929`. No `p` suffix → omit `--thread-ts`.
 
-```
-https://<workspace>.slack.com/archives/<channel-id>/p<timestamp-without-dot>
-```
+### Options
 
-**Parsing rule:** The `p`-prefixed timestamp has no dot. Insert a dot before the last 6 digits to get the `--thread-ts` value.
+| Option              | Notes                                       |
+| ------------------- | ------------------------------------------- |
+| `--limit <n>`       | Default `100` — usually too many; use 20–50 |
+| `--thread-ts <ts>`  | Read replies in a specific thread           |
+| `--exclude-replies` | Top-level only (good for channel scans)     |
+| `--oldest/--latest` | Unix timestamp window                       |
+| `--json`            | Required for `ts` (replying/reacting)       |
+| `--workspace <id>`  | Override default workspace                  |
 
-**Example:**
+### ⚠️ Empty `text`? Re-run with `--json`
 
-URL: `https://holistics.slack.com/archives/C02RC5RG4AD/p1771556130161929`
+Bot/integration posts (GitHub, Linear, Jira, Calendly…) often have empty `text`; the real content lives in `attachments[].text` or `blocks`. Default rendering shows a blank message. **Whenever a message looks empty or you need full body, use `--json`.**
 
-- Channel ID: `C02RC5RG4AD`
-- Raw timestamp: `1771556130161929` → insert dot → `1771556130.161929`
+### Decision guide
 
-```bash
-slackcli conversations read C02RC5RG4AD --thread-ts "1771556130.161929"
-```
+| Intent                          | Flags                                                 |
+| ------------------------------- | ----------------------------------------------------- |
+| "What's happening in #channel?" | `--exclude-replies --limit 50`                        |
+| "Read that thread / URL"        | `--thread-ts <ts>`                                    |
+| "Reply to a message"            | `--json` (capture `ts`) → `messages send --thread-ts` |
+| "What did X say yesterday?"     | `--oldest <start> --latest <end>`                     |
+| Bot/integration message         | `--json` (content is in `attachments`/`blocks`)       |
 
-When the URL has no `p`-timestamp suffix (e.g., `.../archives/C02RC5RG4AD`), just read the channel without `--thread-ts`.
-
-### Read the conversation
-
-**Basic read — recent messages:**
-
-```bash
-slackcli conversations read <channel-id> --limit 30
-```
-
-**Read a specific thread** (when the user pastes a URL, asks about a discussion, or says "that conversation"):
+## Finding channels
 
 ```bash
-slackcli conversations read <channel-id> --thread-ts <parent-message-timestamp>
+slackcli conversations list --exclude-archived --limit 100
+slackcli conversations list --types public_channel|private_channel|im|mpim
 ```
 
-**Top-level messages only** (skip threaded replies, useful for scanning/summarizing):
+When user says "#general", list first to resolve the ID.
+
+## Sending messages
 
 ```bash
-slackcli conversations read <channel-id> --exclude-replies --limit 50
+slackcli messages send --recipient-id <channel-or-user-id> --message "..."
+slackcli messages send --recipient-id <channel-id> --thread-ts <ts> --message "..."
 ```
 
-**Time-bounded reads** (catch up on a specific window):
+**Always confirm recipient + content with the user before sending.**
+
+## Reacting
 
 ```bash
-slackcli conversations read <channel-id> --oldest <timestamp> --latest <timestamp>
+slackcli messages react --channel-id <channel-id> --timestamp <ts> --emoji thumbsup
 ```
 
-**JSON output** (required when you need message timestamps for replying or reacting):
+Common: `thumbsup`, `heart`, `fire`, `eyes`, `white_check_mark`, `rocket`, `tada`.
 
-```bash
-slackcli conversations read <channel-id> --json --limit 30
-```
+## Multi-workspace
 
-### Option Reference
-
-| Option                   | Description                                 | Default |
-| ------------------------ | ------------------------------------------- | ------- |
-| `--limit <n>`            | Number of messages to return                | `100`   |
-| `--thread-ts <ts>`       | Read a specific thread by parent timestamp  | —       |
-| `--exclude-replies`      | Only top-level messages                     | `false` |
-| `--oldest <ts>`          | Start of time range (Unix timestamp)        | —       |
-| `--latest <ts>`          | End of time range (Unix timestamp)          | —       |
-| `--json`                 | JSON output with full metadata & timestamps | `false` |
-| `--workspace <id\|name>` | Override default workspace                  | default |
-
-### Decision Guide
-
-| User intent                          | Flags to use                                                       |
-| ------------------------------------ | ------------------------------------------------------------------ |
-| "What's happening in #channel?"      | `--exclude-replies --limit 50`                                     |
-| "Summarize #channel today"           | `--exclude-replies --limit 100` (then summarize)                   |
-| "Read that thread"                   | `--thread-ts <ts>`                                                 |
-| "I want to reply to a message"       | `--json` (to capture timestamps), then `messages send --thread-ts` |
-| "What did X say yesterday?"          | `--oldest <yesterday-start> --latest <yesterday-end>`              |
-| "Catch me up on the last 5 messages" | `--limit 5`                                                        |
-
-### Tips
-
-- Default `--limit` is 100, which is often too many. Use `--limit 20-50` for summaries.
-- Always use `--json` when the next step is replying or reacting — you need the `ts` field.
-- When summarizing, use `--exclude-replies` first for a high-level scan, then drill into interesting threads with `--thread-ts`.
-
-## Finding Channels & Conversations
-
-```bash
-# List all conversations (channels, DMs, groups)
-slackcli conversations list --limit 100
-
-# Filter by type
-slackcli conversations list --types public_channel
-slackcli conversations list --types private_channel
-slackcli conversations list --types im
-slackcli conversations list --types mpim
-
-# Exclude archived
-slackcli conversations list --exclude-archived
-```
-
-When the user refers to a channel by name (e.g., "#general"), list conversations and find the matching channel ID from the output before proceeding.
-
-## Sending Messages
-
-```bash
-# Send to a channel
-slackcli messages send --recipient-id <channel-id> --message "Hello team"
-
-# Reply in a thread
-slackcli messages send --recipient-id <channel-id> --thread-ts <timestamp> --message "Thread reply"
-
-# Send to a specific user (use their user ID from a DM conversation)
-slackcli messages send --recipient-id <user-id> --message "Direct message"
-```
-
-**Always confirm with the user before sending a message.** Show them the recipient and message content, then ask for approval.
-
-## Reacting to Messages
-
-```bash
-slackcli messages react --channel-id <channel-id> --timestamp <message-ts> --emoji thumbsup
-```
-
-Common emoji names: `thumbsup`, `heart`, `fire`, `eyes`, `white_check_mark`, `rocket`, `tada`.
-
-## Multi-Workspace
-
-If the user has multiple workspaces, specify which one with `--workspace`:
-
-```bash
-slackcli conversations list --workspace "Holistics"
-slackcli messages send --workspace "Holistics" --recipient-id <id> --message "hi"
-```
-
-## Workflow: Summarize a Channel
-
-When asked to summarize or catch up on a channel:
-
-1. `slackcli conversations list` → find the channel ID by name
-2. `slackcli conversations read <channel-id> --limit 50` → fetch recent messages
-3. Summarize the content, grouping by topic or thread
-
-## Workflow: Reply to a Conversation
-
-When asked to reply to a specific message:
-
-1. `slackcli conversations read <channel-id> --json --limit 20` → find the message timestamp
-2. Show the user the target message and your proposed reply
-3. After user confirms: `slackcli messages send --recipient-id <channel-id> --thread-ts <ts> --message "..."`
+Add `--workspace "<name|id>"` to any command if more than one workspace is configured.
