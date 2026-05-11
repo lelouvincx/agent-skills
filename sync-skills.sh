@@ -6,9 +6,10 @@ SKILLS_DIR="$REPO_DIR/skills"
 BIN_DIR="$REPO_DIR/bin"
 REMOTE_SKILLS_CONFIG="$REPO_DIR/remote-skills.yaml"
 CLAUDE_SKILLS_DIR="$HOME/.claude/skills"
+AGENTS_SKILLS_DIR="$HOME/.agents/skills"
 LOCAL_BIN="$HOME/.local/bin"
 
-mkdir -p "$CLAUDE_SKILLS_DIR" "$LOCAL_BIN"
+mkdir -p "$CLAUDE_SKILLS_DIR" "$AGENTS_SKILLS_DIR" "$LOCAL_BIN"
 
 # --- Parse YAML (simple parser for our needs) ---
 
@@ -243,8 +244,10 @@ if [[ "${1:-}" == "--remote" ]]; then
 	sync_remote_skills
 fi
 
-remove_stale_skill_links "$CLAUDE_SKILLS_DIR"
-sync_skill_links "$CLAUDE_SKILLS_DIR"
+for target in "$CLAUDE_SKILLS_DIR" "$AGENTS_SKILLS_DIR"; do
+	remove_stale_skill_links "$target"
+	sync_skill_links "$target"
+done
 
 # --- CLI scripts (~/.local/bin) ---
 
