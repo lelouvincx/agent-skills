@@ -9,6 +9,14 @@ skills/linear/references/
 skills/linear/scripts/
 
 # Add other remote skills here as they are added
+
+skills/grill-with-docs/SKILL.md
+skills/grill-with-docs/.remote-source
+skills/grill-with-docs/CONTEXT-FORMAT.md
+skills/grill-with-docs/ADR-FORMAT.md
+
+skills/grill-me/SKILL.md
+skills/grill-me/.remote-source
 # Example:
 # skills/example-remote-skill/SKILL.md
 # skills/example-remote-skill/.remote-source
@@ -19,3 +27,4 @@ skills/playwright-skill/bin/
 skills/playwright-skill/skill/
 skills/playwright-skill/.playwright-cli
 
+skills/playwright-skill/.playwright-skill

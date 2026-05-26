@@ -61,6 +61,17 @@ skills:
       - bin/cache-query
       - bin/_resolve-session
 
+  - name: grill-with-docs
+    url: https://raw.githubusercontent.com/mattpocock/skills/main/skills/engineering/grill-with-docs/SKILL.md
+    enabled: true
+    files:
+      - CONTEXT-FORMAT.md
+      - ADR-FORMAT.md
+
+  - name: grill-me
+    url: https://raw.githubusercontent.com/mattpocock/skills/main/skills/productivity/grill-me/SKILL.md
+    enabled: true
+
   # Add more remote skills here:
   # - name: example-skill
   #   url: https://raw.githubusercontent.com/user/repo/main/skills/example/SKILL.md
