@@ -9,6 +9,7 @@ Reusable Claude Code and [Amp](https://ampcode.com) skills from @lelouvincx.
 | [slackcli](skills/slackcli/SKILL.md)               | Local  | Interact with Slack workspaces via the `slackcli` CLI |
 | [bigquery-query](skills/bigquery-query/SKILL.md)   | Local  | Query Google BigQuery datasets using the bq CLI       |
 | [notion](skills/notion/SKILL.md)                   | Remote | Manage Notion pages, databases, and comments          |
+| [modern-web-guidance](skills/modern-web-guidance/SKILL.md) | Remote | Search tool for modern web development best practices |
 | [linear-cli](skills/linear/SKILL.md)               | Remote | Manage Linear issues from the command line            |
 | [shadcn](skills/shadcn/SKILL.md)                   | Remote | Manage shadcn/ui components — adding, styling, composing UI |
 | [playwright-skill](skills/playwright-skill/SKILL.md) | Remote | Browser automation for web projects using playwright-cli |

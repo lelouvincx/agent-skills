@@ -1,5 +1,10 @@
 # Generated SKILL.md files from remote skills
 # These are created by sync-skills.sh --remote from remote sources + PERSONAL.md
+
+# Example:
+# skills/example-remote-skill/SKILL.md
+# skills/example-remote-skill/.remote-source
+
 skills/notion/SKILL.md
 skills/notion/.remote-source
 
@@ -17,9 +22,10 @@ skills/grill-with-docs/ADR-FORMAT.md
 
 skills/grill-me/SKILL.md
 skills/grill-me/.remote-source
-# Example:
-# skills/example-remote-skill/SKILL.md
-# skills/example-remote-skill/.remote-source
+
+skills/modern-web-guidance/SKILL.md
+skills/modern-web-guidance/.remote-source
+skills/modern-web-guidance/guides/
 
 skills/playwright-skill/SKILL.md
 skills/playwright-skill/.remote-source
