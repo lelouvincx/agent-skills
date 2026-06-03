@@ -41,6 +41,12 @@ skills:
       - references/commands.md
 ```
 
+- Add `.gitignore` entries for the generated files (SKILL.md, `.remote-source`, and any companion file directories):
+  ```gitignore
+  skills/my-remote-skill/SKILL.md
+  skills/my-remote-skill/.remote-source
+  skills/my-remote-skill/references/
+  ```
 - Optionally add personal context in `skills/my-remote-skill/PERSONAL.md`.
 - It gets prepended to the fetched SKILL.md.
 - Run `./sync-skills.sh --remote` to sync.
