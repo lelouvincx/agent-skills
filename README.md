@@ -15,6 +15,7 @@ Reusable Claude Code and [Amp](https://ampcode.com) skills from @lelouvincx.
 | [playwright-skill](skills/playwright-skill/SKILL.md) | Remote | Browser automation for web projects using playwright-cli |
 | [grill-with-docs](skills/grill-with-docs/SKILL.md) | Remote | Stress-test plans against project language and documented decisions |
 | [grill-me](skills/grill-me/SKILL.md) | Remote | Stress-test plans through relentless one-question-at-a-time grilling |
+| [remotion](skills/remotion/SKILL.md) | Remote | Best practices for Remotion - Video creation in React |
 
 ## Setup
 
@@ -40,6 +41,12 @@ skills:
       - references/commands.md
 ```
 
+- Add `.gitignore` entries for the generated files (SKILL.md, `.remote-source`, and any companion file directories):
+  ```gitignore
+  skills/my-remote-skill/SKILL.md
+  skills/my-remote-skill/.remote-source
+  skills/my-remote-skill/references/
+  ```
 - Optionally add personal context in `skills/my-remote-skill/PERSONAL.md`.
 - It gets prepended to the fetched SKILL.md.
 - Run `./sync-skills.sh --remote` to sync.

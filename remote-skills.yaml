@@ -72,6 +72,43 @@ skills:
     url: https://raw.githubusercontent.com/mattpocock/skills/main/skills/productivity/grill-me/SKILL.md
     enabled: true
 
+  - name: remotion
+    url: https://raw.githubusercontent.com/remotion-dev/skills/main/skills/remotion/SKILL.md
+    enabled: true
+    files:
+      - rules/subtitles.md
+      - rules/ffmpeg.md
+      - rules/silence-detection.md
+      - rules/audio-visualization.md
+      - rules/sfx.md
+      - rules/3d.md
+      - rules/audio.md
+      - rules/calculate-metadata.md
+      - rules/compositions.md
+      - rules/google-fonts.md
+      - rules/local-fonts.md
+      - rules/get-audio-duration.md
+      - rules/get-video-dimensions.md
+      - rules/get-video-duration.md
+      - rules/gifs.md
+      - rules/images.md
+      - rules/light-leaks.md
+      - rules/lottie.md
+      - rules/html-in-canvas.md
+      - rules/measuring-dom-nodes.md
+      - rules/measuring-text.md
+      - rules/sequencing.md
+      - rules/tailwind.md
+      - rules/text-animations.md
+      - rules/timing.md
+      - rules/transitions.md
+      - rules/transparent-videos.md
+      - rules/trimming.md
+      - rules/videos.md
+      - rules/parameters.md
+      - rules/maplibre.md
+      - rules/voiceover.md
+
   - name: modern-web-guidance
     url: https://raw.githubusercontent.com/GoogleChrome/modern-web-guidance/main/skills/modern-web-guidance/SKILL.md
     enabled: true
