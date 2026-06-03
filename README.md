@@ -15,6 +15,7 @@ Reusable Claude Code and [Amp](https://ampcode.com) skills from @lelouvincx.
 | [playwright-skill](skills/playwright-skill/SKILL.md) | Remote | Browser automation for web projects using playwright-cli |
 | [grill-with-docs](skills/grill-with-docs/SKILL.md) | Remote | Stress-test plans against project language and documented decisions |
 | [grill-me](skills/grill-me/SKILL.md) | Remote | Stress-test plans through relentless one-question-at-a-time grilling |
+| [remotion](skills/remotion/SKILL.md) | Remote | Best practices for Remotion - Video creation in React |
 
 ## Setup
 

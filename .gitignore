@@ -34,3 +34,7 @@ skills/playwright-skill/skill/
 skills/playwright-skill/.playwright-cli
 
 skills/playwright-skill/.playwright-skill
+
+skills/remotion/SKILL.md
+skills/remotion/.remote-source
+skills/remotion/rules/
