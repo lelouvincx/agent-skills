@@ -251,6 +251,15 @@ skills:
       - guides/webmcp/agentic-javascript-tools.md
       - guides/webmcp/webmcp.md
 
+  - name: teach
+    url: https://raw.githubusercontent.com/mattpocock/skills/main/skills/productivity/teach/SKILL.md
+    enabled: true
+    files:
+      - MISSION-FORMAT.md
+      - RESOURCES-FORMAT.md
+      - GLOSSARY-FORMAT.md
+      - LEARNING-RECORD-FORMAT.md
+
   # Add more remote skills here:
   # - name: example-skill
   #   url: https://raw.githubusercontent.com/user/repo/main/skills/example/SKILL.md
