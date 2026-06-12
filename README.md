@@ -16,6 +16,7 @@ Reusable Claude Code and [Amp](https://ampcode.com) skills from @lelouvincx.
 | [grill-with-docs](skills/grill-with-docs/SKILL.md) | Remote | Stress-test plans against project language and documented decisions |
 | [grill-me](skills/grill-me/SKILL.md) | Remote | Stress-test plans through relentless one-question-at-a-time grilling |
 | [remotion](skills/remotion/SKILL.md) | Remote | Best practices for Remotion - Video creation in React |
+| [copywriting](skills/copywriting/SKILL.md) | Remote | Expert conversion copywriting for marketing pages |
 
 ## Setup
 
