@@ -260,6 +260,13 @@ skills:
       - GLOSSARY-FORMAT.md
       - LEARNING-RECORD-FORMAT.md
 
+  - name: copywriting
+    url: https://raw.githubusercontent.com/coreyhaines31/marketingskills/main/skills/copywriting/SKILL.md
+    enabled: true
+    files:
+      - references/copy-frameworks.md
+      - references/natural-transitions.md
+
   # Add more remote skills here:
   # - name: example-skill
   #   url: https://raw.githubusercontent.com/user/repo/main/skills/example/SKILL.md
