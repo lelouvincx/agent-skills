@@ -124,7 +124,7 @@ sync_remote_skills() {
 		
 		echo -n "downloaded, "
 		
-		# Build final SKILL.md: frontmatter + PERSONAL.md (if exists) + remote body
+		# Build final SKILL.md: frontmatter + remote body + PERSONAL.md (if exists)
 		if [ -f "$personal_file" ]; then
 			# Extract frontmatter and body from remote file
 			local in_frontmatter=false
@@ -154,18 +154,25 @@ sync_remote_skills() {
 				for fmline in "${frontmatter_lines[@]+"${frontmatter_lines[@]}"}"; do
 					echo "$fmline"
 				done
-				echo ""
-				cat "$personal_file"
-				echo ""
-				echo "---"
-				echo ""
 				# Write remote body
 				for fmline in "${body_lines[@]+"${body_lines[@]}"}"; do
 					echo "$fmline"
 				done
+				echo ""
+				cat "$personal_file"
 			} > "$skill_file"
+			# Ensure frontmatter delimiters
+			if ! head -1 "$skill_file" | grep -q '^---$'; then
+				{ echo "---"; echo "---"; echo ""; cat "$skill_file"; } > "${skill_file}.tmp"
+				mv "${skill_file}.tmp" "$skill_file"
+			fi
 		else
 			cp "$tmp_file" "$skill_file"
+			# Ensure frontmatter delimiters
+			if ! head -1 "$skill_file" | grep -q '^---$'; then
+				{ echo "---"; echo "---"; echo ""; cat "$skill_file"; } > "${skill_file}.tmp"
+				mv "${skill_file}.tmp" "$skill_file"
+			fi
 		fi
 		
 		# Update metadata
