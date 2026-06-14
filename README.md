@@ -17,6 +17,9 @@ Reusable Claude Code and [Amp](https://ampcode.com) skills from @lelouvincx.
 | [grill-me](skills/grill-me/SKILL.md) | Remote | Stress-test plans through relentless one-question-at-a-time grilling |
 | [remotion](skills/remotion/SKILL.md) | Remote | Best practices for Remotion - Video creation in React |
 | [copywriting](skills/copywriting/SKILL.md) | Remote | Expert conversion copywriting for marketing pages |
+| [ponytail](skills/ponytail/SKILL.md) | Remote | Lazy senior dev mode — forces simplest/minimal solution (YAGNI, stdlib first) |
+| [ponytail-review](skills/ponytail-review/SKILL.md) | Remote | Code review hunting only over-engineering — what to delete |
+| [ponytail-help](skills/ponytail-help/SKILL.md) | Remote | Quick-reference card for ponytail modes and commands |
 
 ## Setup
 

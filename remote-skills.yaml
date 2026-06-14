@@ -267,6 +267,18 @@ skills:
       - references/copy-frameworks.md
       - references/natural-transitions.md
 
+  - name: ponytail
+    url: https://raw.githubusercontent.com/DietrichGebert/ponytail/main/skills/ponytail/SKILL.md
+    enabled: true
+
+  - name: ponytail-review
+    url: https://raw.githubusercontent.com/DietrichGebert/ponytail/main/skills/ponytail-review/SKILL.md
+    enabled: true
+
+  - name: ponytail-help
+    url: https://raw.githubusercontent.com/DietrichGebert/ponytail/main/skills/ponytail-help/SKILL.md
+    enabled: true
+
   # Add more remote skills here:
   # - name: example-skill
   #   url: https://raw.githubusercontent.com/user/repo/main/skills/example/SKILL.md
