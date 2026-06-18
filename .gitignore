@@ -15,14 +15,6 @@ skills/linear/scripts/
 
 # Add other remote skills here as they are added
 
-skills/grill-with-docs/SKILL.md
-skills/grill-with-docs/.remote-source
-skills/grill-with-docs/CONTEXT-FORMAT.md
-skills/grill-with-docs/ADR-FORMAT.md
-
-skills/grill-me/SKILL.md
-skills/grill-me/.remote-source
-
 skills/modern-web-guidance/SKILL.md
 skills/modern-web-guidance/.remote-source
 skills/modern-web-guidance/guides/
@@ -38,13 +30,6 @@ skills/playwright-skill/.playwright-skill
 skills/remotion/SKILL.md
 skills/remotion/.remote-source
 skills/remotion/rules/
-
-skills/teach/SKILL.md
-skills/teach/.remote-source
-skills/teach/MISSION-FORMAT.md
-skills/teach/RESOURCES-FORMAT.md
-skills/teach/GLOSSARY-FORMAT.md
-skills/teach/LEARNING-RECORD-FORMAT.md
 
 skills/copywriting/SKILL.md
 skills/copywriting/.remote-source
