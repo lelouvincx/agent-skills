@@ -61,17 +61,6 @@ skills:
       - bin/cache-query
       - bin/_resolve-session
 
-  - name: grill-with-docs
-    url: https://raw.githubusercontent.com/mattpocock/skills/main/skills/engineering/grill-with-docs/SKILL.md
-    enabled: true
-    files:
-      - CONTEXT-FORMAT.md
-      - ADR-FORMAT.md
-
-  - name: grill-me
-    url: https://raw.githubusercontent.com/mattpocock/skills/main/skills/productivity/grill-me/SKILL.md
-    enabled: true
-
   - name: remotion
     url: https://raw.githubusercontent.com/remotion-dev/skills/main/skills/remotion/SKILL.md
     enabled: true
@@ -250,15 +239,6 @@ skills:
       - guides/webmcp/agentic-forms.md
       - guides/webmcp/agentic-javascript-tools.md
       - guides/webmcp/webmcp.md
-
-  - name: teach
-    url: https://raw.githubusercontent.com/mattpocock/skills/main/skills/productivity/teach/SKILL.md
-    enabled: true
-    files:
-      - MISSION-FORMAT.md
-      - RESOURCES-FORMAT.md
-      - GLOSSARY-FORMAT.md
-      - LEARNING-RECORD-FORMAT.md
 
   - name: copywriting
     url: https://raw.githubusercontent.com/coreyhaines31/marketingskills/main/skills/copywriting/SKILL.md

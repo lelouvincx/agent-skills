@@ -13,8 +13,6 @@ Reusable Claude Code and [Amp](https://ampcode.com) skills from @lelouvincx.
 | [linear-cli](skills/linear/SKILL.md)               | Remote | Manage Linear issues from the command line            |
 | [shadcn](skills/shadcn/SKILL.md)                   | Remote | Manage shadcn/ui components — adding, styling, composing UI |
 | [playwright-skill](skills/playwright-skill/SKILL.md) | Remote | Browser automation for web projects using playwright-cli |
-| [grill-with-docs](skills/grill-with-docs/SKILL.md) | Remote | Stress-test plans against project language and documented decisions |
-| [grill-me](skills/grill-me/SKILL.md) | Remote | Stress-test plans through relentless one-question-at-a-time grilling |
 | [remotion](skills/remotion/SKILL.md) | Remote | Best practices for Remotion - Video creation in React |
 | [copywriting](skills/copywriting/SKILL.md) | Remote | Expert conversion copywriting for marketing pages |
 | [ponytail](skills/ponytail/SKILL.md) | Remote | Lazy senior dev mode — forces simplest/minimal solution (YAGNI, stdlib first) |
