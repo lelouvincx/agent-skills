@@ -24,6 +24,7 @@ Use these sources in order when adding or refreshing a document:
 ### Agent-callable tools
 
 - [Claude Code Subagent](./claude-code-subagent.md)
+- [Label Skill/Plugin Usage](./label-skill-plugin-usage.md)
 - [Pi Code Subagent](./pi-code-subagent.md)
 - [Spawn Worker](./spawn-worker.md)
 - [Send to Thread](./send-to-thread.md)
@@ -36,9 +37,11 @@ Use these sources in order when adding or refreshing a document:
 ### Commands
 
 - [Logseq: Log Current Task](./logseq-log-current-task.md)
+- [Track Event](./track-event.md)
 
 ### Event handlers
 
+- [Capture Skill/Plugin Magic Words](./capture-skill-plugin-magic-words.md)
 - [RTK Rewrite](./rtk-rewrite.md)
 - [Holistics Markdown Result Renderer](./holistics-md.md)
 - [Holistics MCP Error Logger](./holistics-mcp-errors.md)
