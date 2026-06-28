@@ -4,9 +4,11 @@ set -euo pipefail
 REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
 SKILLS_DIR="$REPO_DIR/skills"
 BIN_DIR="$REPO_DIR/bin"
+AMP_DIR="$REPO_DIR/amp"
 REMOTE_SKILLS_CONFIG="$REPO_DIR/remote-skills.yaml"
 CLAUDE_SKILLS_DIR="$HOME/.claude/skills"
 AGENTS_SKILLS_DIR="$HOME/.agents/skills"
+AMP_CONFIG_DIR="${AMP_CONFIG_DIR:-$HOME/.config/amp}"
 LOCAL_BIN="$HOME/.local/bin"
 
 mkdir -p "$CLAUDE_SKILLS_DIR" "$AGENTS_SKILLS_DIR" "$LOCAL_BIN"
@@ -214,6 +216,35 @@ sync_remote_skills() {
 	echo ""
 }
 
+# --- Amp artifacts (~/.config/amp) ---
+
+sync_amp_artifacts() {
+	[ -d "$AMP_DIR" ] || return 0
+
+	echo "Syncing Amp artifacts..."
+	echo ""
+
+	if [ -f "$AMP_DIR/AGENTS.md" ]; then
+		mkdir -p "$AMP_CONFIG_DIR"
+		cp "$AMP_DIR/AGENTS.md" "$AMP_CONFIG_DIR/AGENTS.md"
+		echo "copied: amp/AGENTS.md -> $AMP_CONFIG_DIR/AGENTS.md"
+	fi
+
+	if [ -d "$AMP_DIR/plugins" ]; then
+		mkdir -p "$AMP_CONFIG_DIR/plugins"
+		rsync -a --delete "$AMP_DIR/plugins/" "$AMP_CONFIG_DIR/plugins/"
+		echo "synced: amp/plugins/ -> $AMP_CONFIG_DIR/plugins/"
+	fi
+
+	if [ -d "$AMP_DIR/docs/tools" ]; then
+		mkdir -p "$AMP_CONFIG_DIR/docs/tools"
+		rsync -a --delete "$AMP_DIR/docs/tools/" "$AMP_CONFIG_DIR/docs/tools/"
+		echo "synced: amp/docs/tools/ -> $AMP_CONFIG_DIR/docs/tools/"
+	fi
+
+	echo ""
+}
+
 # --- Skills ---
 
 remove_stale_skill_links() {
@@ -250,6 +281,8 @@ sync_skill_links() {
 if [[ "${1:-}" == "--remote" ]]; then
 	sync_remote_skills
 fi
+
+sync_amp_artifacts
 
 for target in "$CLAUDE_SKILLS_DIR" "$AGENTS_SKILLS_DIR"; do
 	remove_stale_skill_links "$target"

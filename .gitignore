@@ -47,3 +47,12 @@ skills/ponytail-help/.remote-source
 skills/writing-great-skills/SKILL.md
 skills/writing-great-skills/.remote-source
 skills/writing-great-skills/GLOSSARY.md
+
+# Amp runtime/source mirror: keep only intentional source artifacts under amp/.
+# Do not commit local runtime state, logs, settings, MCP configs, or write metadata.
+amp/logs/
+amp/mcp/
+amp/settings*.json
+amp/context-profiles.json
+amp/github-profiles.json
+amp/**/*.amp-write-meta
