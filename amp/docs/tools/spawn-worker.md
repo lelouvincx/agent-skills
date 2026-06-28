@@ -99,7 +99,7 @@ Optional inputs:
 | Field | Type | Default | Notes |
 | --- | --- | --- | --- |
 | `mode` | `smart \| deep \| rush` | `deep` | Built-in Amp agent mode for the worker. |
-| `reasoningEffort` | `none \| minimal \| low \| medium \| high \| xhigh \| max` | `high` | Reasoning effort pinned for the worker; equivalent to Amp's deep 2. |
+| `reasoningEffort` | `none \| minimal \| low \| medium \| high \| xhigh \| max` | `high` | Reasoning effort pinned for the worker; Amp CLI displays this as Deep 1, but OpenAI-style reasoning effort is `high`. |
 
 Output is a short text confirmation: `Started <mode>/<reasoningEffort> worker in <threadID>. Do not poll or wait for it.`
 
