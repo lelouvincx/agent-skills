@@ -21,7 +21,7 @@ export default function (amp: PluginAPI) {
 			'Give the worker concrete scope, constraints, expected output, and validation instructions. Do not wait for the worker.',
 			'The worker is instructed to privately reconstruct parent-thread intent before executing so incidental recent context does not replace the original task intent.',
 			'The worker is instructed to report back to this thread with a structured summary via send_to_thread, decide whether parent follow-up is required, then archive itself with archive_current_thread once no required follow-up remains.',
-			"Defaults to the built-in deep agent with high reasoning effort, equivalent to Amp's deep 2.",
+			"Defaults to the built-in deep agent with high reasoning effort; Amp CLI displays this as Deep 1, but OpenAI-style reasoning effort is high.",
 		].join(' '),
 		inputSchema: {
 			type: 'object',
@@ -38,7 +38,7 @@ export default function (amp: PluginAPI) {
 				reasoningEffort: {
 					type: 'string',
 					enum: ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'],
-					description: "Optional reasoning effort for the worker. Defaults to high, equivalent to Amp's deep 2.",
+					description: 'Optional reasoning effort for the worker. Defaults to high; Amp CLI displays this as Deep 1, but OpenAI-style reasoning effort is high.',
 				},
 			},
 			required: ['instructions'],

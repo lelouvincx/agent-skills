@@ -105,7 +105,7 @@ Runtime defaults:
 | --------------------------- | --------------------------------------------------------------------------- |
 | Logseq repo                 | `AMP_LOGSEQ_GRAPH_DIR` or `/Users/lelouvincx/Developer/second-brain-logseq` |
 | Worker mode                 | `deep`                                                                      |
-| Worker reasoning effort     | `high` (deep² equivalent)                                                   |
+| Worker reasoning effort     | `high` (Amp CLI Deep 1; OpenAI-style `high` effort)                         |
 | Worker timeout              | 10 minutes                                                                  |
 | Parent recent-message seed  | 20 messages                                                                 |
 | Parent excerpt limit        | 20000 characters                                                            |
