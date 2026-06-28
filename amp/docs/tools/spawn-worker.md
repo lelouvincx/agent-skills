@@ -3,7 +3,7 @@ doc_schema: "amp-plugin-capability/v1"
 title: "Spawn Worker"
 slug: "spawn-worker"
 status: "active"
-summary: "Launches a bounded independent Amp worker thread and instructs it to report back with send_to_thread."
+summary: "Launches a bounded independent Amp worker thread, instructs it to report back with send_to_thread, then archives itself."
 capability:
   id: "spawn_worker"
   type: "agent_tool"
@@ -37,6 +37,7 @@ runtime:
     - "ctx.thread.id"
   dependencies:
     - "send_to_thread tool available to worker"
+    - "archive_current_thread tool available to worker"
     - "read_thread tool available to worker when parent intent reconstruction is needed"
   env: []
   reads:
@@ -45,6 +46,7 @@ runtime:
   writes:
     - "new child Amp thread"
     - "initial worker user message"
+    - "worker thread archive state after final report"
   network:
     - "Amp agent runtime for spawned worker"
   logs: []
@@ -56,6 +58,8 @@ safety:
     - "Worker must privately reconstruct parent-thread intent before executing when the bounded task depends on broader context."
     - "Caller must not poll or wait for the worker."
     - "Worker is instructed to report completion through send_to_thread with steer=true."
+    - "Worker decides whether follow-up is required, distinguishing optional parent review from required parent input."
+    - "Worker is instructed to archive itself only after sending a terminal final report where required follow-up is none."
   risks:
     - "Unbounded instructions can create noisy or conflicting parallel work."
     - "Worker can preserve the wrong intent if it relies only on recent or incidental parent-thread context."
@@ -72,7 +76,7 @@ tags:
 
 ## Summary
 
-`spawn_worker` starts an independent Amp worker thread for one bounded implementation or investigation slice. It lets a coordinator thread keep working while the child thread reports back later through `send_to_thread`.
+`spawn_worker` starts an independent Amp worker thread for one bounded implementation or investigation slice. It lets a coordinator thread keep working while the child thread reports back later through `send_to_thread`, then archives itself after a terminal final report when no required follow-up is needed.
 
 ## Invocation
 
@@ -95,7 +99,7 @@ Optional inputs:
 | Field | Type | Default | Notes |
 | --- | --- | --- | --- |
 | `mode` | `smart \| deep \| rush` | `deep` | Built-in Amp agent mode for the worker. |
-| `reasoningEffort` | `none \| minimal \| low \| medium \| high \| xhigh \| max` | `high` | Reasoning effort pinned for the worker; equivalent to Amp's deep 2. |
+| `reasoningEffort` | `none \| minimal \| low \| medium \| high \| xhigh \| max` | `high` | Reasoning effort pinned for the worker; Amp CLI displays this as Deep 1, but OpenAI-style reasoning effort is `high`. |
 
 Output is a short text confirmation: `Started <mode>/<reasoningEffort> worker in <threadID>. Do not poll or wait for it.`
 
@@ -105,11 +109,11 @@ The tool validates `instructions`, normalizes the built-in mode and reasoning ef
 
 The prompt tells the worker that the parent owns the broader design, the worker owns only the bounded task, and the worker must preserve parent-thread intent. Before executing, the worker has an explicit private intent-reconstruction step: use `read_thread` on the parent thread when available, or otherwise inspect the parent thread as fully as available, then infer and keep distinct the original user intent, any later user redirects, the latest coherent requested outcome, and how the bounded worker task supports that outcome. The worker must not let incidental recent-message context replace the original task intent; if reconstructed intent and the worker instructions appear to conflict, it should follow explicit latest redirects and otherwise report the ambiguity as a blocker instead of guessing.
 
-When done or blocked, the worker must call `send_to_thread` with a concise structured report.
+When done or blocked, the worker must call `send_to_thread` with a concise structured report. The worker decides whether follow-up is required, but must interpret that narrowly: optional parent review, FYI summaries, or “review the diff if desired” are not required follow-up. Required follow-up means the worker cannot safely finish without parent input, such as a decision between alternatives, missing context, permission, a blocker, or explicit next instructions. If the report is terminal and `Follow-up needed` is empty or `none`, the worker then calls `archive_current_thread` to archive itself. If it is blocked or requires parent input, it stays unarchived so the parent can reply; after completing any follow-up, it sends a new terminal report and archives itself.
 
 ## Permissions and side effects
 
-This tool creates a new Amp thread and appends a user message to it. The worker inherits the selected built-in mode's tool permissions and may make code changes if its task asks for implementation. The parent thread does not wait for the worker and should not poll it.
+This tool creates a new Amp thread, appends a user message to it, and instructs that worker to archive itself after a terminal report. The worker inherits the selected built-in mode's tool permissions and may make code changes if its task asks for implementation. The parent thread does not wait for the worker and should not poll it.
 
 ## Examples
 
@@ -137,7 +141,8 @@ Spawn a faster worker:
 - `mode must be one of...`: use only `smart`, `deep`, or `rush`.
 - `reasoningEffort must be one of...`: use the supported reasoning enum.
 - Worker does not report back: inspect the child thread ID from the return value and check whether `send_to_thread` is available.
+- Worker reports back but remains visible: check whether `archive_current_thread` is available to the worker, then archive the child thread manually if needed.
 
 ## Maintenance notes
 
-Update this doc when built-in agent modes, reasoning efforts, parent-thread intent reconstruction, worker report format, or the relationship with `send_to_thread` changes. Keep examples bounded; this tool is for parallel slices, not broad delegation.
+Update this doc when built-in agent modes, reasoning efforts, parent-thread intent reconstruction, worker report format, self-archive behavior, or the relationship with `send_to_thread` changes. Keep examples bounded; this tool is for parallel slices, not broad delegation.

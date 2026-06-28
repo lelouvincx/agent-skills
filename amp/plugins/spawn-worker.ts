@@ -1,7 +1,8 @@
 // @i-know-the-amp-plugin-api-is-wip-and-very-experimental-right-now
 //
 // spawn-worker — starts an independent worker thread and gives it structured
-// instructions for reporting back through the send_to_thread tool.
+// instructions for reporting back through send_to_thread, then archiving itself
+// once no follow-up is needed.
 
 import type { AgentReasoningEffort, BuiltinAgentMode, PluginAPI } from '@ampcode/plugin'
 
@@ -19,7 +20,7 @@ export default function (amp: PluginAPI) {
 			'Use this when the current thread is acting as the design/coordinator thread and wants a worker to execute one clear slice while the main thread keeps iterating on the broader design.',
 			'Give the worker concrete scope, constraints, expected output, and validation instructions. Do not wait for the worker.',
 			'The worker is instructed to privately reconstruct parent-thread intent before executing so incidental recent context does not replace the original task intent.',
-			'The worker is instructed to report back to this thread with a structured summary via send_to_thread.',
+			'The worker is instructed to report back to this thread with a structured summary via send_to_thread, decide whether parent follow-up is required, then archive itself with archive_current_thread once no required follow-up remains.',
 			"Defaults to the built-in deep agent with high reasoning effort, equivalent to Amp's deep 2.",
 		].join(' '),
 		inputSchema: {
@@ -74,7 +75,9 @@ Validation:
 Open questions / blockers:
 Follow-up needed:
 
-If the parent thread replies with follow-up instructions, continue from those instructions.
+You decide whether parent follow-up is required, but interpret it narrowly. Optional parent review, FYI summaries, or "review the diff if desired" are not required follow-up. Required follow-up means you cannot safely finish without parent input, such as a decision between alternatives, missing context, permission, a blocker, or explicit next instructions.
+
+If the report is terminal and Follow-up needed is empty or none, then after the send_to_thread report succeeds, call archive_current_thread to archive this worker thread. Do not archive before the parent-thread report is sent. If you are blocked or require parent input, do not archive yet; wait for the parent thread to reply with follow-up instructions. After completing follow-up, send a new terminal report and archive yourself when no required follow-up remains.
 
 ${instructions}`
 
