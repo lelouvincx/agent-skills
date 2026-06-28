@@ -259,6 +259,12 @@ skills:
     url: https://raw.githubusercontent.com/DietrichGebert/ponytail/main/skills/ponytail-help/SKILL.md
     enabled: true
 
+  - name: writing-great-skills
+    url: https://raw.githubusercontent.com/mattpocock/skills/main/skills/productivity/writing-great-skills/SKILL.md
+    enabled: true
+    files:
+      - GLOSSARY.md
+
   # Add more remote skills here:
   # - name: example-skill
   #   url: https://raw.githubusercontent.com/user/repo/main/skills/example/SKILL.md
