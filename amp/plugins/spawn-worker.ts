@@ -1,0 +1,105 @@
+// @i-know-the-amp-plugin-api-is-wip-and-very-experimental-right-now
+//
+// spawn-worker — starts an independent worker thread and gives it structured
+// instructions for reporting back through the send_to_thread tool.
+
+import type { AgentReasoningEffort, BuiltinAgentMode, PluginAPI } from '@ampcode/plugin'
+
+const DEFAULT_MODE: BuiltinAgentMode = 'deep'
+const DEFAULT_REASONING_EFFORT: AgentReasoningEffort = 'high'
+const BUILTIN_MODES = new Set(['smart', 'deep', 'rush'])
+const REASONING_EFFORTS = new Set(['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'])
+
+export default function (amp: PluginAPI) {
+	amp.registerTool({
+		name: 'spawn_worker',
+		description: [
+			'Launch a new independent worker thread for a bounded implementation or investigation task.',
+			'Trigger phrases include spawn worker, worker thread, launch a worker, parallel agent, background worker, delegate this slice, and run this in parallel.',
+			'Use this when the current thread is acting as the design/coordinator thread and wants a worker to execute one clear slice while the main thread keeps iterating on the broader design.',
+			'Give the worker concrete scope, constraints, expected output, and validation instructions. Do not wait for the worker.',
+			'The worker is instructed to privately reconstruct parent-thread intent before executing so incidental recent context does not replace the original task intent.',
+			'The worker is instructed to report back to this thread with a structured summary via send_to_thread.',
+			"Defaults to the built-in deep agent with high reasoning effort, equivalent to Amp's deep 2.",
+		].join(' '),
+		inputSchema: {
+			type: 'object',
+			properties: {
+				instructions: {
+					type: 'string',
+					description: 'Instructions to send to the worker thread. Include task scope, constraints, success criteria, and validation to run.',
+				},
+				mode: {
+					type: 'string',
+					enum: ['smart', 'deep', 'rush'],
+					description: 'Optional built-in Amp agent mode for the worker. Defaults to deep.',
+				},
+				reasoningEffort: {
+					type: 'string',
+					enum: ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'],
+					description: "Optional reasoning effort for the worker. Defaults to high, equivalent to Amp's deep 2.",
+				},
+			},
+			required: ['instructions'],
+		},
+
+		async execute(input, ctx) {
+			const instructions = String(input.instructions || '').trim()
+			if (!instructions) {
+				throw new Error('instructions are required')
+			}
+			const mode = normalizeMode(input.mode)
+			const reasoningEffort = normalizeReasoningEffort(input.reasoningEffort)
+
+			const workerAgent = amp.getBuiltinAgent(mode, { reasoningEffort })
+			const thread = await workerAgent.createThread({ parentThreadID: ctx.thread.id })
+			const message = `You are a worker thread spawned by parent thread ${ctx.thread.id}.
+
+The parent thread is the design/coordinator thread and owns the broader architectural intent. Your job is to execute only the bounded task below, preserve the stated constraints, and avoid speculative abstractions or unrelated cleanup.
+
+Before executing, first perform a private intent-reconstruction step. Use read_thread on ${ctx.thread.id} when available, or otherwise inspect the parent thread as fully as available. Infer and keep distinct: (a) the original user intent, (b) any later user redirect, (c) the latest coherent requested outcome, and (d) how this bounded worker task supports that outcome. Do not write anything yet.
+
+Execute the bounded task represented by the worker instructions in that reconstructed parent-thread context. Do not let incidental recent-message context replace the original task intent. If the reconstructed intent and worker instructions appear to conflict, follow explicit latest redirects; otherwise report the ambiguity as blocked instead of guessing.
+
+When complete or blocked, call the send_to_thread tool with:
+- threadID: ${ctx.thread.id}
+- steer: true
+- message: a concise structured report using this format:
+
+Worker thread: ${thread.id}
+Status: done | blocked
+Task summary:
+Files changed:
+Validation:
+Open questions / blockers:
+Follow-up needed:
+
+If the parent thread replies with follow-up instructions, continue from those instructions.
+
+${instructions}`
+
+			await thread.appendUserMessage({
+				type: 'user-message',
+				content: message,
+			})
+
+			return `Started ${mode}/${reasoningEffort} worker in ${thread.id}. Do not poll or wait for it.`
+		},
+	})
+}
+
+function normalizeMode(raw: unknown): BuiltinAgentMode {
+	const mode = String(raw || DEFAULT_MODE).trim()
+	if (!BUILTIN_MODES.has(mode)) {
+		throw new Error('mode must be one of: smart, deep, rush')
+	}
+	return mode as BuiltinAgentMode
+}
+
+function normalizeReasoningEffort(raw: unknown): AgentReasoningEffort {
+	const reasoningEffort = String(raw || DEFAULT_REASONING_EFFORT).trim()
+	if (!REASONING_EFFORTS.has(reasoningEffort)) {
+		throw new Error('reasoningEffort must be one of: none, minimal, low, medium, high, xhigh, max')
+	}
+	return reasoningEffort as AgentReasoningEffort
+}

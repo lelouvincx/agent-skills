@@ -29,6 +29,26 @@ cd agent-skills
 ./sync-skills.sh             # local
 ```
 
+`sync-skills.sh` also syncs version-controlled Amp runtime artifacts from this repo into `~/.config/amp`:
+
+```text
+amp/AGENTS.md          -> ~/.config/amp/AGENTS.md
+amp/plugins/           -> ~/.config/amp/plugins/
+amp/docs/tools/        -> ~/.config/amp/docs/tools/
+```
+
+Use `AMP_CONFIG_DIR=/path/to/amp-config ./sync-skills.sh` to test against a temporary Amp config directory.
+
+## Amp artifacts
+
+Amp plugins and plugin capability docs are maintained under `amp/` in this repo. Treat `~/.config/amp` as the runtime projection, not the long-term source of truth.
+
+When changing a plugin capability:
+
+1. Update `amp/docs/tools/*.md` first.
+2. Update `amp/plugins/*.ts` to match the documented contract.
+3. Run `./sync-skills.sh` to project the change into `~/.config/amp`.
+
 ## Adding Skills
 
 **Local:** Create `skills/my-skill/SKILL.md` with YAML frontmatter, then run `./sync-skills.sh`.
