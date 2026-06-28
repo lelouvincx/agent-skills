@@ -18,6 +18,7 @@ Reusable Claude Code and [Amp](https://ampcode.com) skills from @lelouvincx.
 | [ponytail](skills/ponytail/SKILL.md) | Remote | Lazy senior dev mode — forces simplest/minimal solution (YAGNI, stdlib first) |
 | [ponytail-review](skills/ponytail-review/SKILL.md) | Remote | Code review hunting only over-engineering — what to delete |
 | [ponytail-help](skills/ponytail-help/SKILL.md) | Remote | Quick-reference card for ponytail modes and commands |
+| [writing-great-skills](skills/writing-great-skills/SKILL.md) | Remote | Reference for writing and editing skills well |
 
 ## Setup
 
