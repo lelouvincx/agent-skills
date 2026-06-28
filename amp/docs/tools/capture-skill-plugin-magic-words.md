@@ -24,12 +24,13 @@ amp:
 contract:
   input_kind: "plugin_event"
   output_kind: "append_only_jsonl"
-  event: "turn.start_or_incoming_user_message"
+  event: "agent.start_and_tool.result"
   command_id: null
   agent_mode_key: null
 runtime:
   uses:
-    - "turn-start or incoming-user-message event when Amp exposes one"
+    - "amp.on('agent.start')"
+    - "amp.on('tool.result') for tracked subagent/tool wrappers"
     - "agent-callable fallback when no suitable plugin event exists"
     - "optional agent.end finalizer for pending capture enrichment"
     - "ctx.thread.messages"
@@ -87,7 +88,8 @@ The capability exists so Chinh can use explicit prefixes such as `usage capture:
 
 - Surface: plugin event pipeline
 - Registered with: `amp.on`
-- Preferred event: turn start or incoming user message, if Amp exposes one
+- Preferred event: `agent.start`, fired when the user submits a prompt
+- Tracked invocation event: `tool.result` for terminal tracked subagent/tool wrapper results
 - Fallback: agent-callable tool with the same contract when no suitable plugin event exists
 - Optional later event: `agent.end` only to enrich or finalize a pending capture with outcome metadata
 - ID: `capture_skill_plugin_magic_words`
@@ -160,6 +162,8 @@ When a canonical label phrase maps clearly to a taxonomy label, the handler appe
 An optional `agent.end` finalizer may later enrich a pending capture with compact outcome metadata. It must not inspect broad raw transcripts or create the initial capture event from scratch.
 
 Tracked artifact activity also creates usage events when the signal is reliable: edits or reviews of `AGENTS.md`, `SKILL.md`, `amp/docs/tools/*.md`, plugin prompts, plugin docs, subagent prompts, or invocations of tracked plugin capabilities, commands, modes, and subagent wrappers.
+
+A passive `tool.result` handler captures terminal invocations for the first reliable tracked tool set: `claude_code_subagent`, `pi_code_subagent`, and `spawn_worker`. It records the tool name, terminal status, compact summary, artifact metadata, and privacy booleans. It must not store raw tool input, raw output, error text, prompts, transcripts, or command payloads. Dataset-maintenance capabilities such as `track_event` and `label_skill_plugin_usage` are excluded from self-capture.
 
 ## Permissions and side effects
 
