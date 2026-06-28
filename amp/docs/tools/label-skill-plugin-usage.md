@@ -74,7 +74,7 @@ tags:
 
 ## Summary
 
-`label_skill_plugin_usage` appends manual labels for existing skill/plugin usage events. It covers canonical label-prefix requests such as `usage label: helped` and `usage label: wrong tool`, plus explicit correction requests that name the event or label to supersede.
+`label_skill_plugin_usage` appends manual labels for existing skill/plugin usage events. It covers direct labels such as `this helped`, negative labels such as `wrong tool`, and corrections such as “remove the too_verbose label; this was actually helped.”
 
 The tool preserves auditability by treating labels as append-only rows. Corrections append superseding label rows instead of modifying older rows.
 
@@ -86,7 +86,7 @@ The tool preserves auditability by treating labels as append-only rows. Correcti
 - ID: `label_skill_plugin_usage`
 - Plugin file: `plugins/skill-plugin-usage.ts`
 
-Amp should call this tool when Chinh explicitly labels or corrects a captured event. Simple previous-turn labels should come through the canonical `usage label:` prefix, such as `usage label: helped`, `usage label: no-op`, `usage label: wrong tool`, `usage label: too verbose`, or `usage label: missed trigger`. Backfills and corrections should use explicit event or label pointers rather than adding extra free-form magic words.
+Amp should call this tool when Chinh explicitly labels or corrects a captured event, including phrases such as `this helped`, `no-op`, `wrong tool`, `too verbose`, and `missed trigger`.
 
 ## Contract
 
@@ -135,7 +135,7 @@ Label the previous event as helpful:
   "labels": ["helped"],
   "verdict": "keep",
   "confidence": "medium",
-  "notes": "usage label: helped"
+  "notes": "this helped"
 }
 ```
 
@@ -151,7 +151,7 @@ Correct a previous label:
   "labels": ["tool_mismatch"],
   "verdict": "rewrite",
   "confidence": "high",
-  "notes": "usage label: wrong tool",
+  "notes": "wrong tool",
   "supersedes_label_id": "lbl_2026-06-28T12-45-00Z_d4e5f6"
 }
 ```
