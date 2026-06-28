@@ -20,7 +20,7 @@ plugin:
 amp:
   api_docs_source: "amp plugins show-docs"
   agent_options_source: "amp plugins show-agent-options --json"
-  last_verified: "2026-06-24"
+  last_verified: "2026-06-28"
 contract:
   input_kind: "json_schema"
   output_kind: "text"
@@ -95,7 +95,7 @@ Optional inputs:
 | Field | Type | Default | Notes |
 | --- | --- | --- | --- |
 | `mode` | `smart \| deep \| rush` | `deep` | Built-in Amp agent mode for the worker. |
-| `reasoningEffort` | `none \| minimal \| low \| medium \| high \| xhigh \| max` | `high` | Reasoning effort pinned for the worker; equivalent to Amp's deep 2. |
+| `reasoningEffort` | `none \| minimal \| low \| medium \| high \| xhigh \| max` | `xhigh` | Reasoning effort pinned for the worker. `xhigh` matches Amp's current Deep 2 setting; `high` is lower and not equivalent. |
 
 Output is a short text confirmation: `Started <mode>/<reasoningEffort> worker in <threadID>. Do not poll or wait for it.`
 
@@ -113,7 +113,7 @@ This tool creates a new Amp thread and appends a user message to it. The worker 
 
 ## Examples
 
-Spawn a default deep worker:
+Spawn a default Deep 2-equivalent worker:
 
 ```json
 {
@@ -140,4 +140,4 @@ Spawn a faster worker:
 
 ## Maintenance notes
 
-Update this doc when built-in agent modes, reasoning efforts, parent-thread intent reconstruction, worker report format, or the relationship with `send_to_thread` changes. Keep examples bounded; this tool is for parallel slices, not broad delegation.
+Update this doc when built-in agent modes, reasoning efforts, the Deep 2 effort mapping, parent-thread intent reconstruction, worker report format, or the relationship with `send_to_thread` changes. Keep examples bounded; this tool is for parallel slices, not broad delegation.

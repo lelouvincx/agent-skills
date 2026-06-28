@@ -105,7 +105,7 @@ Runtime defaults:
 | --------------------------- | --------------------------------------------------------------------------- |
 | Logseq repo                 | `AMP_LOGSEQ_GRAPH_DIR` or `/Users/lelouvincx/Developer/second-brain-logseq` |
 | Worker mode                 | `deep`                                                                      |
-| Worker reasoning effort     | `high` (deep² equivalent)                                                   |
+| Worker reasoning effort     | `xhigh` (matches Amp's current Deep 2 setting)                              |
 | Worker timeout              | 10 minutes                                                                  |
 | Parent recent-message seed  | 20 messages                                                                 |
 | Parent excerpt limit        | 20000 characters                                                            |
@@ -114,7 +114,7 @@ Runtime defaults:
 
 ## Behavior
 
-The command checks for an active thread, prompts for an optional hint, reads up to 20 recent messages only as a seed for link/outcome extraction, spawns a hidden built-in `deep/high` worker thread, and sends it a Logseq-specific prompt. The worker has an explicit private intent-reconstruction step: read the parent Amp thread, infer the original user intent, the latest coherent requested outcome, and the durable result to log, then proceed from that reconstructed intent. The worker is asked to update an existing block when possible, otherwise append a concise journal block under `Done`, `Tasks`, or `Notes`.
+The command checks for an active thread, prompts for an optional hint, reads up to 20 recent messages only as a seed for link/outcome extraction, spawns a hidden built-in `deep/xhigh` worker thread, and sends it a Logseq-specific prompt. The worker has an explicit private intent-reconstruction step: read the parent Amp thread, infer the original user intent, the latest coherent requested outcome, and the durable result to log, then proceed from that reconstructed intent. The worker is asked to update an existing block when possible, otherwise append a concise journal block under `Done`, `Tasks`, or `Notes`.
 
 Before choosing or writing a block, the worker must treat the Logseq graph's canonical map as the source of truth: read `pages/Canonical Pages.md`, then read the corresponding canonical project/rule pages named there, especially `pages/Projects.md`, `pages/Backlog.md`, and relevant rule pages. The logged task's `project:: [[...]]`, priority, title, and placement must be coherent with that canonical project taxonomy and any matching active backlog task. If the recent-message seed, reconstructed intent, and canonical pages disagree, the worker should prefer the reconstructed original thread intent and canonical project mapping over incidental recent-message context.
 

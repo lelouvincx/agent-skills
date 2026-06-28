@@ -16,7 +16,7 @@ import type {
 
 const LOGSEQ_REPO = process.env.AMP_LOGSEQ_GRAPH_DIR ?? '/Users/lelouvincx/Developer/second-brain-logseq'
 const WORKER_MODE: BuiltinAgentMode = 'deep'
-const WORKER_REASONING_EFFORT: AgentReasoningEffort = 'high'
+const WORKER_REASONING_EFFORT: AgentReasoningEffort = 'xhigh'
 const WORKER_TIMEOUT_MS = 10 * 60 * 1000
 const PARENT_RECENT_MESSAGE_SEED_LIMIT = 20
 const MAX_PARENT_EXCERPT_CHARS = 20_000
