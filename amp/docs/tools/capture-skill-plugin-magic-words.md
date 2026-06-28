@@ -59,7 +59,7 @@ safety:
     - "Append label rows only when a canonical label phrase maps to a clear target; corrections are superseding label rows."
     - "At most one automatic event per thread turn by default unless Chinh explicitly names multiple artifacts or labels."
   risks:
-    - "Phrase matching can be noisy if a broad phrase appears incidentally."
+    - "Phrase matching can be noisy if prefixes are made too broad."
     - "Plugin event APIs may not expose enough user-message context; implementation may need an agent-callable fallback with this same contract."
 related:
   - "track-event"
@@ -77,7 +77,7 @@ tags:
 
 `capture_skill_plugin_magic_words` is the automatic-first capture capability for the grounded skill/plugin usage dataset. It watches predictable, canonical phrases and tracked artifact activity, then appends compact usage events under `~/.config/amp/logs/skill-plugin-usage/` without copying private task context.
 
-The capability exists so Chinh can say lightweight phrases such as `track this`, `this helped`, or `which instructions are no-ops` and get durable usage evidence for later skill/plugin maintenance.
+The capability exists so Chinh can use explicit prefixes such as `usage capture: plugin ...`, `usage label: wrong tool`, or `usage report` and get durable usage evidence for later skill/plugin maintenance.
 
 ## Invocation
 
@@ -114,48 +114,32 @@ Every captured event row must include:
 | `privacy.contains_file_contents` | Must be `false`. |
 | `privacy.contains_secrets` | Must be `false`. |
 
-Canonical capture phrases are case-insensitive and phrase-based:
+Canonical capture phrases are case-insensitive prefixes, not broad natural-language phrases:
 
-- `learn this`
-- `record this`
-- `log this`
-- `track this`
-- `capture this`
-- `add this to the dataset`
-- `add this to skill/plugin usage`
-- `remember this for skills/plugins`
-- `usage event`
-- `skill/plugin usage`
+- `usage capture: skill <skill-or-instruction-target>`
+- `usage capture: plugin <plugin-or-capability-target>`
 
-Canonical label phrases trigger event capture plus a label row when the target is clear:
+Canonical label phrases trigger event capture plus a label row when the target is clear. They must start with `usage label:` followed by one of these label phrases:
 
-- `label this`
-- `mark this`
-- `this helped`
-- `this was useful`
-- `this saved time`
-- `this was a no-op`
-- `no-op`
-- `ignored instruction`
-- `you ignored`
-- `wrong trigger`
-- `missed trigger`
-- `wrong tool`
-- `tool mismatch`
-- `too verbose`
-- `over-scoped`
-- `docs/code drift`
-- `unsafe`
-- `risky`
-- `I had to correct`
+- `usage label: helped`
+- `usage label: useful`
+- `usage label: saved time`
+- `usage label: no-op`
+- `usage label: ignored instruction`
+- `usage label: wrong trigger`
+- `usage label: missed trigger`
+- `usage label: wrong tool`
+- `usage label: tool mismatch`
+- `usage label: too verbose`
+- `usage label: over-scoped`
+- `usage label: docs/code drift`
+- `usage label: unsafe`
+- `usage label: risky`
+- `usage label: had to correct`
 
-Canonical report phrases trigger a report flow later and may capture the report request as its own usage event:
+Canonical report phrase:
 
 - `usage report`
-- `skill/plugin report`
-- `what should we delete`
-- `what should we rewrite`
-- `which instructions are no-ops`
 
 ## Behavior
 
@@ -163,7 +147,7 @@ On each eligible event, the handler inspects only the minimal recent task contex
 
 The handler appends at most one event per thread turn by default. It may append multiple rows only when Chinh explicitly names multiple artifacts, multiple labels, or multiple distinct events to capture.
 
-When a canonical label phrase maps clearly to a taxonomy label, the handler appends both an event row and a label row. For example, `this helped` maps to `helped`, `no-op` maps to `no_op`, `wrong tool` maps to `tool_mismatch`, `too verbose` maps to `too_verbose`, and `missed trigger` maps to `missed_trigger`. If the target artifact or instruction is ambiguous, capture the event with an `unclear` or `needs_more_data` label rather than asking a broad follow-up question.
+When a canonical label phrase maps clearly to a taxonomy label, the handler appends both an event row and a label row. For example, `usage label: helped` maps to `helped`, `usage label: no-op` maps to `no_op`, `usage label: wrong tool` maps to `tool_mismatch`, `usage label: too verbose` maps to `too_verbose`, and `usage label: missed trigger` maps to `missed_trigger`. If the target artifact or instruction is ambiguous, capture the event with an `unclear` or `needs_more_data` label rather than asking a broad follow-up question.
 
 Tracked artifact activity also creates usage events when the signal is reliable: edits or reviews of `AGENTS.md`, `SKILL.md`, `amp/docs/tools/*.md`, plugin prompts, plugin docs, subagent prompts, or invocations of tracked plugin capabilities, commands, modes, and subagent wrappers.
 
@@ -178,25 +162,25 @@ Privacy constraints are strict: no plaintext secrets, env values, raw transcript
 User phrase that captures one event:
 
 ```text
-track this for skill/plugin usage
+usage capture: plugin pi-code-subagent
 ```
 
 User phrase that captures an event and a positive label:
 
 ```text
-this helped
+usage label: helped
 ```
 
 User phrase that captures an event and a negative label:
 
 ```text
-wrong tool; this should have used the Pi Code subagent
+usage label: wrong tool
 ```
 
 Report phrase that may also be captured as a usage event:
 
 ```text
-which instructions are no-ops?
+usage report
 ```
 
 ## Troubleshooting
