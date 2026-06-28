@@ -87,7 +87,7 @@ The capability exists so Chinh can say lightweight phrases such as `track this`,
 - ID: `capture_skill_plugin_magic_words`
 - Plugin file: `plugins/skill-plugin-usage.ts`
 
-The v1 implementation should use an event handler if Amp exposes enough recent user-message context. If the plugin event API cannot reliably observe canonical phrases, implement the same behavior as an agent-callable tool fallback whose description tells Amp to call it whenever the current user message contains a canonical phrase. The product behavior remains automatic-first capture either way.
+The initial implementation should use an event handler if Amp exposes enough recent user-message context. If the plugin event API cannot reliably observe canonical phrases, implement the same behavior as an agent-callable tool fallback whose description tells Amp to call it whenever the current user message contains a canonical phrase. The product behavior remains automatic-first capture either way.
 
 ## Contract
 
