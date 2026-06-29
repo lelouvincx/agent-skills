@@ -62,8 +62,7 @@ safety:
     - "macOS notification permissions for the hosting terminal or Amp client can suppress notifications."
     - "Click-to-focus depends on Herdr pane metadata matching the Amp process that emitted the notification."
     - "High-turn-volume workflows can produce many notifications."
-related:
-  - "context-window-notifier"
+related: []
 tags:
   - "event-handler"
   - "macos"
