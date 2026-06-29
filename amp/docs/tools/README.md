@@ -45,7 +45,6 @@ Use these sources in order when adding or refreshing a document:
 - [RTK Rewrite](./rtk-rewrite.md)
 - [Holistics Markdown Result Renderer](./holistics-md.md)
 - [Holistics MCP Error Logger](./holistics-mcp-errors.md)
-- [Context Window Notifier](./context-window-notifier.md)
 - [macOS Turn End Notifier](./macos-turn-end-notifier.md)
 
 ## Maintenance files
