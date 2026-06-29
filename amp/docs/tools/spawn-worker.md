@@ -99,13 +99,15 @@ Optional inputs:
 | Field | Type | Default | Notes |
 | --- | --- | --- | --- |
 | `mode` | `smart \| deep \| rush` | `deep` | Built-in Amp agent mode for the worker. |
-| `reasoningEffort` | `none \| minimal \| low \| medium \| high \| xhigh \| max` | `high` | Reasoning effort pinned for the worker; Amp CLI displays this as Deep 1, but OpenAI-style reasoning effort is `high`. |
+| `reasoningEffort` | `none \| minimal \| low \| medium \| high \| xhigh \| max` | `medium` | Reasoning effort pinned for the worker. Amp's GPT-5.5 guidance says `medium` is the right default for normal deep work; `high` can cost more and perform worse. |
 
 Output is a short text confirmation: `Started <mode>/<reasoningEffort> worker in <threadID>. Do not poll or wait for it.`
 
 ## Behavior
 
 The tool validates `instructions`, normalizes the built-in mode and reasoning effort, obtains a built-in agent with `amp.getBuiltinAgent`, creates a child thread with the current thread as `parentThreadID`, and appends a structured worker prompt.
+
+The default `deep/medium` setting intentionally follows Amp's GPT-5.5 model guidance rather than the CLI display label alone: `medium` is the recommended default for normal deep work, while `high` is not treated as a safe default because Amp's internal eval found it more expensive than `medium` and worse-performing on that run.
 
 The prompt tells the worker that the parent owns the broader design, the worker owns only the bounded task, and the worker must preserve parent-thread intent. Before executing, the worker has an explicit private intent-reconstruction step: use `read_thread` on the parent thread when available, or otherwise inspect the parent thread as fully as available, then infer and keep distinct the original user intent, any later user redirects, the latest coherent requested outcome, and how the bounded worker task supports that outcome. The worker must not let incidental recent-message context replace the original task intent; if reconstructed intent and the worker instructions appear to conflict, it should follow explicit latest redirects and otherwise report the ambiguity as a blocker instead of guessing.
 
