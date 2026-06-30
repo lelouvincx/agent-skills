@@ -19,6 +19,7 @@ Reusable Claude Code and [Amp](https://ampcode.com) skills from @lelouvincx.
 | [ponytail-review](skills/ponytail-review/SKILL.md) | Remote | Code review hunting only over-engineering — what to delete |
 | [ponytail-help](skills/ponytail-help/SKILL.md) | Remote | Quick-reference card for ponytail modes and commands |
 | [writing-great-skills](skills/writing-great-skills/SKILL.md) | Remote | Reference for writing and editing skills well |
+| [govuk-style](skills/govuk-style/SKILL.md) | Remote | GOV.UK-style plain-English writing, adapted for presales and customer Slack messages |
 
 ## Setup
 
