@@ -1,0 +1,38 @@
+{
+  "amp.dangerouslyAllowAll": true,
+  "amp.gauge": "tokens",
+  "amp.git.commit.ampThread.enabled": false,
+  "amp.git.commit.coauthor.enabled": false,
+  "amp.internal.deepReasoningEffort": "high",
+  "amp.mcpServers": {
+    "ffmpeg-mcp": {
+      "args": [
+        "-y",
+        "@bitscorp-mcp/mcp-ffmpeg"
+      ],
+      "command": "npx"
+    },
+    "sem": {
+      "args": [
+        "mcp"
+      ],
+      "command": "/opt/homebrew/bin/sem"
+    }
+  },
+  "amp.permissions": [
+    {
+      "action": "ask",
+      "tool": "Bash"
+    },
+    {
+      "action": "ask",
+      "tool": "mcp__*"
+    },
+    {
+      "action": "delegate",
+      "to": "my-permission-helper",
+      "tool": "*"
+    }
+  ],
+  "amp.updates.mode": "auto"
+}
