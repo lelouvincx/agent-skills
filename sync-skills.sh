@@ -230,16 +230,22 @@ sync_amp_artifacts() {
 		echo "copied: amp/AGENTS.md -> $AMP_CONFIG_DIR/AGENTS.md"
 	fi
 
+	if [ -f "$AMP_DIR/settings.json" ]; then
+		mkdir -p "$AMP_CONFIG_DIR"
+		cp "$AMP_DIR/settings.json" "$AMP_CONFIG_DIR/settings.json"
+		echo "copied: amp/settings.json -> $AMP_CONFIG_DIR/settings.json"
+	fi
+
 	if [ -d "$AMP_DIR/plugins" ]; then
 		mkdir -p "$AMP_CONFIG_DIR/plugins"
 		rsync -a --delete "$AMP_DIR/plugins/" "$AMP_CONFIG_DIR/plugins/"
 		echo "synced: amp/plugins/ -> $AMP_CONFIG_DIR/plugins/"
 	fi
 
-	if [ -d "$AMP_DIR/docs/tools" ]; then
-		mkdir -p "$AMP_CONFIG_DIR/docs/tools"
-		rsync -a --delete "$AMP_DIR/docs/tools/" "$AMP_CONFIG_DIR/docs/tools/"
-		echo "synced: amp/docs/tools/ -> $AMP_CONFIG_DIR/docs/tools/"
+	if [ -d "$AMP_DIR/docs" ]; then
+		mkdir -p "$AMP_CONFIG_DIR/docs"
+		rsync -a --delete "$AMP_DIR/docs/" "$AMP_CONFIG_DIR/docs/"
+		echo "synced: amp/docs/ -> $AMP_CONFIG_DIR/docs/"
 	fi
 
 	echo ""
