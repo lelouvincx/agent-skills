@@ -41,7 +41,7 @@ export default function (amp: PluginAPI) {
 			const hint = await ctx.ui.input({
 				title: 'Log current task to Logseq',
 				message:
-					'Optional target, note, or source link, e.g. "update DAT-594", "journal only", or a Slack/PR/Notion URL. Leave blank to infer from this thread.',
+					'Optional target, note, or source link, e.g. "update DAT-594" or a Slack/PR/Notion URL. Leave blank to infer from this thread.',
 				placeholder: 'Optional Logseq target / context / source links',
 				submitButtonText: 'Log to Logseq',
 			})
@@ -120,7 +120,7 @@ Context:
 - Worker Amp thread id: ${workerThreadID}
 - Logseq repo: ${LOGSEQ_REPO}
 - Today's journal file: ${LOGSEQ_REPO}/journals/${today.journalFile}
-- User instruction: ${hint || '(none — infer the best target from this thread)'}
+- User instruction: ${hint || '(none, infer the best target from this thread)'}
 
 Recent parent-thread seed for quick link/outcome extraction only; do not use this seed as the source of truth for original intent:
 <<<recent-parent-thread-seed
@@ -132,31 +132,31 @@ Rules:
 2. Log the durable task/outcome represented by that reconstructed intent. Do not let incidental recent-message context replace the original task intent. If the thread contains unrelated later chatter, ignore it unless the user explicitly redirected the task.
 3. Before choosing or writing a Logseq block, read \`${LOGSEQ_REPO}/pages/Canonical Pages.md\`, then read the corresponding canonical project/rule pages named there, especially \`pages/Projects.md\`, \`pages/Backlog.md\`, and any relevant rule page. Use that canonical map as the source of truth for project taxonomy, active backlog matches, priority conventions, and placement.
 4. If reconstructed intent, recent seed, and canonical map conflict, prefer reconstructed user intent plus canonical project mapping; use the recent seed only for final outcome details and reference links.
-5. First check for an existing Logseq entry referencing the parent thread via \`input:: [Ampcode](${parentThreadID})\`, a numbered variant such as \`[1-Ampcode](${parentThreadID})\`, or \`${parentThreadID}\`; update it instead of creating a duplicate.
-6. If the user hint or reconstructed parent-thread intent clearly maps to an active task in \`pages/Backlog.md\` or today's journal, update that task/block.
-7. Otherwise append one concise block to today's journal:
+5. All task logs must be represented in \`pages/Backlog.md\` first. Check for an existing backlog entry referencing the parent thread via \`input:: [Ampcode](${parentThreadID})\`, a numbered variant such as \`[1-Ampcode](${parentThreadID})\`, or \`${parentThreadID}\`; update it instead of creating a duplicate.
+6. If the user hint or reconstructed parent-thread intent clearly maps to an active task in \`pages/Backlog.md\`, update that backlog task/block. Otherwise create one concise backlog task block in the canonical backlog placement for its project/priority/state.
+7. After the backlog task is updated or created, add or update a short reference in today's journal pointing back to that backlog task:
    - under \`### Done\` when the work is complete
    - under \`### Tasks\` when follow-up remains
    - under \`### Notes\` when this is informational only
-   Create the section only if needed and missing.
+   Create the section only if needed and missing. Keep the journal entry as a pointer to the backlog task, not a duplicate task with copied properties/source links.
 8. Use Logseq markdown conventions from this graph:
    - lowercase properties with \`::\`
    - \`project:: [[...]]\` must be coherent with the canonical project map in \`pages/Projects.md\`; default to \`[[Personal]]\` only for personal/tooling tasks that do not match a more specific canonical project such as \`[[Logseq]]\`, \`[[Internal]]\`, \`[[Docs]]\`, or \`[[Presales]]\`.
    - \`priority:: #P...\` when inferable from backlog/rules; default to \`#P3\` only for low-priority personal/tooling tasks
-   - Keep source/reference links in the block's \`input::\` property, not scattered as child notes.
-   - Always include the parent Amp thread in \`input::\`.
-   - Also include useful source or deliverable links from the user instruction and parent thread, such as Slack, Notion, Linear, GitHub PR/issue, ReadAI, customer docs, design docs, or related Amp threads.
+   - Keep source/reference links in the backlog task block's \`input::\` property, not scattered as child notes or duplicated in the journal reference.
+   - Always include the parent Amp thread in the backlog task's \`input::\`.
+   - Also include useful source or deliverable links from the user instruction and parent thread in the backlog task's \`input::\`, such as Slack, Notion, Linear, GitHub PR/issue, ReadAI, customer docs, design docs, or related Amp threads.
    - When there is more than one input link, use numbered labels like \`input:: [1-Ampcode](${parentThreadID}) [2-PR](https://...) [3-Slack](https://...)\`; use \`input:: [Ampcode](${parentThreadID})\` only when no other useful reference link is found.
    - Dedupe equivalent links and skip incidental documentation/search-result links unless they were actual task inputs or important deliverables.
-   - \`completed:: [[${today.isoDate}]]\` only for DONE items
+   - \`completed:: [[${today.isoDate}]]\` only for DONE backlog items
    - preserve surrounding indentation style, usually one tab for properties under a block
-9. Keep the entry short: one task/note block plus few useful child notes. Do not paste the transcript or your private intent-reconstruction notes.
-10. Determine the parent Amp thread title from the Logseq task/block you wrote or updated, using exactly this pattern: \`[Project] task title\`. Use the Logseq \`project:: [[...]]\` value without brackets for \`Project\`; use the task/block title text without TODO/DONE markers or properties for \`task title\`.
+9. Keep the backlog entry short: one task block plus few useful child notes, and one brief journal reference. Do not paste the transcript or your private intent-reconstruction notes.
+10. Determine the parent Amp thread title from the Logseq backlog task/block you wrote or updated, using exactly this pattern: \`[Project] task title\`. Use the Logseq \`project:: [[...]]\` value without brackets for \`Project\`; use the backlog task/block title text without TODO/DONE markers or properties for \`task title\`.
 11. Do not commit, push, run weekly report automation, or modify unrelated blocks.
 12. Do not send messages to the parent thread. Return your result only as this worker thread's final answer.
 
 After editing, reply with exactly two plain-text lines, without bullets or code formatting:
-Logged to <file/block> — <summary>.
+Logged to <backlog file/block> and <journal file/block> — <summary>.
 Thread title: [Project] task title
 `
 }

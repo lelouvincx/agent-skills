@@ -96,7 +96,7 @@ The command accepts no JSON input. It requires an active thread. When invoked, i
 | Prompt field  | Notes                                                                                                      |
 | ------------- | ---------------------------------------------------------------------------------------------------------- |
 | Title         | `Log current task to Logseq`                                                                               |
-| Message       | Optional target, note, or source link, such as `update DAT-594`, `journal only`, or a Slack/PR/Notion URL. |
+| Message       | Optional target, note, or source link, such as `update DAT-594` or a Slack/PR/Notion URL.                  |
 | Submit button | `Log to Logseq`                                                                                            |
 
 Runtime defaults:
@@ -114,11 +114,11 @@ Runtime defaults:
 
 ## Behavior
 
-The command checks for an active thread, prompts for an optional hint, reads up to 20 recent messages only as a seed for link/outcome extraction, spawns a hidden built-in `deep/medium` worker thread, and sends it a Logseq-specific prompt. The worker has an explicit private intent-reconstruction step: read the parent Amp thread, infer the original user intent, the latest coherent requested outcome, and the durable result to log, then proceed from that reconstructed intent. The worker is asked to update an existing block when possible, otherwise append a concise journal block under `Done`, `Tasks`, or `Notes`.
+The command checks for an active thread, prompts for an optional hint, reads up to 20 recent messages only as a seed for link/outcome extraction, spawns a hidden built-in `deep/medium` worker thread, and sends it a Logseq-specific prompt. The worker has an explicit private intent-reconstruction step: read the parent Amp thread, infer the original user intent, the latest coherent requested outcome, and the durable result to log, then proceed from that reconstructed intent. The worker is asked to log task entries in `pages/Backlog.md` first: update an existing matching backlog block when possible, otherwise create one concise backlog task block. Today's journal should then contain only a short reference back to that backlog task, under `Done`, `Tasks`, or `Notes` according to the task state.
 
-Before choosing or writing a block, the worker must treat the Logseq graph's canonical map as the source of truth: read `pages/Canonical Pages.md`, then read the corresponding canonical project/rule pages named there, especially `pages/Projects.md`, `pages/Backlog.md`, and relevant rule pages. The logged task's `project:: [[...]]`, priority, title, and placement must be coherent with that canonical project taxonomy and any matching active backlog task. If the recent-message seed, reconstructed intent, and canonical pages disagree, the worker should prefer the reconstructed original thread intent and canonical project mapping over incidental recent-message context.
+Before choosing or writing a block, the worker must treat the Logseq graph's canonical map as the source of truth: read `pages/Canonical Pages.md`, then read the corresponding canonical project/rule pages named there, especially `pages/Projects.md`, `pages/Backlog.md`, and relevant rule pages. The backlog task's `project:: [[...]]`, priority, title, and placement must be coherent with that canonical project taxonomy and any matching active backlog task. If the recent-message seed, reconstructed intent, and canonical pages disagree, the worker should prefer the reconstructed original thread intent and canonical project mapping over incidental recent-message context.
 
-When writing the Logseq block, the worker keeps reference links in the `input::` property. It always includes the parent Amp thread and also includes useful source or deliverable links found in the user hint or parent thread, such as Slack, Notion, Linear, GitHub PR/issue, ReadAI, customer docs, design docs, or related Amp threads. With multiple links, it uses numbered labels such as `input:: [1-Ampcode](T-...) [2-PR](https://...) [3-Slack](https://...)`, dedupes equivalent links, and skips incidental links that are not meaningful task references.
+When writing the backlog task block, the worker keeps reference links in the `input::` property. It always includes the parent Amp thread and also includes useful source or deliverable links found in the user hint or parent thread, such as Slack, Notion, Linear, GitHub PR/issue, ReadAI, customer docs, design docs, or related Amp threads. With multiple links, it uses numbered labels such as `input:: [1-Ampcode](T-...) [2-PR](https://...) [3-Slack](https://...)`, dedupes equivalent links, and skips incidental links that are not meaningful task references. The journal reference should stay brief and point to the backlog task instead of duplicating the task properties or source links.
 
 The worker's final answer must include a plain-text `Thread title: [Project] task title` line derived from the Logseq task/block it wrote or updated. The project is the Logseq `project:: [[...]]` value without brackets; the task title is the Logseq block's task/note text without TODO/DONE markers or properties. If the worker finishes within the timeout and returns a valid title, the command renames the parent thread with `amp threads rename <parentThreadID> "[Project] task title"`, shows a completion notification, and archives the worker thread with `amp threads archive <threadID>`. If the worker fails, times out, returns no title, rename fails, or archive fails, it notifies the user and leaves the worker unarchived for inspection.
 
@@ -138,7 +138,6 @@ Optional hint examples:
 
 ```text
 update DAT-594
-journal only
 docs/tools maintenance
 include https://github.com/owner/repo/pull/123
 ```
@@ -154,4 +153,4 @@ include https://github.com/owner/repo/pull/123
 
 ## Maintenance notes
 
-Update this doc when the worker prompt, Logseq conventions, `input::` reference-link behavior, parent thread rename behavior, default graph path, worker mode, timeout, or archive behavior changes. Keep this documented as a manual command; it intentionally has no `agent.start` or `agent.end` hook.
+Update this doc when the worker prompt, Backlog-first task logging behavior, journal-reference behavior, Logseq conventions, `input::` reference-link behavior, parent thread rename behavior, default graph path, worker mode, timeout, or archive behavior changes. Keep this documented as a manual command; it intentionally has no `agent.start` or `agent.end` hook.
