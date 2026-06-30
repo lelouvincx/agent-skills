@@ -265,6 +265,10 @@ skills:
     files:
       - GLOSSARY.md
 
+  - name: govuk-style
+    url: https://gist.githubusercontent.com/fofr/505e225f9bf5e839d30c12ba6bfa0be2/raw/SKILL.md
+    enabled: true
+
   # Add more remote skills here:
   # - name: example-skill
   #   url: https://raw.githubusercontent.com/user/repo/main/skills/example/SKILL.md
