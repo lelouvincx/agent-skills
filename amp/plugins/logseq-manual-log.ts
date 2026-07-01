@@ -120,7 +120,6 @@ Context:
 - Worker Amp thread id: ${workerThreadID}
 - Logseq repo: ${LOGSEQ_REPO}
 - Today's journal file: ${LOGSEQ_REPO}/journals/${today.journalFile}
-- User instruction: ${hint || '(none, infer the best target from this thread)'}
 
 Recent parent-thread seed for quick link/outcome extraction only; do not use this seed as the source of truth for original intent:
 <<<recent-parent-thread-seed
@@ -154,6 +153,8 @@ Rules:
 10. Determine the parent Amp thread title from the Logseq backlog task/block you wrote or updated, using exactly this pattern: \`[Project] task title\`. Use the Logseq \`project:: [[...]]\` value without brackets for \`Project\`; use the backlog task/block title text without TODO/DONE markers or properties for \`task title\`.
 11. Do not commit, push, run weekly report automation, or modify unrelated blocks.
 12. Do not send messages to the parent thread. Return your result only as this worker thread's final answer.
+
+User instruction: ${hint || '(none, infer the best target from this thread)'}
 
 After editing, reply with exactly two plain-text lines, without bullets or code formatting:
 Logged to <backlog file/block> and <journal file/block> — <summary>.
