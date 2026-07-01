@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uvx --with pyyaml --with rapidfuzz python
 """Resolve Chinh's spoken project names to local paths and GitHub repos."""
 
 from __future__ import annotations
@@ -15,7 +15,7 @@ try:
     import yaml
 except ImportError as exc:  # pragma: no cover - depends on host environment
     print(
-        "Missing dependency: pyyaml. Install with: python3 -m pip install pyyaml rapidfuzz",
+        "Missing dependency: pyyaml. Run bin/project-resolve directly so uvx can provide pyyaml/rapidfuzz. Prerequisite: uv and uvx on PATH.",
         file=sys.stderr,
     )
     raise SystemExit(2) from exc
@@ -24,7 +24,7 @@ try:
     from rapidfuzz import fuzz, process
 except ImportError as exc:  # pragma: no cover - depends on host environment
     print(
-        "Missing dependency: rapidfuzz. Install with: python3 -m pip install rapidfuzz pyyaml",
+        "Missing dependency: rapidfuzz. Run bin/project-resolve directly so uvx can provide pyyaml/rapidfuzz. Prerequisite: uv and uvx on PATH.",
         file=sys.stderr,
     )
     raise SystemExit(2) from exc
@@ -224,7 +224,8 @@ def generate_markdown(registry: dict[str, Any], environment: str, environment_co
             "## Usage",
             "",
             "```bash",
-            "python3 -m pip install pyyaml rapidfuzz",
+            "# prerequisite: uv and uvx on PATH; pyyaml/rapidfuzz are provided by uvx",
+            "command -v uv >/dev/null && command -v uvx >/dev/null",
             "",
             "bin/project-resolve logseq --path",
             "bin/project-resolve \"log this to logseq\" --github",
