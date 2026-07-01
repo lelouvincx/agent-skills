@@ -248,6 +248,18 @@ sync_amp_artifacts() {
 		echo "synced: amp/docs/ -> $AMP_CONFIG_DIR/docs/"
 	fi
 
+	if [ -f "$REPO_DIR/projects.yaml" ]; then
+		mkdir -p "$AMP_CONFIG_DIR"
+		cp "$REPO_DIR/projects.yaml" "$AMP_CONFIG_DIR/projects.yaml"
+		echo "copied: projects.yaml -> $AMP_CONFIG_DIR/projects.yaml"
+	fi
+
+	if [ -f "$REPO_DIR/PROJECTS.md" ]; then
+		mkdir -p "$AMP_CONFIG_DIR"
+		cp "$REPO_DIR/PROJECTS.md" "$AMP_CONFIG_DIR/PROJECTS.md"
+		echo "copied: PROJECTS.md -> $AMP_CONFIG_DIR/PROJECTS.md"
+	fi
+
 	echo ""
 }
 

@@ -1,8 +1,11 @@
 ---
+doc_schema: "amp-rfc/v1"
 code: "RFC-0002"
 title: "Raw agent token usage ledger"
+slug: "agent-token-usage-ledger"
 file: "rfc-0002-agent-token-usage-ledger.md"
 status: "Implemented (initial)"
+summary: "Create a raw append-only local JSONL ledger for agent token usage events."
 created: "2026-06-20"
 updated: "2026-06-20"
 amp_thread_id: "T-019ee630-2df6-7697-a737-c08bbe4ab3ba"

@@ -1,8 +1,11 @@
 ---
+doc_schema: "amp-rfc/v1"
 code: "RFC-0004"
 title: "Grounded skill and plugin usage dataset"
+slug: "grounded-skill-plugin-usage-dataset"
 file: "rfc-0004-grounded-skill-plugin-usage-dataset.md"
 status: "Implemented (initial capture; monitoring)"
+summary: "Create a local user-maintained dataset for evaluating real skill and plugin usage."
 created: "2026-06-28"
 updated: "2026-06-28"
 amp_thread_id: "T-019f0ec6-453f-70d9-9503-7d44d9f08135"
