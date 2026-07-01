@@ -31,7 +31,8 @@ Current environment roots:
 ## Usage
 
 ```bash
-python3 -m pip install pyyaml rapidfuzz
+# prerequisite: uv and uvx on PATH; pyyaml/rapidfuzz are provided by uvx
+command -v uv >/dev/null && command -v uvx >/dev/null
 
 bin/project-resolve logseq --path
 bin/project-resolve "log this to logseq" --github

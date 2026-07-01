@@ -105,11 +105,13 @@ Environment-specific `project_dir_overrides` handle hosts such as Amp Orb, where
 
 The default VPS root is `/home/lelouvincx`, but VPS layouts may vary. Set `AGENTS_REGISTRY_WORKSPACE_ROOT` for hosts that use a different home or workspace path.
 
-Required resolver dependencies:
+Required resolver host dependencies:
 
 - Python 3
-- `pyyaml`
-- `rapidfuzz`
+- `uv`
+- `uvx`
+
+`pyyaml` and `rapidfuzz` are resolver runtime packages supplied by `uvx`; they must not be required as globally installed Python packages.
 
 The generated Markdown view is created with:
 
@@ -136,7 +138,7 @@ The environment variable name is intentionally `AGENTS_REGISTRY_ENV` because thi
 3. Exact GitHub repository basename, when unique.
 4. Deterministic fuzzy match.
 
-Fuzzy matching uses Python and `rapidfuzz`; no LLM is allowed in the resolver. If fuzzy matching is not clearly unique, the resolver must fail and print candidates instead of guessing.
+Fuzzy matching uses Python with `rapidfuzz` supplied by `uvx`; no LLM is allowed in the resolver. If fuzzy matching is not clearly unique, the resolver must fail and print candidates instead of guessing.
 
 The desired flow is:
 
@@ -175,6 +177,9 @@ The AI skill is intentionally short. Its job is only to route future agents to `
 Example commands:
 
 ```bash
+# prerequisite: uv and uvx on PATH; pyyaml/rapidfuzz are provided by uvx
+command -v uv >/dev/null && command -v uvx >/dev/null
+
 bin/project-resolve logseq --path
 bin/project-resolve "log this to logseq" --github
 bin/project-resolve dbt --json
@@ -197,7 +202,7 @@ Initial important mappings:
 - Make GitHub repository slugs the canonical remote identity when a project maps to one repository; use `github: null` only for parent workspaces that contain multiple repositories.
 - Derive local paths portably across local, Amp Orb, and VPS environments.
 - Support natural spoken project names and aliases.
-- Support deterministic fuzzy matching without LLM calls.
+- Support deterministic fuzzy matching without LLM calls or globally installed Python packages.
 - Fail safely when a fuzzy query is ambiguous.
 - Do not model local-only projects as first-class entries unless they later get a GitHub source of truth.
 - Do not replace git remotes, shell aliases, or package-manager workspace metadata.
