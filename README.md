@@ -8,19 +8,27 @@ Reusable Claude Code and [Amp](https://ampcode.com) skills from @lelouvincx.
 | ------------------------------------------------------------ | ------ | ------------------------------------------------------------------------------------ |
 | [slackcli](skills/slackcli/SKILL.md)                         | Local  | Interact with Slack workspaces via the `slackcli` CLI                                |
 | [bigquery-query](skills/bigquery-query/SKILL.md)             | Local  | Query Google BigQuery datasets using the bq CLI                                      |
+| [resolving-projects](skills/resolving-projects/SKILL.md)     | Local  | Resolve spoken project names to local paths and GitHub repositories                  |
 | [notion](skills/notion/SKILL.md)                             | Remote | Manage Notion pages, databases, and comments                                         |
 | [modern-web-guidance](skills/modern-web-guidance/SKILL.md)   | Remote | Search tool for modern web development best practices                                |
 | [linear-cli](skills/linear/SKILL.md)                         | Remote | Manage Linear issues from the command line                                           |
-| [shadcn](skills/shadcn/SKILL.md)                             | Remote | Manage shadcn/ui components — adding, styling, composing UI                          |
 | [playwright-skill](skills/playwright-skill/SKILL.md)         | Remote | Browser automation for web projects using playwright-cli                             |
 | [remotion](skills/remotion/SKILL.md)                         | Remote | Best practices for Remotion - Video creation in React                                |
-| [copywriting](skills/copywriting/SKILL.md)                   | Remote | Expert conversion copywriting for marketing pages                                    |
 | [ponytail](skills/ponytail/SKILL.md)                         | Remote | Lazy senior dev mode — forces simplest/minimal solution (YAGNI, stdlib first)        |
 | [ponytail-review](skills/ponytail-review/SKILL.md)           | Remote | Code review hunting only over-engineering — what to delete                           |
 | [ponytail-help](skills/ponytail-help/SKILL.md)               | Remote | Quick-reference card for ponytail modes and commands                                 |
-| [resolving-projects](skills/resolving-projects/SKILL.md)     | Local  | Resolve spoken project names to local paths and GitHub repositories                  |
 | [writing-great-skills](skills/writing-great-skills/SKILL.md) | Remote | Reference for writing and editing skills well                                        |
 | [govuk-style](skills/govuk-style/SKILL.md)                   | Remote | GOV.UK-style plain-English writing, adapted for presales and customer Slack messages |
+| [impeccable](skills/impeccable/SKILL.md)                     | Remote | Design, audit, and improve frontend interfaces                                       |
+| [domain-modeling](skills/domain-modeling/SKILL.md)           | Remote | Build and sharpen a project's domain model                                           |
+| [grilling](skills/grilling/SKILL.md)                         | Remote | Interview relentlessly to stress-test a plan or design                               |
+| [tdd](skills/tdd/SKILL.md)                                   | Remote | Test-driven development guidance                                                     |
+| [teach](skills/teach/SKILL.md)                               | Remote | Teach a new skill or concept in a workspace                                          |
+| [develop-amql](skills/develop-amql/SKILL.md)                 | Remote | Develop Holistics AMQL models, datasets, dashboards, and metrics                     |
+| [write-aql](skills/write-aql/SKILL.md)                       | Remote | Write and run Holistics AQL queries                                                  |
+| [search-docs](skills/search-docs/SKILL.md)                   | Remote | Search Holistics docs                                                                |
+| [visualize-data](skills/visualize-data/SKILL.md)             | Remote | Create Holistics visualizations from queries                                         |
+| [holistics-migrate-power-bi](skills/holistics-migrate-power-bi/SKILL.md) | Remote | Migrate Power BI semantic models and reports to Holistics AMQL assets |
 
 ## Amp capabilities
 
@@ -68,6 +76,10 @@ cd agent-skills
 ./sync-skills.sh --remote   # fetch remote skills
 ./sync-skills.sh             # local
 ```
+
+Remote skill source-of-truth lives in `remote-skills.yaml`. `./sync-skills.sh --remote` fetches each remote `SKILL.md`, optional companion files, and writes generated files such as `skills/<name>/SKILL.md`, `skills/<name>/.remote-source`, and remote companion directories. Those generated files are ignored in `.gitignore`; commit the registry entry and any intentional local `PERSONAL.md`, not the fetched payload.
+
+Some remote skills depend on shared generated references. For example, Holistics AMQL skills fetch `references/` from `github.com/holistics/skills`; that directory is runtime support generated by remote sync and should not appear in PR diffs.
 
 `sync-skills.sh` also syncs version-controlled Amp runtime artifacts from this repo into `~/.config/amp`:
 

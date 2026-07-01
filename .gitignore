@@ -15,6 +15,8 @@ skills/linear/scripts/
 
 # Add other remote skills here as they are added
 
+references/
+
 skills/modern-web-guidance/SKILL.md
 skills/modern-web-guidance/.remote-source
 skills/modern-web-guidance/guides/
@@ -31,10 +33,6 @@ skills/remotion/SKILL.md
 skills/remotion/.remote-source
 skills/remotion/rules/
 
-skills/copywriting/SKILL.md
-skills/copywriting/.remote-source
-skills/copywriting/references/
-
 skills/ponytail/SKILL.md
 skills/ponytail/.remote-source
 
@@ -47,6 +45,85 @@ skills/ponytail-help/.remote-source
 skills/writing-great-skills/SKILL.md
 skills/writing-great-skills/.remote-source
 skills/writing-great-skills/GLOSSARY.md
+
+skills/domain-modeling/SKILL.md
+skills/domain-modeling/.remote-source
+skills/domain-modeling/ADR-FORMAT.md
+skills/domain-modeling/CONTEXT-FORMAT.md
+
+skills/grill-me/SKILL.md
+skills/grill-me/.remote-source
+
+skills/grill-with-docs/SKILL.md
+skills/grill-with-docs/.remote-source
+
+skills/grilling/SKILL.md
+skills/grilling/.remote-source
+
+skills/handoff/SKILL.md
+skills/handoff/.remote-source
+
+skills/prototype/SKILL.md
+skills/prototype/.remote-source
+skills/prototype/LOGIC.md
+skills/prototype/UI.md
+
+skills/tdd/SKILL.md
+skills/tdd/.remote-source
+skills/tdd/mocking.md
+skills/tdd/refactoring.md
+skills/tdd/tests.md
+
+skills/teach/SKILL.md
+skills/teach/.remote-source
+skills/teach/GLOSSARY-FORMAT.md
+skills/teach/LEARNING-RECORD-FORMAT.md
+skills/teach/MISSION-FORMAT.md
+skills/teach/RESOURCES-FORMAT.md
+
+skills/to-prd/SKILL.md
+skills/to-prd/.remote-source
+
+skills/analyze-data/SKILL.md
+skills/analyze-data/.remote-source
+skills/analyze-data/.link
+
+skills/convert-agent-skill-to-holistics/SKILL.md
+skills/convert-agent-skill-to-holistics/.remote-source
+
+skills/create-holistics-skill/SKILL.md
+skills/create-holistics-skill/.remote-source
+
+skills/develop-amql/SKILL.md
+skills/develop-amql/.remote-source
+
+skills/search-docs/SKILL.md
+skills/search-docs/.remote-source
+skills/search-docs/.link
+
+skills/setup-amql-development/SKILL.md
+skills/setup-amql-development/.remote-source
+
+skills/use-existing-viz/SKILL.md
+skills/use-existing-viz/.remote-source
+skills/use-existing-viz/.link
+
+skills/visualize-data/SKILL.md
+skills/visualize-data/.remote-source
+skills/visualize-data/.link
+
+skills/write-aql/SKILL.md
+skills/write-aql/.remote-source
+skills/write-aql/.link
+
+skills/holistics-migrate-power-bi/SKILL.md
+skills/holistics-migrate-power-bi/.remote-source
+skills/holistics-migrate-power-bi/references/
+
+skills/impeccable/SKILL.md
+skills/impeccable/.remote-source
+skills/impeccable/reference/
+skills/impeccable/scripts/
 
 # Amp runtime/source mirror: keep only intentional source artifacts under amp/.
 # Do not commit local runtime state, logs, MCP configs, or write metadata.
