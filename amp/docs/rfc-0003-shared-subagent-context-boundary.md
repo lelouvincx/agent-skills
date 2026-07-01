@@ -1,8 +1,11 @@
 ---
+doc_schema: "amp-rfc/v1"
 code: "RFC-0003"
 title: "Shared read-only subagent toolkit and Amp-owned external context"
+slug: "shared-subagent-context-boundary"
 file: "rfc-0003-shared-subagent-context-boundary.md"
 status: "Implemented (initial)"
+summary: "Standardize Claude Code and Pi Coding Agent as read-only subagents while Amp owns external context gathering."
 created: "2026-06-20"
 updated: "2026-06-20"
 amp_thread_id: "T-019ee65b-a854-70f8-b4a8-477b22471a34"

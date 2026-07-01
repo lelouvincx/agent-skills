@@ -1,8 +1,11 @@
 ---
+doc_schema: "amp-rfc/v1"
 code: "RFC-0001"
 title: "Claude Code as a manual read-only Amp subagent"
+slug: "claude-code-subagent"
 file: "rfc-0001-claude-code-subagent.md"
 status: "Implemented (initial)"
+summary: "Use Claude Code CLI as a manual, read-only, structured-output Amp subagent."
 created: "2026-06-20"
 updated: "2026-06-20"
 amp_thread_id: "T-019ee5a6-032c-7009-9c49-bef9be1543ea"

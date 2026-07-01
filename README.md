@@ -18,6 +18,7 @@ Reusable Claude Code and [Amp](https://ampcode.com) skills from @lelouvincx.
 | [ponytail](skills/ponytail/SKILL.md)                         | Remote | Lazy senior dev mode — forces simplest/minimal solution (YAGNI, stdlib first)        |
 | [ponytail-review](skills/ponytail-review/SKILL.md)           | Remote | Code review hunting only over-engineering — what to delete                           |
 | [ponytail-help](skills/ponytail-help/SKILL.md)               | Remote | Quick-reference card for ponytail modes and commands                                 |
+| [resolving-projects](skills/resolving-projects/SKILL.md)     | Local  | Resolve spoken project names to local paths and GitHub repositories                  |
 | [writing-great-skills](skills/writing-great-skills/SKILL.md) | Remote | Reference for writing and editing skills well                                        |
 | [govuk-style](skills/govuk-style/SKILL.md)                   | Remote | GOV.UK-style plain-English writing, adapted for presales and customer Slack messages |
 
@@ -40,6 +41,23 @@ Reusable Claude Code and [Amp](https://ampcode.com) skills from @lelouvincx.
 | [Holistics Markdown Result Renderer](amp/docs/tools/holistics-md.md)                   | Event handler | Plugin event pipeline | Rewrites selected Holistics MCP YAML `result_data` blocks into Markdown tables before the result reaches the model.                 |
 | [macOS Turn End Notifier](amp/docs/tools/macos-turn-end-notifier.md)                   | Event handler | Plugin event pipeline | Sends a native macOS notification whenever an agent turn ends.                                                                      |
 | [RTK Rewrite](amp/docs/tools/rtk-rewrite.md)                                           | Event handler | Plugin event pipeline | Intercepts Bash tool calls and rewrites eligible commands through `rtk rewrite` before execution.                                   |
+
+## Project registry
+
+`projects.yaml` maps spoken project names to GitHub repositories and environment-relative local paths. Use `bin/project-resolve` as the executable interface for humans, agents, and scripts:
+
+```bash
+python3 -m pip install pyyaml rapidfuzz
+
+bin/project-resolve logseq --path
+bin/project-resolve "log this to logseq" --github
+bin/project-resolve dbt --json
+bin/project-resolve --generate-md > PROJECTS.md
+```
+
+Set `AGENTS_REGISTRY_ENV` to force an environment such as `local`, `amp-orb`, or `vps`; otherwise the resolver auto-detects where possible. Set `AGENTS_REGISTRY_WORKSPACE_ROOT` when a host uses a different workspace root than the registry default. See [PROJECTS.md](PROJECTS.md) for the generated overview.
+
+`./sync-skills.sh` projects `projects.yaml` and `PROJECTS.md` into `~/.config/amp` along with the other Amp runtime artifacts.
 
 ## Setup
 

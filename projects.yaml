@@ -1,0 +1,257 @@
+version: 1
+
+ownership_entities:
+  lelouvincx:
+    description: Personal projects owned by Chinh.
+  lelouvincx-bot:
+    description: Automation and bot-owned projects or workflows.
+  holistics:
+    description: Holistics work projects.
+  open-source:
+    description: External or contributed open-source projects.
+
+environments:
+  local:
+    workspace_root: ~/Developer
+    detect:
+      workspace_root_exists: ~/Developer
+  amp-orb:
+    # Default only. Amp Orb workspace paths may change; use
+    # AGENTS_REGISTRY_WORKSPACE_ROOT to override at runtime.
+    workspace_root: /home/user/workspace
+    project_dir_overrides:
+      agent-skills: repo
+    detect:
+      env:
+        AMP_ORB: "true"
+      workspace_root_exists: /home/user/workspace
+  vps:
+    # Default only. VPS workspace paths may vary; use
+    # AGENTS_REGISTRY_WORKSPACE_ROOT to override at runtime.
+    workspace_root: /home/lelouvincx
+    detect:
+      workspace_root_exists: /home/lelouvincx
+
+projects:
+  logseq:
+    github: lelouvincx/second-brain-logseq
+    owner: lelouvincx
+    dir: second-brain-logseq
+    aliases:
+      - second-brain-logseq
+      - second brain logseq
+      - second brain
+      - log this to logseq
+      - second-brain
+    description: Logseq graph and personal second brain.
+
+  agent-skills:
+    github: lelouvincx/agent-skills
+    owner: lelouvincx
+    dir: agent-skills
+    aliases:
+      - agents registry
+      - agent registry
+      - skills
+      - amp skills
+    description: Shared agent skills, Amp capabilities, and project registry.
+
+  dotfiles:
+    github: lelouvincx/dotfiles
+    owner: lelouvincx
+    dir: dotfiles
+    aliases:
+      - dots
+      - shell config
+      - terminal config
+    description: Personal dotfiles repository.
+
+  nvim:
+    github: lelouvincx/dotfiles
+    owner: lelouvincx
+    dir: dotfiles/nvim
+    aliases:
+      - neovim
+      - vim
+      - vim config
+      - neovim config
+    description: Neovim configuration stored inside dotfiles.
+
+  data:
+    github: null
+    owner: holistics
+    dir: holistics/data
+    aliases:
+      - holistics data
+      - data workspace
+    description: Parent Holistics data workspace containing data-related repositories.
+
+  data-internal:
+    github: holistics/data-internal
+    owner: holistics
+    dir: holistics/data/data-internal
+    aliases:
+      - internal data
+      - data internal
+      - internal aml
+      - internal aml project
+    description: Default Holistics internal data AML project.
+
+  data-eu:
+    github: holistics/data-eu
+    owner: holistics
+    dir: holistics/data/data-eu
+    aliases:
+      - eu data
+      - eu aml
+      - eu aml project
+    description: Holistics EU data AML project.
+
+  data-sg:
+    github: holistics/data-sg
+    owner: holistics
+    dir: holistics/data/data-sg
+    aliases:
+      - sg data
+      - singapore data
+      - sg aml
+      - sg aml project
+    description: Holistics Singapore data AML project.
+
+  data-us:
+    github: holistics/data-us
+    owner: holistics
+    dir: holistics/data/data-us
+    aliases:
+      - us data
+      - united states data
+      - us aml
+      - us aml project
+    description: Holistics US data AML project.
+
+  dbt:
+    github: holistics/dbt
+    owner: holistics
+    dir: holistics/data/dbt
+    aliases:
+      - holistics dbt
+      - data dbt
+    description: Holistics dbt project.
+
+  prefect:
+    github: holistics/prefect
+    owner: holistics
+    dir: holistics/data/prefect
+    aliases:
+      - holistics prefect
+      - data prefect
+    description: Holistics Prefect project.
+
+  demo4:
+    github: holistics/data-demo4
+    owner: holistics
+    dir: holistics/demo4
+    aliases:
+      - data demo4
+      - demo 4
+    description: Holistics Demo 4 data project.
+
+  holistics-docs:
+    github: holistics/docs
+    owner: holistics
+    dir: holistics/docs
+    aliases:
+      - docs
+      - holistics docs
+      - documentation
+    description: Holistics documentation repository.
+
+  holistics-skills:
+    github: holistics/skills
+    owner: holistics
+    dir: holistics/skills
+    aliases:
+      - holistics ai skills
+      - holistics agent skills
+    description: Holistics skills repository.
+
+  internal-skills:
+    github: holistics/internal-skills
+    owner: holistics
+    dir: holistics/internal-skills
+    aliases:
+      - holistics internal skills
+    description: Holistics internal skills repository.
+
+  marketing:
+    github: holistics/marketing
+    owner: holistics
+    dir: holistics/marketing
+    aliases:
+      - holistics marketing
+      - website
+    description: Holistics marketing repository.
+
+  dealops:
+    github: holistics/dealops
+    owner: holistics
+    dir: holistics/dealops
+    aliases:
+      - deal ops
+      - holistics dealops
+    description: Holistics DealOps repository.
+
+  add2cart:
+    github: holistics/add2cart
+    owner: holistics
+    dir: holistics/add2cart
+    aliases:
+      - add to cart
+      - add-to-cart
+    description: Holistics Add2Cart repository.
+
+  holistics-remotion:
+    github: holistics/holistics-remotion
+    owner: holistics
+    dir: holistics/remotion
+    aliases:
+      - holistics remotion
+      - remotion
+    description: Holistics Remotion repository.
+
+  personal-finance:
+    github: lelouvincx/personal-finance
+    owner: lelouvincx
+    dir: personal-finance
+    aliases:
+      - finance
+      - money
+    description: Personal finance repository.
+
+  blog:
+    github: lelouvincx/lelouvincx.github.io
+    owner: lelouvincx
+    dir: lelouvincx.github.io
+    aliases:
+      - website blog
+      - personal site
+      - github pages
+    description: Personal GitHub Pages site.
+
+  smartclass:
+    github: lelouvincx/smartclass
+    owner: lelouvincx
+    dir: smartclass
+    aliases:
+      - smart class
+    description: Smartclass repository.
+
+  wwi-data-platform:
+    github: lelouvincx/wwi-data-platform
+    owner: lelouvincx
+    dir: wwi-data-platform
+    aliases:
+      - wwi
+      - wwi data
+      - wide world importers
+    description: Wide World Importers data platform repository.

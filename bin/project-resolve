@@ -1,0 +1,427 @@
+#!/usr/bin/env python3
+"""Resolve Chinh's spoken project names to local paths and GitHub repos."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import re
+import sys
+from pathlib import Path
+from typing import Any
+
+try:
+    import yaml
+except ImportError as exc:  # pragma: no cover - depends on host environment
+    print(
+        "Missing dependency: pyyaml. Install with: python3 -m pip install pyyaml rapidfuzz",
+        file=sys.stderr,
+    )
+    raise SystemExit(2) from exc
+
+try:
+    from rapidfuzz import fuzz, process
+except ImportError as exc:  # pragma: no cover - depends on host environment
+    print(
+        "Missing dependency: rapidfuzz. Install with: python3 -m pip install rapidfuzz pyyaml",
+        file=sys.stderr,
+    )
+    raise SystemExit(2) from exc
+
+
+MIN_FUZZY_SCORE = 65
+MIN_FUZZY_MARGIN = 8
+GITHUB_SLUG_RE = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
+
+
+def normalize(value: str) -> str:
+    return " ".join(value.casefold().replace("_", "-").split())
+
+
+def expand_user(value: str) -> Path:
+    return Path(os.path.expanduser(value))
+
+
+def repo_basename(slug: str) -> str:
+    return slug.rsplit("/", 1)[-1]
+
+
+def github_slug(project: dict[str, Any]) -> str | None:
+    github = project.get("github")
+    if github is None:
+        return None
+    return str(github)
+
+
+def load_registry(path: Path) -> dict[str, Any]:
+    with path.open("r", encoding="utf-8") as handle:
+        registry = yaml.safe_load(handle)
+    if not isinstance(registry, dict):
+        raise ValueError(f"Registry must be a mapping: {path}")
+    if not isinstance(registry.get("projects"), dict):
+        raise ValueError(f"Registry must contain a projects mapping: {path}")
+    if not isinstance(registry.get("environments"), dict):
+        raise ValueError(f"Registry must contain an environments mapping: {path}")
+    if not isinstance(registry.get("ownership_entities"), dict):
+        raise ValueError(f"Registry must contain an ownership_entities mapping: {path}")
+    known_owners = set(registry["ownership_entities"])
+    for key, project in registry["projects"].items():
+        if not isinstance(project, dict):
+            raise ValueError(f"Project {key!r} must be a mapping")
+        github = project.get("github")
+        if github is not None and (not isinstance(github, str) or not GITHUB_SLUG_RE.match(github)):
+            raise ValueError(f"Project {key!r} must define github as a compact owner/repo slug")
+        if not isinstance(project.get("dir"), str) or not project["dir"]:
+            raise ValueError(f"Project {key!r} must define a non-empty dir")
+        owner = project.get("owner") if isinstance(project, dict) else None
+        if owner not in known_owners:
+            raise ValueError(f"Project {key!r} must define owner as one of: {', '.join(sorted(known_owners))}")
+    return registry
+
+
+def detect_environment(registry: dict[str, Any]) -> str:
+    explicit = os.environ.get("AGENTS_REGISTRY_ENV")
+    environments = registry["environments"]
+    if explicit:
+        if explicit not in environments:
+            raise ValueError(
+                f"AGENTS_REGISTRY_ENV={explicit!r} is not defined. "
+                f"Known environments: {', '.join(sorted(environments))}"
+            )
+        return explicit
+
+    matches: list[str] = []
+    for name, config in environments.items():
+        detect = config.get("detect", {}) if isinstance(config, dict) else {}
+        if environment_matches(detect):
+            matches.append(name)
+
+    if len(matches) == 1:
+        return matches[0]
+    if not matches:
+        raise ValueError(
+            "Could not auto-detect environment. Set AGENTS_REGISTRY_ENV to one of: "
+            + ", ".join(sorted(environments))
+        )
+    raise ValueError(
+        "Environment detection is ambiguous "
+        f"({', '.join(matches)}). Set AGENTS_REGISTRY_ENV explicitly."
+    )
+
+
+def environment_matches(detect: dict[str, Any]) -> bool:
+    if not detect:
+        return False
+
+    env_rules = detect.get("env", {})
+    if isinstance(env_rules, dict):
+        for key, expected in env_rules.items():
+            if os.environ.get(str(key)) != str(expected):
+                return False
+
+    root = detect.get("workspace_root_exists")
+    if root and not expand_user(str(root)).exists():
+        return False
+
+    return True
+
+
+def workspace_root(registry: dict[str, Any], environment: str) -> Path:
+    explicit = os.environ.get("AGENTS_REGISTRY_WORKSPACE_ROOT")
+    if explicit:
+        return expand_user(explicit)
+
+    config = registry["environments"].get(environment)
+    if not isinstance(config, dict) or not config.get("workspace_root"):
+        raise ValueError(f"Environment {environment!r} must define workspace_root")
+    return expand_user(str(config["workspace_root"]))
+
+
+def project_local_path(key: str, project: dict[str, Any], environment_config: dict[str, Any], root: Path) -> Path:
+    if not project.get("dir"):
+        raise ValueError("Project is missing dir")
+    overrides = environment_config.get("project_dir_overrides", {})
+    project_dir = overrides.get(key, project["dir"]) if isinstance(overrides, dict) else project["dir"]
+    return root / str(project_dir)
+
+
+def project_result(
+    key: str,
+    project: dict[str, Any],
+    environment: str,
+    environment_config: dict[str, Any],
+    root: Path,
+) -> dict[str, Any]:
+    github = github_slug(project)
+    owner = str(project.get("owner", ""))
+    local_path = project_local_path(key, project, environment_config, root)
+    return {
+        "key": key,
+        "environment": environment,
+        "local_path": str(local_path),
+        "github": github,
+        "owner": owner,
+        "github_https": f"https://github.com/{github}" if github else None,
+        "github_ssh": f"git@github.com:{github}.git" if github else None,
+        "dir": str(project["dir"]),
+        "aliases": project.get("aliases", []),
+        "description": project.get("description", ""),
+    }
+
+
+def markdown_path(root: Path, key: str, project: dict[str, Any], environment_config: dict[str, Any]) -> str:
+    local_path = project_local_path(key, project, environment_config, root)
+    home = Path.home()
+    try:
+        relative = local_path.relative_to(home)
+    except ValueError:
+        return str(local_path)
+    return f"~/{relative}"
+
+
+def generate_markdown(registry: dict[str, Any], environment: str, environment_config: dict[str, Any], root: Path) -> str:
+    projects = registry["projects"]
+    environments = registry["environments"]
+    ownership_entities = registry["ownership_entities"]
+    lines = [
+        "# Project registry",
+        "",
+        "Generated from `projects.yaml`. Do not edit this file directly; update `projects.yaml` and regenerate it with `bin/project-resolve --generate-md > PROJECTS.md`.",
+        "",
+        "Use `bin/project-resolve` to resolve spoken project names, aliases, local paths, and GitHub repositories.",
+        "",
+        "## Environment selection",
+        "",
+        "Resolution uses `AGENTS_REGISTRY_ENV` when set. If it is not set, `bin/project-resolve` tries to auto-detect the environment from `projects.yaml`.",
+        "Set `AGENTS_REGISTRY_WORKSPACE_ROOT` to override the selected environment's default workspace root when a host uses a different checkout path.",
+        "",
+        f"Generated for environment: `{environment}`.",
+        "",
+        "Current environment roots:",
+        "",
+        "| Environment | Workspace root |",
+        "| --- | --- |",
+    ]
+    for name, config in environments.items():
+        lines.append(f"| `{name}` | `{config['workspace_root']}` |")
+
+    lines.extend(
+        [
+            "",
+            "## Ownership entities",
+            "",
+            "| Entity | Description |",
+            "| --- | --- |",
+        ]
+    )
+    for name, config in ownership_entities.items():
+        lines.append(f"| `{name}` | {config.get('description', '')} |")
+
+    lines.extend(
+        [
+            "",
+            "## Usage",
+            "",
+            "```bash",
+            "python3 -m pip install pyyaml rapidfuzz",
+            "",
+            "bin/project-resolve logseq --path",
+            "bin/project-resolve \"log this to logseq\" --github",
+            "bin/project-resolve dbt --json",
+            "bin/project-resolve --list",
+            "AGENTS_REGISTRY_ENV=vps bin/project-resolve prefect --path",
+            "```",
+            "",
+            "## Core mappings",
+            "",
+            f"| Spoken name | Owner | Local path on `{environment}` | GitHub |",
+            "| --- | --- | --- | --- |",
+        ]
+    )
+    for key, project in projects.items():
+        github = github_slug(project) or "null"
+        lines.append(f"| `{key}` | `{project.get('owner', '')}` | `{markdown_path(root, key, project, environment_config)}` | `{github}` |")
+
+    lines.extend(
+        [
+            "",
+            "## Matching policy",
+            "",
+            "`bin/project-resolve` resolves in this order:",
+            "",
+            "1. Exact project key.",
+            "2. Exact alias.",
+            "3. Exact GitHub repository basename, when unique.",
+            "4. Deterministic fuzzy match through `rapidfuzz` across keys, aliases, repo slugs, repo basenames, and descriptions.",
+            "",
+            "If fuzzy matching is not clearly unique, the resolver fails and prints candidates instead of guessing.",
+            "",
+        ]
+    )
+    return "\n".join(lines)
+
+
+def exact_indexes(projects: dict[str, Any]) -> tuple[dict[str, str], dict[str, list[str]]]:
+    exact: dict[str, str] = {}
+    basenames: dict[str, list[str]] = {}
+
+    for key, project in projects.items():
+        exact.setdefault(normalize(key), key)
+        for alias in project.get("aliases", []) or []:
+            exact.setdefault(normalize(str(alias)), key)
+        github = github_slug(project)
+        if github:
+            base = normalize(repo_basename(github))
+            basenames.setdefault(base, []).append(key)
+
+    return exact, basenames
+
+
+def fuzzy_choices(projects: dict[str, Any]) -> dict[str, str]:
+    choices: dict[str, str] = {}
+    for key, project in projects.items():
+        terms = [key]
+        terms.extend(str(alias) for alias in project.get("aliases", []) or [])
+        github = github_slug(project)
+        if github:
+            terms.extend([github, repo_basename(github)])
+        if project.get("description"):
+            terms.append(str(project["description"]))
+        for term in terms:
+            choices[f"{key}\t{term}"] = key
+    return choices
+
+
+def resolve_project(query: str, projects: dict[str, Any]) -> tuple[str, list[tuple[str, int, str]]]:
+    normalized_query = normalize(query)
+    exact, basenames = exact_indexes(projects)
+
+    if normalized_query in exact:
+        return exact[normalized_query], []
+
+    basename_matches = basenames.get(normalized_query, [])
+    if len(basename_matches) == 1:
+        return basename_matches[0], []
+    if len(basename_matches) > 1:
+        return "", [(key, 100, "github basename") for key in basename_matches]
+
+    choices = fuzzy_choices(projects)
+    matches = process.extract(
+        query,
+        choices.keys(),
+        scorer=fuzz.WRatio,
+        limit=8,
+    )
+    candidates: list[tuple[str, int, str]] = []
+    seen: set[str] = set()
+    for label, score, _index in matches:
+        key = choices[label]
+        if key in seen:
+            continue
+        seen.add(key)
+        _key, term = label.split("\t", 1)
+        candidates.append((key, int(round(score)), term))
+
+    if not candidates:
+        return "", []
+
+    top = candidates[0]
+    second_score = candidates[1][1] if len(candidates) > 1 else 0
+    if top[1] >= MIN_FUZZY_SCORE and top[1] - second_score >= MIN_FUZZY_MARGIN:
+        return top[0], candidates
+
+    return "", candidates
+
+
+def print_candidates(candidates: list[tuple[str, int, str]]) -> None:
+    if not candidates:
+        print("No matching projects found.", file=sys.stderr)
+        return
+    print("Could not resolve to a unique project. Candidates:", file=sys.stderr)
+    for key, score, term in candidates:
+        print(f"  - {key} (score {score}, matched {term!r})", file=sys.stderr)
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("query", nargs="?", help="Project key, alias, repo name, or fuzzy phrase")
+    parser.add_argument(
+        "--registry",
+        type=Path,
+        default=Path(__file__).resolve().parents[1] / "projects.yaml",
+        help="Path to projects.yaml",
+    )
+    parser.add_argument("--env", dest="environment", help="Environment name; overrides AGENTS_REGISTRY_ENV")
+    parser.add_argument("--list", action="store_true", help="List all project keys")
+    parser.add_argument("--path", action="store_true", help="Print the local path only")
+    parser.add_argument("--github", action="store_true", help="Print the GitHub slug only")
+    parser.add_argument("--https", action="store_true", help="Print the GitHub HTTPS URL only")
+    parser.add_argument("--ssh", action="store_true", help="Print the Git SSH URL only")
+    parser.add_argument("--json", action="store_true", help="Print full JSON result")
+    parser.add_argument("--generate-md", action="store_true", help="Generate PROJECTS.md from the registry")
+    return parser.parse_args()
+
+
+def main() -> int:
+    args = parse_args()
+    try:
+        registry = load_registry(args.registry)
+        projects = registry["projects"]
+
+        if args.environment:
+            os.environ["AGENTS_REGISTRY_ENV"] = args.environment
+
+        if args.generate_md:
+            environment = detect_environment(registry)
+            environment_config = registry["environments"][environment]
+            root = workspace_root(registry, environment)
+            print(generate_markdown(registry, environment, environment_config, root), end="")
+            return 0
+
+        if args.list:
+            for key in sorted(projects):
+                print(key)
+            return 0
+
+        if not args.query:
+            print("Missing query. Use --list or pass a project name.", file=sys.stderr)
+            return 2
+
+        environment = detect_environment(registry)
+        environment_config = registry["environments"][environment]
+        root = workspace_root(registry, environment)
+
+        key, candidates = resolve_project(args.query, projects)
+        if not key:
+            print_candidates(candidates)
+            return 1
+
+        result = project_result(key, projects[key], environment, environment_config, root)
+        if args.path:
+            print(result["local_path"])
+        elif args.github:
+            if result["github"] is None:
+                print(f"project-resolve: project {key!r} does not define github", file=sys.stderr)
+                return 1
+            print(result["github"])
+        elif args.https:
+            if result["github_https"] is None:
+                print(f"project-resolve: project {key!r} does not define github", file=sys.stderr)
+                return 1
+            print(result["github_https"])
+        elif args.ssh:
+            if result["github_ssh"] is None:
+                print(f"project-resolve: project {key!r} does not define github", file=sys.stderr)
+                return 1
+            print(result["github_ssh"])
+        else:
+            print(json.dumps(result, indent=2 if args.json else None, sort_keys=True))
+        return 0
+    except (OSError, ValueError, KeyError) as exc:
+        print(f"project-resolve: {exc}", file=sys.stderr)
+        return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
