@@ -26,19 +26,6 @@ skills:
       - references/team.md
       - references/commands.md
 
-  - name: shadcn
-    url: https://raw.githubusercontent.com/shadcn-ui/ui/refs/heads/main/skills/shadcn/SKILL.md
-    enabled: true
-    files:
-      - cli.md
-      - customization.md
-      - mcp.md
-      - rules/styling.md
-      - rules/forms.md
-      - rules/composition.md
-      - rules/icons.md
-      - rules/base-vs-radix.md
-
   - name: playwright-skill
     url: https://raw.githubusercontent.com/willmarple/playwright-skill/main/SKILL.md
     enabled: true
@@ -240,13 +227,6 @@ skills:
       - guides/webmcp/agentic-javascript-tools.md
       - guides/webmcp/webmcp.md
 
-  - name: copywriting
-    url: https://raw.githubusercontent.com/coreyhaines31/marketingskills/main/skills/copywriting/SKILL.md
-    enabled: true
-    files:
-      - references/copy-frameworks.md
-      - references/natural-transitions.md
-
   - name: ponytail
     url: https://raw.githubusercontent.com/DietrichGebert/ponytail/main/skills/ponytail/SKILL.md
     enabled: true
@@ -264,6 +244,235 @@ skills:
     enabled: true
     files:
       - GLOSSARY.md
+
+  - name: domain-modeling
+    url: https://raw.githubusercontent.com/mattpocock/skills/main/skills/engineering/domain-modeling/SKILL.md
+    enabled: true
+    files:
+      - ADR-FORMAT.md
+      - CONTEXT-FORMAT.md
+
+  - name: grill-me
+    url: https://raw.githubusercontent.com/mattpocock/skills/main/skills/productivity/grill-me/SKILL.md
+    enabled: true
+
+  - name: grill-with-docs
+    url: https://raw.githubusercontent.com/mattpocock/skills/main/skills/engineering/grill-with-docs/SKILL.md
+    enabled: true
+
+  - name: grilling
+    url: https://raw.githubusercontent.com/mattpocock/skills/main/skills/productivity/grilling/SKILL.md
+    enabled: true
+
+  - name: handoff
+    url: https://raw.githubusercontent.com/mattpocock/skills/main/skills/productivity/handoff/SKILL.md
+    enabled: true
+
+  - name: prototype
+    url: https://raw.githubusercontent.com/mattpocock/skills/main/skills/engineering/prototype/SKILL.md
+    enabled: true
+    files:
+      - LOGIC.md
+      - UI.md
+
+  - name: tdd
+    url: https://raw.githubusercontent.com/mattpocock/skills/main/skills/engineering/tdd/SKILL.md
+    enabled: true
+    files:
+      - mocking.md
+      - refactoring.md
+      - tests.md
+
+  - name: teach
+    url: https://raw.githubusercontent.com/mattpocock/skills/main/skills/productivity/teach/SKILL.md
+    enabled: true
+    files:
+      - GLOSSARY-FORMAT.md
+      - LEARNING-RECORD-FORMAT.md
+      - MISSION-FORMAT.md
+      - RESOURCES-FORMAT.md
+
+  - name: to-prd
+    url: https://raw.githubusercontent.com/mattpocock/skills/main/skills/engineering/to-prd/SKILL.md
+    enabled: true
+
+  - name: analyze-data
+    url: https://raw.githubusercontent.com/holistics/skills/main/plugins/holistics-development/skills/analyze-data/SKILL.md
+    enabled: true
+    files:
+      - .link
+
+  - name: convert-agent-skill-to-holistics
+    url: https://raw.githubusercontent.com/holistics/skills/main/plugins/holistics-development/skills/convert-agent-skill-to-holistics/SKILL.md
+    enabled: true
+
+  - name: create-holistics-skill
+    url: https://raw.githubusercontent.com/holistics/skills/main/plugins/holistics-development/skills/create-holistics-skill/SKILL.md
+    enabled: true
+
+  - name: develop-amql
+    url: https://raw.githubusercontent.com/holistics/skills/main/plugins/holistics-development/skills/develop-amql/SKILL.md
+    enabled: true
+    files:
+      - ../../references/.link
+      - ../../references/aml.md
+      - ../../references/aql.md
+      - ../../references/data_format.md
+      - ../../references/data_modeling.md
+      - ../../references/holistics.md
+      - ../../references/aml/examples/car_retails.page.aml
+      - ../../references/aml/examples/demo_ecommerce.dataset.aml
+      - ../../references/aml/examples/ecommerce_orders.model.aml
+      - ../../references/aml/type_definitions/action.aml
+      - ../../references/aml/type_definitions/conditional_format.aml
+      - ../../references/aml/type_definitions/dashboard.aml
+      - ../../references/aml/type_definitions/dashboard_theme.aml
+      - ../../references/aml/type_definitions/data_model.aml
+      - ../../references/aml/type_definitions/data_source.aml
+      - ../../references/aml/type_definitions/dataset.aml
+      - ../../references/aml/type_definitions/embed.aml
+      - ../../references/aml/type_definitions/format.aml
+      - ../../references/aml/type_definitions/import_settings.aml
+      - ../../references/aml/type_definitions/import_source.aml
+      - ../../references/aml/type_definitions/persistence.aml
+      - ../../references/aml/type_definitions/pre_aggregate.aml
+      - ../../references/aml/type_definitions/project_settings.aml
+      - ../../references/aml/type_definitions/relationship.aml
+      - ../../references/aml/type_definitions/schedule.aml
+      - ../../references/aml/type_definitions/template_func.aml
+      - ../../references/aml/type_definitions/viz.aml
+
+  - name: search-docs
+    url: https://raw.githubusercontent.com/holistics/skills/main/plugins/holistics-development/skills/search-docs/SKILL.md
+    enabled: true
+    files:
+      - .link
+
+  - name: setup-amql-development
+    url: https://raw.githubusercontent.com/holistics/skills/main/plugins/holistics-development/skills/setup-amql-development/SKILL.md
+    enabled: true
+
+  - name: use-existing-viz
+    url: https://raw.githubusercontent.com/holistics/skills/main/plugins/holistics-development/skills/use-existing-viz/SKILL.md
+    enabled: true
+    files:
+      - .link
+
+  - name: visualize-data
+    url: https://raw.githubusercontent.com/holistics/skills/main/plugins/holistics-development/skills/visualize-data/SKILL.md
+    enabled: true
+    files:
+      - .link
+
+  - name: write-aql
+    url: https://raw.githubusercontent.com/holistics/skills/main/plugins/holistics-development/skills/write-aql/SKILL.md
+    enabled: true
+    files:
+      - .link
+
+  - name: holistics-migrate-power-bi
+    url: https://raw.githubusercontent.com/holistics/skills/main/plugins/holistics-migrate-power-bi/skills/holistics-migrate-power-bi/SKILL.md
+    enabled: true
+    files:
+      - references/concept-mapping.md
+      - references/dax-to-aql.md
+      - references/migration-workflow.md
+      - references/tmdl-to-aml.md
+      - references/validation.md
+
+  - name: impeccable
+    url: https://raw.githubusercontent.com/pbakaus/impeccable/main/plugin/skills/impeccable/SKILL.md
+    enabled: true
+    files:
+      - reference/adapt.md
+      - reference/animate.md
+      - reference/audit.md
+      - reference/bolder.md
+      - reference/brand.md
+      - reference/clarify.md
+      - reference/codex.md
+      - reference/colorize.md
+      - reference/craft.md
+      - reference/critique.md
+      - reference/delight.md
+      - reference/distill.md
+      - reference/document.md
+      - reference/extract.md
+      - reference/harden.md
+      - reference/hooks.md
+      - reference/init.md
+      - reference/interaction-design.md
+      - reference/layout.md
+      - reference/live.md
+      - reference/onboard.md
+      - reference/optimize.md
+      - reference/overdrive.md
+      - reference/polish.md
+      - reference/product.md
+      - reference/quieter.md
+      - reference/shape.md
+      - reference/typeset.md
+      - scripts/command-metadata.json
+      - scripts/context-signals.mjs
+      - scripts/context.mjs
+      - scripts/critique-storage.mjs
+      - scripts/detect-csp.mjs
+      - scripts/detect.mjs
+      - scripts/detector/cli/main.mjs
+      - scripts/detector/design-system.mjs
+      - scripts/detector/detect-antipatterns-browser.js
+      - scripts/detector/detect-antipatterns.mjs
+      - scripts/detector/findings.mjs
+      - scripts/detector/node/file-system.mjs
+      - scripts/detector/profile/profiler.mjs
+      - scripts/detector/registry/antipatterns.mjs
+      - scripts/detector/rules/checks.mjs
+      - scripts/detector/shared/color.mjs
+      - scripts/detector/shared/constants.mjs
+      - scripts/detector/shared/inline-ignores.mjs
+      - scripts/detector/shared/page.mjs
+      - scripts/hook-admin.mjs
+      - scripts/hook-before-edit.mjs
+      - scripts/hook-lib.mjs
+      - scripts/hook.mjs
+      - scripts/lib/design-parser.mjs
+      - scripts/lib/impeccable-config.mjs
+      - scripts/lib/impeccable-paths.mjs
+      - scripts/lib/is-generated.mjs
+      - scripts/lib/target-args.mjs
+      - scripts/live-accept.mjs
+      - scripts/live-browser-dom.js
+      - scripts/live-browser-session.js
+      - scripts/live-browser.js
+      - scripts/live-commit-manual-edits.mjs
+      - scripts/live-complete.mjs
+      - scripts/live-copy-edit-agent.mjs
+      - scripts/live-discard-manual-edits.mjs
+      - scripts/live-inject.mjs
+      - scripts/live-insert.mjs
+      - scripts/live-manual-edit-evidence.mjs
+      - scripts/live-poll.mjs
+      - scripts/live-resume.mjs
+      - scripts/live-server.mjs
+      - scripts/live-status.mjs
+      - scripts/live-target.mjs
+      - scripts/live-wrap.mjs
+      - scripts/live.mjs
+      - scripts/live/browser-script-parts.mjs
+      - scripts/live/completion.mjs
+      - scripts/live/event-validation.mjs
+      - scripts/live/insert-ui.mjs
+      - scripts/live/manual-apply.mjs
+      - scripts/live/manual-edit-routes.mjs
+      - scripts/live/manual-edits-buffer.mjs
+      - scripts/live/session-store.mjs
+      - scripts/live/svelte-component.mjs
+      - scripts/live/sveltekit-adapter.mjs
+      - scripts/live/ui-core.mjs
+      - scripts/live/vocabulary.mjs
+      - scripts/modern-screenshot.umd.js
+      - scripts/palette.mjs
+      - scripts/pin.mjs
 
   - name: govuk-style
     url: https://gist.githubusercontent.com/fofr/505e225f9bf5e839d30c12ba6bfa0be2/raw/SKILL.md
