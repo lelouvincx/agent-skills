@@ -36,6 +36,7 @@ Use these sources in order when adding or refreshing a document:
 
 ### Commands
 
+- [Codex Usage Command](./codex-usage.md)
 - [Logseq: Log Current Task](./logseq-log-current-task.md)
 - [Track Event](./track-event.md)
 
