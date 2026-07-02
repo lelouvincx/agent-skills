@@ -30,6 +30,5 @@
     }
   ],
   "amp.updates.mode": "auto",
-  "amp.showCosts": false,
-  "amp.notifications.system.enabled": true
+  "amp.showCosts": false
 }
