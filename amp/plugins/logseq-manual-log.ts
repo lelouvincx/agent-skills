@@ -1,8 +1,9 @@
 // @i-know-the-amp-plugin-api-is-wip-and-very-experimental-right-now
 //
-// logseq-manual-log — command-palette action for manually asking Amp to log
-// the current thread/task into the user's Logseq graph. This intentionally has
-// no agent lifecycle hook: logging only happens when the command is invoked.
+// logseq-manual-log — command-palette action and agent-callable tool for
+// manually asking Amp to log the current thread/task into the user's Logseq
+// graph. This intentionally has no agent lifecycle hook: logging only happens
+// when the command is invoked or the tool is called from an Amp thread.
 
 import type {
 	AgentReasoningEffort,
@@ -20,7 +21,10 @@ const WORKER_REASONING_EFFORT: AgentReasoningEffort = 'medium'
 const WORKER_TIMEOUT_MS = 10 * 60 * 1000
 const PARENT_RECENT_MESSAGE_SEED_LIMIT = 20
 const MAX_PARENT_EXCERPT_CHARS = 20_000
+const MAX_RESULT_CHARS = 500
 const MAX_NOTIFICATION_CHARS = 500
+
+type LogContext = Pick<PluginCommandContext, 'thread' | '$'>
 
 export default function (amp: PluginAPI) {
 	amp.logger.log(`[logseq-manual-log] plugin loaded → ${LOGSEQ_REPO}`)
@@ -51,60 +55,80 @@ export default function (amp: PluginAPI) {
 				return
 			}
 
-			const parentThreadID = ctx.thread.id
-			const parentExcerpt = await parentThreadExcerpt(ctx.thread)
-			const workerAgent = amp.getBuiltinAgent(WORKER_MODE, { reasoningEffort: WORKER_REASONING_EFFORT })
-			const workerThread = await workerAgent.createThread({
-				parentThreadID,
-				show: false,
-			})
-
-			await ctx.ui.notify(`Started Logseq worker ${workerThread.id}.`)
-
-			try {
-				await workerThread.appendUserMessage({
-					type: 'user-message',
-					content: buildPrompt(parentThreadID, workerThread.id, hint.trim(), parentExcerpt),
-				})
-
-				const response = await workerThread.waitForResponse({ timeoutMs: WORKER_TIMEOUT_MS })
-				const summary = extractAssistantText(response) || 'Logseq worker finished.'
-				const newTitle = extractThreadTitle(summary)
-				if (!newTitle) {
-					await ctx.ui.notify(
-						`Logseq worker ${workerThread.id} finished, but did not return a valid thread title; leaving it unarchived for inspection.\n${truncate(summary, MAX_NOTIFICATION_CHARS)}`,
-					)
-					return
-				}
-
-				try {
-					await renameThread(ctx, parentThreadID, newTitle)
-				} catch (error) {
-					await ctx.ui.notify(
-						`Logseq worker ${workerThread.id} finished, but parent thread rename failed; leaving it unarchived for inspection.\n${errorMessage(error)}`,
-					)
-					return
-				}
-
-				await ctx.ui.notify(
-					`Logseq worker ${workerThread.id} finished and renamed this thread to ${newTitle}. Archiving worker now.\n${truncate(summary, MAX_NOTIFICATION_CHARS)}`,
-				)
-			} catch (error) {
-				await ctx.ui.notify(
-					`Logseq worker ${workerThread.id} failed or timed out; leaving it unarchived for inspection.\n${errorMessage(error)}`,
-				)
-				return
-			}
-
-			try {
-				await archiveThread(ctx, workerThread.id)
-			} catch (error) {
-				await ctx.ui.notify(
-					`Logseq worker ${workerThread.id} finished, but archive failed; leaving it unarchived for inspection.\n${errorMessage(error)}`,
-				)
-			}
+			const result = await logCurrentTask(amp, ctx, hint.trim(), MAX_NOTIFICATION_CHARS)
+			await ctx.ui.notify(result)
 		},
 	)
+
+	amp.registerTool({
+		name: 'logseq_log_current_task',
+		description: [
+			'Log the durable outcome of the current Amp thread into the configured Logseq graph.',
+			'Use this when the user asks to log the current task from inside the active Amp thread, without using the command palette.',
+			'The tool starts a hidden Logseq worker, waits for it, renames the parent thread from the Logseq task title, and archives the worker when successful.',
+		].join(' '),
+		inputSchema: {
+			type: 'object',
+			properties: {
+				hint: {
+					type: 'string',
+					description: 'Optional target, note, or source link, such as update DAT-594 or a Slack/PR/Notion URL.',
+				},
+			},
+		},
+
+		async execute(input, ctx) {
+			if (!ctx.thread) {
+				throw new Error('Open an Amp thread before running logseq_log_current_task.')
+			}
+
+			return logCurrentTask(amp, ctx, String(input.hint || '').trim(), MAX_RESULT_CHARS)
+		},
+	})
+}
+
+async function logCurrentTask(amp: PluginAPI, ctx: LogContext, hint: string, maxResultChars: number): Promise<string> {
+	if (!ctx.thread) {
+		throw new Error('Open an Amp thread before running Logseq: Log current task.')
+	}
+
+	const parentThreadID = ctx.thread.id
+	const parentExcerpt = await parentThreadExcerpt(ctx.thread)
+	const workerAgent = amp.getBuiltinAgent(WORKER_MODE, { reasoningEffort: WORKER_REASONING_EFFORT })
+	const workerThread = await workerAgent.createThread({
+		parentThreadID,
+		show: false,
+	})
+
+	try {
+		await workerThread.appendUserMessage({
+			type: 'user-message',
+			content: buildPrompt(parentThreadID, workerThread.id, hint, parentExcerpt),
+		})
+
+		const response = await workerThread.waitForResponse({ timeoutMs: WORKER_TIMEOUT_MS })
+		const summary = extractAssistantText(response) || 'Logseq worker finished.'
+		const newTitle = extractThreadTitle(summary)
+		if (!newTitle) {
+			return `Logseq worker ${workerThread.id} finished, but did not return a valid thread title; leaving it unarchived for inspection.\n${truncate(summary, maxResultChars)}`
+		}
+
+		try {
+			await renameThread(ctx, parentThreadID, newTitle)
+		} catch (error) {
+			return `Logseq worker ${workerThread.id} finished, but parent thread rename failed; leaving it unarchived for inspection.\n${errorMessage(error)}`
+		}
+
+		try {
+			await archiveThread(ctx, workerThread.id)
+		} catch (error) {
+			return `Logseq worker ${workerThread.id} finished and renamed this thread to ${newTitle}, but archive failed; leaving it unarchived for inspection.\n${errorMessage(error)}`
+		}
+
+		return `Logseq worker ${workerThread.id} finished, renamed this thread to ${newTitle}, and was archived.\n${truncate(summary, maxResultChars)}`
+	} catch (error) {
+		return `Logseq worker ${workerThread.id} failed or timed out; leaving it unarchived for inspection.\n${errorMessage(error)}`
+	}
 }
 
 function buildPrompt(parentThreadID: string, workerThreadID: string, hint: string, parentExcerpt: string): string {
@@ -201,14 +225,14 @@ function extractAssistantText(message: ThreadAssistantMessage): string {
 		.trim()
 }
 
-async function archiveThread(ctx: PluginCommandContext, threadID: ThreadID): Promise<void> {
+async function archiveThread(ctx: LogContext, threadID: ThreadID): Promise<void> {
 	const result = await ctx.$`amp threads archive ${threadID}`
 	if (result.exitCode !== 0) {
 		throw new Error(result.stderr.trim() || result.stdout.trim() || `amp threads archive exited with ${result.exitCode}`)
 	}
 }
 
-async function renameThread(ctx: PluginCommandContext, threadID: ThreadID, newTitle: string): Promise<void> {
+async function renameThread(ctx: LogContext, threadID: ThreadID, newTitle: string): Promise<void> {
 	const result = await ctx.$`amp threads rename ${threadID} ${newTitle}`
 	if (result.exitCode !== 0) {
 		throw new Error(result.stderr.trim() || result.stdout.trim() || `amp threads rename exited with ${result.exitCode}`)
