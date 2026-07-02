@@ -3,19 +3,14 @@
   "amp.gauge": "tokens",
   "amp.git.commit.ampThread.enabled": false,
   "amp.git.commit.coauthor.enabled": false,
-  "amp.internal.deepReasoningEffort": "high",
+  "amp.internal.deepReasoningEffort": "xhigh",
   "amp.mcpServers": {
     "ffmpeg-mcp": {
-      "args": [
-        "-y",
-        "@bitscorp-mcp/mcp-ffmpeg"
-      ],
+      "args": ["-y", "@bitscorp-mcp/mcp-ffmpeg"],
       "command": "npx"
     },
     "sem": {
-      "args": [
-        "mcp"
-      ],
+      "args": ["mcp"],
       "command": "/opt/homebrew/bin/sem"
     }
   },
@@ -34,5 +29,6 @@
       "tool": "*"
     }
   ],
-  "amp.updates.mode": "auto"
+  "amp.updates.mode": "auto",
+  "amp.showCosts": false
 }
