@@ -19,12 +19,16 @@ const LOGSEQ_REPO = process.env.AMP_LOGSEQ_GRAPH_DIR ?? '/Users/lelouvincx/Devel
 const WORKER_MODE: BuiltinAgentMode = 'deep'
 const WORKER_REASONING_EFFORT: AgentReasoningEffort = 'medium'
 const WORKER_TIMEOUT_MS = 10 * 60 * 1000
+const WORKER_WAIT_RETRY_DELAY_MS = 1_000
 const PARENT_RECENT_MESSAGE_SEED_LIMIT = 20
 const MAX_PARENT_EXCERPT_CHARS = 20_000
 const MAX_RESULT_CHARS = 500
 const MAX_NOTIFICATION_CHARS = 500
 
 type LogContext = Pick<PluginCommandContext, 'thread' | '$'>
+type WorkerThread = {
+	waitForResponse(options: { timeoutMs: number }): Promise<ThreadAssistantMessage>
+}
 
 export default function (amp: PluginAPI) {
 	amp.logger.log(`[logseq-manual-log] plugin loaded → ${LOGSEQ_REPO}`)
@@ -106,7 +110,7 @@ async function logCurrentTask(amp: PluginAPI, ctx: LogContext, hint: string, max
 			content: buildPrompt(parentThreadID, workerThread.id, hint, parentExcerpt),
 		})
 
-		const response = await workerThread.waitForResponse({ timeoutMs: WORKER_TIMEOUT_MS })
+		const response = await waitForWorkerResponse(workerThread)
 		const summary = extractAssistantText(response) || 'Logseq worker finished.'
 		const newTitle = extractThreadTitle(summary)
 		if (!newTitle) {
@@ -129,6 +133,34 @@ async function logCurrentTask(amp: PluginAPI, ctx: LogContext, hint: string, max
 	} catch (error) {
 		return `Logseq worker ${workerThread.id} failed or timed out; leaving it unarchived for inspection.\n${errorMessage(error)}`
 	}
+}
+
+async function waitForWorkerResponse(workerThread: WorkerThread): Promise<ThreadAssistantMessage> {
+	const deadline = Date.now() + WORKER_TIMEOUT_MS
+	let lastError: unknown
+
+	while (Date.now() < deadline) {
+		const remainingMs = deadline - Date.now()
+		try {
+			return await workerThread.waitForResponse({ timeoutMs: remainingMs })
+		} catch (error) {
+			lastError = error
+			if (!isThreadMessagesTimeout(error)) {
+				throw error
+			}
+			await sleep(Math.min(WORKER_WAIT_RETRY_DELAY_MS, Math.max(0, deadline - Date.now())))
+		}
+	}
+
+	throw lastError instanceof Error ? lastError : new Error('Logseq worker timed out')
+}
+
+function isThreadMessagesTimeout(error: unknown): boolean {
+	return errorMessage(error).includes('Plugin thread.messages timed out')
+}
+
+function sleep(ms: number): Promise<void> {
+	return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
 function buildPrompt(parentThreadID: string, workerThreadID: string, hint: string, parentExcerpt: string): string {
