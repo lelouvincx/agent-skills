@@ -20,6 +20,7 @@ and this project does not currently use versioned releases.
 
 ### Changed
 
+- Allow the `teach` skill to be model-invoked from Amp. [#55]
 - Manage migrated skills from upstream remote sources, including Holistics, Matt Pocock, and Impeccable skill sources plus shared Holistics references. [#46]
 - Run project resolution through `uvx` and document `uv`/`uvx` prerequisites for local and Orb setup. [#45]
 - Rework README and maintenance docs for clearer human setup, Amp capability tables, and agent-facing repository maintenance guidance. [#18] [#41] [#47]
