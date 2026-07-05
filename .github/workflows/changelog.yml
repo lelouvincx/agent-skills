@@ -1,0 +1,26 @@
+name: Changelog
+
+on:
+  pull_request:
+
+jobs:
+  require-changelog-update:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check CHANGELOG.md was updated
+        run: |
+          changed_files=$(git diff --name-only \
+            "${{ github.event.pull_request.base.sha }}" \
+            "${{ github.event.pull_request.head.sha }}")
+
+          if ! printf '%s\n' "$changed_files" | grep -qx 'CHANGELOG.md'; then
+            echo 'Every pull request must update CHANGELOG.md under [Unreleased].'
+            echo 'Changed files:'
+            printf '%s\n' "$changed_files"
+            exit 1
+          fi
