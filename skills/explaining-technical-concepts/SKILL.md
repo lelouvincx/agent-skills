@@ -1,9 +1,9 @@
 ---
-name: writing-clear-explainers
-description: Writes and edits technical explanations, video scripts, and teaching prose so they feel easy to understand. Use when the user wants a clear explainer, asks to simplify a complex concept, turn notes into a talk or script, or borrow clarity patterns from an educator without copying their exact voice.
+name: explaining-technical-concepts
+description: Explains technical concepts through clear, causal explainers, video scripts, and teaching prose. Use when the user wants a complex idea made easy to understand, asks to simplify a technical concept, turn notes into a talk or script, or borrow clarity patterns from an educator without copying their exact voice.
 ---
 
-# Writing Clear Explainers
+# Explaining Technical Concepts
 
 Turn complex technical topics into simple, causal explainers that move from confusion to clarity.
 
