@@ -47,6 +47,7 @@ See [PROJECTS.md](PROJECTS.md) for the generated project list.
 | [ponytail-review](skills/ponytail-review/SKILL.md) | Remote | review code for over-engineering only |
 | [ponytail-help](skills/ponytail-help/SKILL.md) | Remote | show ponytail commands and modes |
 | [writing-great-skills](skills/writing-great-skills/SKILL.md) | Remote | write and edit skills well |
+| [explaining-technical-concepts](skills/explaining-technical-concepts/SKILL.md) | Local | explain technical concepts so they are easy to understand |
 | [govuk-style](skills/govuk-style/SKILL.md) | Remote | write clear plain-English prose |
 | [impeccable](skills/impeccable/SKILL.md) | Remote | design, review, and improve frontend interfaces |
 | [domain-modeling](skills/domain-modeling/SKILL.md) | Remote | define domain terms and decisions |
