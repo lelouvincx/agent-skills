@@ -9,7 +9,7 @@ and this project does not currently use versioned releases.
 
 ### Added
 
-- Add a changelog and enforce changelog updates for every pull request. [PR pending]
+- Add a changelog and enforce changelog updates for every pull request. [#54]
 
 ### Changed
 
