@@ -1,15 +1,35 @@
 ---
-title: "RFC 0006: Amp Orb bootstrap lifecycle"
-slug: "rfc-0006-amp-orb-bootstrap-lifecycle"
-status: "proposed"
+doc_schema: "amp-rfc/v1"
+code: "RFC-0006"
+title: "Amp Orb bootstrap lifecycle"
+slug: "amp-orb-bootstrap-lifecycle"
+file: "rfc-0006-amp-orb-bootstrap-lifecycle.md"
+status: "Draft"
+summary: "Define Amp Orb setup and resume lifecycle scripts from the agent-skills source of truth."
+created: "2026-07-05"
+updated: "2026-07-05"
 last_reviewed: "2026-07-05"
+amp_thread_id:
+  T-019f3186-1f2b-76fe-a23b-ec9ff79018b9: "RFC schema and docs maintenance"
+dependency: []
+implementation: []
+inputs:
+  - ".agents/setup or .agents/resume lifecycle invocation"
+  - "agent-skills repository and runtime environment variables"
+outputs:
+  - "synced Amp runtime artifacts"
+  - "linked or refreshed reusable skills"
+supersedes: []
+superseded_by: null
+related: []
+tags: []
 ---
 
-# RFC 0006: Amp Orb bootstrap lifecycle
+# RFC-0006: Amp Orb bootstrap lifecycle
 
-## Status
+## Summary
 
-Proposed.
+Define the Amp Orb setup and resume lifecycle scripts from this repository.
 
 ## Context
 
@@ -26,7 +46,7 @@ Manage Amp Orb runtime initialization through Amp's script convention only:
 
 No other runtime entrypoints are part of this capability. In particular, do not add `~/.config/amp/bootstrap`, a local workstation bootstrap target, or a user-facing local bin wrapper for this lifecycle.
 
-## Scope
+## Contract
 
 In scope:
 
@@ -44,7 +64,7 @@ Out of scope:
 - `~/.config/amp/bootstrap` as an entrypoint.
 - User-facing CLI wrappers.
 
-## Lifecycle behavior
+## Behavior
 
 ### `.agents/setup`
 
@@ -72,7 +92,7 @@ It should:
 5. avoid remote skill refresh by default;
 6. avoid package installation unless the already-specified setup dependencies prove required for resume correctness.
 
-## Safety
+## Permissions and side effects
 
 - Never discard local changes.
 - Never force-reset `agent-skills`.
@@ -81,14 +101,7 @@ It should:
 - Never print secrets.
 - Keep one-off upstream compatibility patches out of the lifecycle scripts once the source configuration has been fixed.
 
-## Migration
-
-1. Treat `agent-skills` as the source of truth for Amp Orb bootstrap lifecycle behavior.
-2. Move Amp Orb-specific bootstrap behavior into `.agents/setup` and `.agents/resume`.
-3. Replace or remove external Logseq and dotfiles copies that duplicate this behavior.
-4. Keep only Amp-required lifecycle scripts as runtime entrypoints.
-
-## Verification
+## Examples
 
 Run shell syntax checks:
 
@@ -104,4 +117,15 @@ AMP_CONFIG_DIR="$(mktemp -d)" ./sync-skills.sh --remote
 AMP_CONFIG_DIR="$(mktemp -d)" ./sync-skills.sh
 ```
 
+## Maintenance notes
+
+1. Treat `agent-skills` as the source of truth for Amp Orb bootstrap lifecycle behavior.
+2. Move Amp Orb-specific bootstrap behavior into `.agents/setup` and `.agents/resume`.
+3. Replace or remove external Logseq and dotfiles copies that duplicate this behavior.
+4. Keep only Amp-required lifecycle scripts as runtime entrypoints.
+
 When practical, validate `.agents/setup` and `.agents/resume` in a fresh orb-like environment.
+
+## Open questions
+
+None.

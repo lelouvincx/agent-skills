@@ -3,16 +3,20 @@ name: CI
 on:
   pull_request:
     paths:
+      - "amp/docs/rfcs/**"
       - "amp/docs/tools/**"
       - "amp/plugins/**"
+      - "amp/scripts/validate-rfcs.py"
       - "amp/scripts/validate-plugin-docs.py"
       - ".github/workflows/ci.yml"
   push:
     branches:
       - main
     paths:
+      - "amp/docs/rfcs/**"
       - "amp/docs/tools/**"
       - "amp/plugins/**"
+      - "amp/scripts/validate-rfcs.py"
       - "amp/scripts/validate-plugin-docs.py"
       - ".github/workflows/ci.yml"
 
@@ -25,3 +29,6 @@ jobs:
 
       - name: Validate Amp plugin docs
         run: python3 amp/scripts/validate-plugin-docs.py
+
+      - name: Validate Amp RFC docs
+        run: python3 amp/scripts/validate-rfcs.py

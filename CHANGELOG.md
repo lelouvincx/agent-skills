@@ -17,6 +17,7 @@ and this project does not currently use versioned releases.
 - Add the shared project registry, `bin/project-resolve`, generated `PROJECTS.md`, project resolution skill, and RFC-0005. [#44]
 - Add Orb bootstrap lifecycle support with cold-start and warm-start scripts plus RFC-0006. [#42] [#52]
 - Add CI validation for Amp plugin docs and enforce the plugin capability schema contract. [#50]
+- Add RFC documentation schema, scoped RFC guidance, and CI validation for RFC frontmatter, relationships, and headings. [#56]
 
 ### Changed
 
