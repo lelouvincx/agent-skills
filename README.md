@@ -41,7 +41,7 @@ See [PROJECTS.md](PROJECTS.md) for the generated project list.
 | [notion](skills/notion/SKILL.md) | Remote | manage Notion pages, databases, and comments |
 | [modern-web-guidance](skills/modern-web-guidance/SKILL.md) | Remote | check current web platform guidance before frontend work |
 | [linear-cli](skills/linear-cli/SKILL.md) | Remote | manage Linear issues from the command line |
-| [playwright-skill](skills/playwright-skill/SKILL.md) | Remote | automate browser checks with `playwright-cli` |
+| [agent-browser](skills/agent-browser/SKILL.md) | Remote | automate browser and UI tasks with `agent-browser` |
 | [remotion](skills/remotion/SKILL.md) | Remote | create videos with Remotion in React |
 | [ponytail](skills/ponytail/SKILL.md) | Remote | choose the simplest code that works |
 | [ponytail-review](skills/ponytail-review/SKILL.md) | Remote | review code for over-engineering only |
