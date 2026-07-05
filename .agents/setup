@@ -56,8 +56,8 @@ ensure_uv() {
 
 ensure_uv
 
-# E2B orbs may not include rsync by default. Install it when possible because
-# sync-skills.sh uses rsync to project Amp plugins/docs into ~/.config/amp.
+# Amp-managed orbs may not include rsync by default. Install it when possible
+# because sync-skills.sh uses rsync to project Amp plugins/docs into ~/.config/amp.
 if ! command -v rsync >/dev/null 2>&1; then
 	echo "[agent-skills] rsync missing; attempting to install it"
 	if command -v apt-get >/dev/null 2>&1; then

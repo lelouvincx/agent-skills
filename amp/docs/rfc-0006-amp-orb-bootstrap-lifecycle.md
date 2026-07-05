@@ -13,7 +13,7 @@ Proposed.
 
 ## Context
 
-Amp-managed runtime bootstrap logic has drifted across Logseq notes, dotfiles, and this repository. The only supported consumer for this capability is the Amp Orb / E2B runtime, and Amp already defines lifecycle script entrypoints for that runtime.
+Amp-managed runtime bootstrap logic has drifted across Logseq notes, dotfiles, and this repository. The only supported consumer for this capability is the Amp Orb runtime, and Amp already defines lifecycle script entrypoints for that runtime.
 
 `agent-skills` should be the source of truth for those lifecycle scripts so Amp runtime setup can be maintained in one place.
 
@@ -30,7 +30,7 @@ No other runtime entrypoints are part of this capability. In particular, do not 
 
 In scope:
 
-- Amp Orb / E2B runtime setup only.
+- Amp Orb runtime setup only.
 - Cloning or updating `agent-skills` inside the orb.
 - Installing the already-specified missing runtime dependencies used by the bootstrap path.
 - Syncing Amp artifacts, skills, and generated remote skill payloads according to lifecycle stage.
