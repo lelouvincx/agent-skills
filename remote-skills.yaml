@@ -164,7 +164,7 @@ skills:
       - guides/user-experience/cross-document-transitions.md
       - guides/user-experience/customize-scrollbar-color-and-thickness.md
       - guides/user-experience/dark-mode.md
-      - guides/user-experience/declarative-button-actions.md
+      - guides/user-experience/custom-button-actions.md
       - guides/user-experience/declarative-dialog-popover-control.md
       - guides/user-experience/deliver-optimized-decorative-images.md
       - guides/user-experience/design-token-reactivity.md
