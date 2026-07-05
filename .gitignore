@@ -21,13 +21,8 @@ skills/modern-web-guidance/SKILL.md
 skills/modern-web-guidance/.remote-source
 skills/modern-web-guidance/guides/
 
-skills/playwright-skill/SKILL.md
-skills/playwright-skill/.remote-source
-skills/playwright-skill/bin/
-skills/playwright-skill/skill/
-skills/playwright-skill/.playwright-cli
-
-skills/playwright-skill/.playwright-skill
+skills/agent-browser/SKILL.md
+skills/agent-browser/.remote-source
 
 skills/remotion/SKILL.md
 skills/remotion/.remote-source

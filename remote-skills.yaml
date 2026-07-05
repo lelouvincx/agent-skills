@@ -26,27 +26,9 @@ skills:
       - references/team.md
       - references/commands.md
 
-  - name: playwright-skill
-    url: https://raw.githubusercontent.com/willmarple/playwright-skill/main/SKILL.md
+  - name: agent-browser
+    url: https://raw.githubusercontent.com/vercel-labs/agent-browser/main/skills/agent-browser/SKILL.md
     enabled: true
-    files:
-      - skill/INSTALL.md
-      - skill/CONFIG.md
-      - skill/AUTH.md
-      - skill/REFERENCE.md
-      - skill/worktrees.example.json
-      - skill/secrets.example.json
-      - bin/open
-      - bin/close
-      - bin/click-css
-      - bin/fill-css
-      - bin/upload
-      - bin/auth-save
-      - bin/auth-load
-      - bin/context
-      - bin/inject-capture
-      - bin/cache-query
-      - bin/_resolve-session
 
   - name: remotion
     url: https://raw.githubusercontent.com/remotion-dev/skills/main/skills/remotion/SKILL.md
