@@ -7,13 +7,20 @@ file: "rfc-0005-project-registry.md"
 status: "Implemented (initial registry and resolver)"
 summary: "Map spoken project names to GitHub repositories and environment-relative local paths, with generated docs, a resolver CLI, and a short AI skill."
 created: "2026-07-01"
-updated: "2026-07-01"
-amp_thread_id: "T-019f1cc3-406e-75d8-877b-64fc80f2e8d3"
+updated: "2026-07-05"
+amp_thread_id:
+  T-019f1cc3-406e-75d8-877b-64fc80f2e8d3: "initial RFC design"
 implementation:
-  - path: "../../projects.yaml"
-  - path: "../../PROJECTS.md"
-  - path: "../../bin/project-resolve"
-  - path: "../../skills/resolving-projects/SKILL.md"
+  - path: "../../../projects.yaml"
+  - path: "../../../PROJECTS.md"
+  - path: "../../../bin/project-resolve"
+  - path: "../../../skills/resolving-projects/SKILL.md"
+inputs:
+  - "spoken project name or registry key"
+  - "projects.yaml registry data"
+outputs:
+  - "resolved project path and GitHub repository metadata"
+  - "generated PROJECTS.md documentation"
 related: []
 tags:
   - "project-registry"

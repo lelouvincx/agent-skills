@@ -7,13 +7,18 @@ file: "rfc-0002-agent-token-usage-ledger.md"
 status: "Implemented (initial)"
 summary: "Create a raw append-only local JSONL ledger for agent token usage events."
 created: "2026-06-20"
-updated: "2026-06-20"
-amp_thread_id: "T-019ee630-2df6-7697-a737-c08bbe4ab3ba"
+updated: "2026-07-05"
+amp_thread_id:
+  T-019ee630-2df6-7697-a737-c08bbe4ab3ba: "initial RFC design"
 dependency:
   - type: "rfc"
     code: "RFC-0001"
     title: "Claude Code as a manual read-only Amp subagent"
     path: "./rfc-0001-claude-code-subagent.md"
+inputs:
+  - "agent token usage events from Amp and subagent wrappers"
+outputs:
+  - "append-only local JSONL usage ledger"
 ---
 
 # RFC-0002: Raw agent token usage ledger
@@ -29,7 +34,9 @@ The goal is not to compare Amp and Claude Code. Their roles are different:
 
 The ledger should simply preserve enough raw usage data that Chinh can later ask Amp to read the file and explain usage patterns.
 
-## Motivation
+## Context
+
+### Motivation
 
 Agent work can consume meaningful token budget across Amp conversations and delegated Claude Code runs. The current Claude Code subagent already writes redacted audit logs, and Amp already displays a token gauge, but there is no simple durable ledger of usage events that can be analyzed later.
 
@@ -41,7 +48,7 @@ Agent activity happens → usage event is appended → later Amp reads JSONL and
 
 This should be boring infrastructure: raw data capture first, analysis later.
 
-## Goals
+### Goals
 
 - Store raw token usage events in one append-only local JSONL file.
 - Start with automatic Claude Code subagent usage capture because Claude CLI output already includes usage metadata.
@@ -49,7 +56,7 @@ This should be boring infrastructure: raw data capture first, analysis later.
 - Keep the format easy for Amp to consume directly in a later conversation.
 - Avoid summaries, dashboards, routing logic, or comparison logic in the first version.
 
-## Non-goals
+### Non-goals
 
 - Do not build an `agent-usage` CLI.
 - Do not build a dashboard or report UI.
@@ -59,7 +66,9 @@ This should be boring infrastructure: raw data capture first, analysis later.
 - Do not implement a cost optimizer.
 - Do not store raw transcripts by default.
 
-## Ledger path
+## Decision
+
+### Ledger path
 
 Use one user-wide JSONL file:
 
@@ -69,7 +78,9 @@ Use one user-wide JSONL file:
 
 Each line is one usage event.
 
-## Event schema
+## Contract
+
+### Event schema
 
 Initial schema:
 
@@ -113,7 +124,9 @@ Field notes:
 - `usage`: token counters, using lower-camel-case names in JSON.
 - `metadata.auditLogPath`: pointer to the detailed redacted audit log.
 
-## Claude Code capture
+## Behavior
+
+### Claude Code capture
 
 The Claude Code subagent plugin should extract token usage from Claude CLI JSON output before stdout is truncated for audit logging.
 
@@ -136,7 +149,7 @@ The plugin should normalize those to:
 
 If multiple usage blocks are present in a single Claude CLI response, the implementation should pick the final aggregate result when available. If no aggregate exists, it may sum message-level usage blocks conservatively, but should avoid double-counting repeated cumulative values.
 
-## Amp usage capture
+### Amp usage capture
 
 Amp usage capture is desirable but secondary.
 
@@ -144,7 +157,17 @@ The implementation should first investigate whether Amp exposes per-thread or pe
 
 If Amp does not expose reliable local usage data, do not overbuild. Leave the ledger focused on automatic Claude Code usage capture and document the limitation.
 
-## Privacy and retention
+### Expected usage
+
+After enough events have accumulated, Chinh can ask Amp:
+
+> Read `~/.config/amp/logs/agent-token-usage.jsonl` and explain my agent token usage this week.
+
+Amp can then analyze the raw data directly without needing a dedicated reporting command.
+
+## Permissions and side effects
+
+### Privacy and retention
 
 The usage ledger should not contain prompts, raw transcripts, file contents, user messages, or tool results.
 
@@ -160,15 +183,13 @@ It may contain:
 
 Existing redacted audit logs remain the place for richer debugging context. Raw transcript capture remains opt-in only.
 
-## Expected usage
+## Examples
 
-After enough events have accumulated, Chinh can ask Amp:
+None.
 
-> Read `~/.config/amp/logs/agent-token-usage.jsonl` and explain my agent token usage this week.
+## Maintenance notes
 
-Amp can then analyze the raw data directly without needing a dedicated reporting command.
-
-## Implementation plan
+### Implementation plan
 
 1. Update `plugins/claude-code-subagent.ts` to parse usage from Claude CLI JSON output before truncation.
 2. Add an append-only writer for `~/.config/amp/logs/agent-token-usage.jsonl`.
@@ -177,6 +198,8 @@ Amp can then analyze the raw data directly without needing a dedicated reporting
 5. Separately investigate Amp-local token metadata; only add Amp rows if there is a reliable source.
 
 ## Open questions
+
+### Open questions
 
 - Does Amp expose reliable per-thread/per-call token usage locally, or only through the visible token gauge?
 - Should failed Claude Code calls with no usage metadata still append a status-only row?

@@ -7,8 +7,9 @@ file: "rfc-0004-grounded-skill-plugin-usage-dataset.md"
 status: "Implemented (initial capture; monitoring)"
 summary: "Create a local user-maintained dataset for evaluating real skill and plugin usage."
 created: "2026-06-28"
-updated: "2026-06-28"
-amp_thread_id: "T-019f0ec6-453f-70d9-9503-7d44d9f08135"
+updated: "2026-07-05"
+amp_thread_id:
+  T-019f0ec6-453f-70d9-9503-7d44d9f08135: "initial RFC design"
 dependency:
   - type: "rfc"
     code: "RFC-0002"
@@ -18,6 +19,13 @@ dependency:
     code: "RFC-0003"
     title: "Shared read-only subagent toolkit and Amp-owned external context"
     path: "./rfc-0003-shared-subagent-context-boundary.md"
+inputs:
+  - "captured skill, plugin, and agent-guidance usage events"
+  - "manual labels and user corrections"
+outputs:
+  - "local usage event JSONL dataset"
+  - "local label JSONL dataset"
+  - "monitoring reports and improvement signals"
 ---
 
 # RFC-0004: Grounded skill and plugin usage dataset
@@ -36,7 +44,9 @@ This dataset becomes the source of truth for deciding whether an instruction is 
 
 For the dataset to be trustworthy, skills and plugins also need a version-controlled source of truth. Runtime files under `~/.config/amp` are not enough: usage labels must point to reviewable artifact versions, commits, and changes over time.
 
-## Motivation
+## Context
+
+### Motivation
 
 https://x.com/mattpocockuk/status/2069784839474032896
 
@@ -53,7 +63,29 @@ The missing layer is an eval dataset generated from actual work:
 
 With labels maintained by Chinh, skill/plugin maintenance becomes evidence-based instead of aesthetic.
 
+### In scope
+
+- Build a grounded dataset from real Amp usage.
+- Track usage opportunities for skills, plugins, AGENTS instructions, capabilities, plugin prompts.
+- Put skill/plugin source artifacts under version control so labels can point to exact versions.
+- Let Chinh label outcomes with a small stable taxonomy.
+- Support periodic monitoring.
+- Avoid collecting secrets, raw transcripts, or excessive private context by default.
+
+### Out of scope
+
+- Do not build a dashboard in the first version.
+- Do not build a fully automatic skill optimizer.
+- Do not auto-delete or rewrite skills/plugins based on metrics alone.
+- Do not treat static phrase matching as sufficient evidence of a no-op.
+- Do not treat loose runtime files in `~/.config/amp` as the long-term source of truth for skills/plugins.
+- Do not require every task to be labeled.
+- Do not store full Amp transcripts by default.
+- Do not compare agents by token efficiency; RFC-0002 already covers token usage as a separate ledger.
+
 ## Decision
+
+### Decision
 
 Introduce a local dataset for skill/plugin usage evaluation.
 
@@ -68,27 +100,7 @@ The first version should be boring and manually correctable:
 
 The dataset should optimize for being easy to inspect, diff, repair, and summarize.
 
-## In scope
-
-- Build a grounded dataset from real Amp usage.
-- Track usage opportunities for skills, plugins, AGENTS instructions, capabilities, plugin prompts.
-- Put skill/plugin source artifacts under version control so labels can point to exact versions.
-- Let Chinh label outcomes with a small stable taxonomy.
-- Support periodic monitoring.
-- Avoid collecting secrets, raw transcripts, or excessive private context by default.
-
-## Out of scope
-
-- Do not build a dashboard in the first version.
-- Do not build a fully automatic skill optimizer.
-- Do not auto-delete or rewrite skills/plugins based on metrics alone.
-- Do not treat static phrase matching as sufficient evidence of a no-op.
-- Do not treat loose runtime files in `~/.config/amp` as the long-term source of truth for skills/plugins.
-- Do not require every task to be labeled.
-- Do not store full Amp transcripts by default.
-- Do not compare agents by token efficiency; RFC-0002 already covers token usage as a separate ledger.
-
-## Dataset location
+### Dataset location
 
 Use a dedicated local directory:
 
@@ -112,7 +124,7 @@ snapshots/artifacts-YYYY-MM-DD.jsonl
 
 Keep events and labels separate so labels can be added, corrected, or superseded without rewriting original usage rows.
 
-## Version-controlled artifact source
+### Version-controlled artifact source
 
 Use `~/Developer/agent-skills` as the canonical version-controlled source for skills and Amp plugin artifacts. Treat `~/.config/amp` as a runtime install/projection location.
 
@@ -159,7 +171,9 @@ label says instruction X was no-op → rewrite X in git → sync runtime → obs
 
 Without version control, the dataset can describe symptoms but cannot reliably explain which artifact change improved or regressed behavior.
 
-## Usage event schema
+## Contract
+
+### Usage event schema
 
 Each event records a meaningful opportunity where an agent-facing artifact may have influenced behavior.
 
@@ -195,7 +209,7 @@ Example `events.jsonl` row:
       "id": "RFC-0004",
       "source_repo": null,
       "source_path": null,
-      "runtime_path": "/Users/lelouvincx/.config/amp/docs/rfc-0004-grounded-skill-plugin-usage-dataset.md",
+      "runtime_path": "/Users/lelouvincx/.config/amp/docs/rfcs/rfc-0004-grounded-skill-plugin-usage-dataset.md",
       "vcs": null,
       "refs": []
     }
@@ -206,7 +220,7 @@ Example `events.jsonl` row:
     "outcome": "completed"
   },
   "evidence": {
-    "files_changed": ["docs/rfc-0004-grounded-skill-plugin-usage-dataset.md"],
+    "files_changed": ["docs/rfcs/rfc-0004-grounded-skill-plugin-usage-dataset.md"],
     "tools_called": ["shell_command", "apply_patch"],
     "checks_run": [],
     "user_correction": "Static linting alone is not enough; need a grounded dataset from actual usage."
@@ -235,7 +249,7 @@ Field notes:
 - `usage.outcome`: `completed`, `blocked`, `abandoned`, `partially_completed`, or `not_applicable`.
 - `evidence.user_correction`: especially important because corrections are high-value labels.
 
-## Label schema
+### Label schema
 
 Each label records Chinh's judgment about an event, artifact, or specific instruction.
 
@@ -266,7 +280,7 @@ Example `labels.jsonl` row:
 
 Labels are append-only. If a label changes, append a new label row with the same `event_id` and target. The latest row wins for simple reporting, while history remains auditable.
 
-## Label taxonomy
+### Label taxonomy
 
 Start with a small taxonomy. Add new labels only when repeated real cases need them.
 
@@ -307,7 +321,9 @@ Verdicts:
 - `merge`
 - `needs_more_data`
 
-## No-op detection model
+## Behavior
+
+### No-op detection model
 
 Static phrase matching should only create candidates. A line becomes a serious no-op candidate when usage evidence supports it.
 
@@ -331,7 +347,7 @@ mark it as a rewrite/delete candidate for Chinh's review.
 
 This threshold is intentionally low and advisory. Chinh's label remains the ground truth.
 
-## Monitoring questions
+### Monitoring questions
 
 The dataset should make it easy to ask Amp questions like:
 
@@ -346,7 +362,7 @@ The dataset should make it easy to ask Amp questions like:
 - Which runtime files in `~/.config/amp` lack a version-controlled source path?
 - What should we delete, rewrite, or split next?
 
-## Reporting shape
+### Reporting shape
 
 A useful report should be concise and action-oriented:
 
@@ -373,7 +389,7 @@ Version-control gaps:
 
 Reports should show evidence and suggested changes, not silently modify artifacts.
 
-## Capture strategy
+### Capture strategy
 
 Start automatic, but keep it predictable. The first capture mechanism should be a narrow canonical list of prefix-based phrases that cause a usage event to be recorded. Magic-word capture should be case-insensitive, prefix-based, and easy for Chinh to remember; broad natural-language intents should not be treated as capture triggers.
 
@@ -464,25 +480,20 @@ The command should:
 
 This command is the explicit fallback for “I know this should be tracked” moments. Magic words optimize for habit; the command palette optimizes for certainty.
 
-## Capability implications
+### Relationship to RFC-0002
 
-If implemented as Amp plugin capabilities, follow the existing docs-first plugin rule:
+RFC-0002 tracks raw token usage. This RFC tracks behavioral usefulness.
 
-1. Add capability docs under `docs/tools/` first.
-2. Make plugin code match the documented contract.
-3. Keep events/labels append-only.
+The two ledgers should stay separate:
 
-Likely future capabilities:
+- token usage answers “how much did agents cost?”
+- skill/plugin usage answers “which guidance actually improved outcomes?”
 
-- `capture_skill_plugin_magic_words`: detect canonical prefixes at the start of incoming user messages and append event/label rows.
-- `track_event`: command palette command for explicit capture of the current task.
-- `log_skill_plugin_usage`: append an event row.
-- `label_skill_plugin_usage`: append a label row.
-- `skill_plugin_usage_report`: summarize recent evidence and suggested edits.
+Reports may join them later, but neither schema should depend on the other.
 
-If Amp plugin events cannot observe user messages directly, implement the same behavior as an agent-callable tool whose description tells Amp to call it whenever the current user message starts with a canonical prefix. The intended product behavior is still automatic-first capture.
+## Permissions and side effects
 
-## Privacy and retention
+### Privacy and retention
 
 Default rows must not include:
 
@@ -506,7 +517,29 @@ Rows may include:
 
 If richer evidence is needed, store a pointer to a redacted audit log rather than copying sensitive content into the dataset.
 
-## Maintenance workflow
+## Examples
+
+### Capability implications
+
+If implemented as Amp plugin capabilities, follow the existing docs-first plugin rule:
+
+1. Add capability docs under `docs/tools/` first.
+2. Make plugin code match the documented contract.
+3. Keep events/labels append-only.
+
+Likely future capabilities:
+
+- `capture_skill_plugin_magic_words`: detect canonical prefixes at the start of incoming user messages and append event/label rows.
+- `track_event`: command palette command for explicit capture of the current task.
+- `log_skill_plugin_usage`: append an event row.
+- `label_skill_plugin_usage`: append a label row.
+- `skill_plugin_usage_report`: summarize recent evidence and suggested edits.
+
+If Amp plugin events cannot observe user messages directly, implement the same behavior as an agent-callable tool whose description tells Amp to call it whenever the current user message starts with a canonical prefix. The intended product behavior is still automatic-first capture.
+
+## Maintenance notes
+
+### Maintenance workflow
 
 When editing a skill/plugin because of behavior quality:
 
@@ -520,18 +553,7 @@ When editing a skill/plugin because of behavior quality:
 
 The point is not to lint once. The point is to keep a living eval loop.
 
-## Relationship to RFC-0002
-
-RFC-0002 tracks raw token usage. This RFC tracks behavioral usefulness.
-
-The two ledgers should stay separate:
-
-- token usage answers “how much did agents cost?”
-- skill/plugin usage answers “which guidance actually improved outcomes?”
-
-Reports may join them later, but neither schema should depend on the other.
-
-## Implementation status
+### Implementation status
 
 Initial capture infrastructure is implemented and active locally.
 
@@ -561,7 +583,7 @@ Deferred until after several captures:
 - Use the first report to update one or two high-confidence instructions in version-controlled source.
 - Add a manual/instruction for Chinh and save it in Logseq.
 
-## Implementation plan
+### Implementation plan
 
 1. [done] Inventory current runtime artifacts under `~/.config/amp/plugins`, `~/.config/amp/skills`, `~/.config/amp/docs/tools`, and `~/.config/amp/AGENTS.md`.
 2. [done] Decide the canonical `~/Developer/agent-skills` layout for Amp plugins, plugin docs, skills, and AGENTS instructions.
@@ -579,6 +601,8 @@ Deferred until after several captures:
 14. [deferred] Add a manual/instruction for Chinh and save it in Logseq.
 
 ## Open questions
+
+### Open questions
 
 - Are the narrow canonical prefixes enough to capture Chinh's real usage without adding noisy natural-language triggers?
 - How much task summary is enough without leaking too much context?
