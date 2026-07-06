@@ -84,7 +84,9 @@ tags:
 - Registered with: `amp.registerTool`
 - Tool name: `spawn_subagent`
 - Plugin file: `plugins/spawn-subagent.ts`
-- Trigger keywords: `spawn subagent`, `subagent thread`, `launch a subagent`, `parallel agent`, `background subagent`, `delegate this slice`, `run this in parallel`
+- Trigger keywords: `/subagent`, `|subagent`, `spawn subagent`, `parallel subagent`, `run this in parallel`
+
+Note: prefer `|subagent` for start-of-prompt use because Amp reserves `/` for the command palette.
 
 When invoking from the start of a prompt, prefer `|subagent` because Amp reserves `/` for the command palette.
 

@@ -21,6 +21,8 @@ and this project does not currently use versioned releases.
 
 ### Changed
 
+- Document explicit `/subagent` and `|subagent` trigger forms for the spawn subagent capability and agent instructions. [#61](https://github.com/lelouvincx/agent-skills/pull/61)
+- Remove a stale RFC handoff dependency path that failed RFC validation. [#61](https://github.com/lelouvincx/agent-skills/pull/61)
 - Rename the `spawn_worker` Amp capability to `spawn_subagent`. [#59](https://github.com/lelouvincx/agent-skills/pull/59)
 - Replace the browser automation remote skill with `agent-browser`.
 - Add a compact GOV.UK-style message contract to the `send_to_thread` capability doc. [#59](https://github.com/lelouvincx/agent-skills/pull/59) [#60](https://github.com/lelouvincx/agent-skills/pull/60)
