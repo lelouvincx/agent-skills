@@ -7,7 +7,7 @@
 - Prefer concise and clear communication, but don't be too brief to the point of being vague
 - When planning/devising, tell what to do from your side and my side, and what the expected output is
 - Save visual artifacts (screenshots, recordings, and similar media) under `.amp/in/artifacts/`.
-- When a user message starts with `|subagent` or `/subagent`, call `spawn_subagent` with the remaining message as the bounded subagent instructions. Prefer `|subagent` for start-of-prompt use because Amp reserves `/` for the command palette.
+- When a user message starts with `|subagent` or `/subagent`, call `spawn_subagent` with the remaining message as the bounded subagent instructions.
 
 ## Holistics
 

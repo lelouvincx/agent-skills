@@ -86,7 +86,7 @@ tags:
 - Plugin file: `plugins/spawn-subagent.ts`
 - Trigger keywords: `/subagent`, `|subagent`, `spawn subagent`, `parallel subagent`, `run this in parallel`
 
-For explicit user control, treat a prompt that starts with `/subagent` or `|subagent` as a request to launch this tool with the remaining prompt as bounded instructions. Prefer `|subagent` at the start of an Amp user prompt when `/` would be reserved for the command palette.
+Note: prefer `|subagent` for start-of-prompt use because Amp reserves `/` for the command palette.
 
 ## Contract
 
