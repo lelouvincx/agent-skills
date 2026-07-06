@@ -86,6 +86,8 @@ tags:
 - Plugin file: `plugins/spawn-subagent.ts`
 - Trigger keywords: `spawn subagent`, `subagent thread`, `launch a subagent`, `parallel agent`, `background subagent`, `delegate this slice`, `run this in parallel`
 
+When invoking from the start of a prompt, prefer `|subagent` because Amp reserves `/` for the command palette.
+
 ## Contract
 
 Required inputs:
@@ -106,8 +108,6 @@ Output is a short text confirmation: `Started <mode>/<reasoningEffort> subagent 
 ## Behavior
 
 The tool validates `instructions`, normalizes the built-in mode and reasoning effort, obtains a built-in agent with `amp.getBuiltinAgent`, creates a child thread with the current thread as `parentThreadID`, and appends a structured subagent prompt.
-
-The default `deep/medium` setting intentionally follows Amp's GPT-5.5 model guidance rather than the CLI display label alone: `medium` is the recommended default for normal deep work, while `high` is not treated as a safe default because Amp's internal eval found it more expensive than `medium` and worse-performing on that run.
 
 The prompt tells the subagent that the parent owns the broader design, the subagent owns only the bounded task, and the subagent must preserve parent-thread intent. Before executing, the subagent has an explicit private intent-reconstruction step: use `read_thread` on the parent thread when available, or otherwise inspect the parent thread as fully as available, then infer and keep distinct the original user intent, any later user redirects, the latest coherent requested outcome, and how the bounded subagent task supports that outcome. The subagent must not let incidental recent-message context replace the original task intent; if reconstructed intent and the subagent instructions appear to conflict, it should follow explicit latest redirects and otherwise report the ambiguity as a blocker instead of guessing.
 
