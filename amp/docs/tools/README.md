@@ -26,7 +26,7 @@ Use these sources in order when adding or refreshing a document:
 - [Claude Code Subagent](./claude-code-subagent.md)
 - [Label Skill/Plugin Usage](./label-skill-plugin-usage.md)
 - [Pi Code Subagent](./pi-code-subagent.md)
-- [Spawn Worker](./spawn-worker.md)
+- [Spawn Subagent](./spawn-subagent.md)
 - [Send to Thread](./send-to-thread.md)
 
 ### Agent modes
