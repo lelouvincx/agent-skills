@@ -51,23 +51,23 @@ safety:
   constraints:
     - "Requires target threadID and non-empty message."
     - "Prefixes forwarded content with the sender thread ID."
-    - "Use steer=true for worker completion reports to busy parent threads."
+    - "Use steer=true for subagent completion reports to busy parent threads."
   risks:
     - "Can interrupt or steer another active thread."
     - "Wrong thread ID sends context to the wrong conversation."
 related:
-  - "spawn-worker"
+  - "spawn-subagent"
 tags:
   - "thread"
   - "coordination"
-  - "worker"
+  - "subagent"
 ---
 
 # Send to Thread
 
 ## Summary
 
-`send_to_thread` appends a text user message to an existing Amp thread. It is mainly used by worker threads to report completion, blockers, or follow-up results back to a parent coordinator thread.
+`send_to_thread` appends a text user message to an existing Amp thread. It is mainly used by subagent threads to report completion, blockers, or follow-up results back to a parent coordinator thread.
 
 ## Invocation
 
@@ -93,6 +93,38 @@ Optional inputs:
 
 The message sent to the target thread is prefixed with `From Amp ThreadID <current-thread-id>:`. Output is `Sent message to <threadID>.` or `Sent steering message to <threadID>.`.
 
+### Message contract
+
+When `message` is a human-readable report, keep it short and write it in GOV.UK style:
+
+- put the status or answer first
+- use short, active sentences
+- keep one idea per sentence
+- remove repeated context and process narration
+- use concrete bullets only when they help the reader act
+- end with the smallest next action, or say `No follow-up needed`
+
+Subagent completion reports should use this compact shape:
+
+```text
+Subagent thread: <thread-id>
+Status: <done | blocked | needs-review>
+
+Summary:
+<lead with the outcome or blocker>
+
+Evidence:
+- <specific evidence, only if useful>
+
+Validation:
+<what was checked, or "not run" with the reason>
+
+Next:
+<no follow-up needed, or the smallest next action>
+```
+
+Do not apply this style rule to raw logs, code snippets, structured data, or quoted source text.
+
 ## Behavior
 
 The tool trims `threadID` and `message`, rejects empty values, obtains the target handle through `amp.threads.get`, prefixes the message with the current thread ID, and appends it as a user message to the target thread.
@@ -103,13 +135,13 @@ This tool writes to another Amp thread. With `steer=true`, the message can influ
 
 ## Examples
 
-Report worker completion:
+Report subagent completion:
 
 ```json
 {
   "threadID": "T-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
   "steer": true,
-  "message": "Worker thread: T-yyyy...\nStatus: done\nTask summary: Checked the docs.\nValidation: heading check passed."
+  "message": "Subagent thread: T-yyyy...\nStatus: done\n\nSummary:\nChecked the docs. The capability contract matches the plugin behavior.\n\nValidation:\nHeading check passed.\n\nNext:\nNo follow-up needed."
 }
 ```
 
@@ -118,7 +150,7 @@ Send a normal follow-up:
 ```json
 {
   "threadID": "T-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
-  "message": "I found the relevant plugin file: plugins/spawn-worker.ts."
+  "message": "I found the relevant plugin file: plugins/spawn-subagent.ts."
 }
 ```
 
@@ -127,8 +159,8 @@ Send a normal follow-up:
 - `threadID is required`: pass a non-empty thread ID.
 - `message is required`: pass a non-empty message.
 - Message went to the wrong place: confirm the target thread ID before sending.
-- Parent thread did not react immediately: use `steer=true` for worker completion reports when the target thread is busy.
+- Parent thread did not react immediately: use `steer=true` for subagent completion reports when the target thread is busy.
 
 ## Maintenance notes
 
-Update this doc when Amp changes `PluginThreads`, `appendUserMessage`, or steering semantics. Keep this paired with `spawn_worker`, which relies on this tool for worker reporting.
+Update this doc when Amp changes `PluginThreads`, `appendUserMessage`, or steering semantics. Keep this paired with `spawn_subagent`, which relies on this tool for subagent reporting.

@@ -68,7 +68,7 @@ See [PROJECTS.md](PROJECTS.md) for the generated project list.
 | [Label skill and plugin usage](amp/docs/tools/label-skill-plugin-usage.md) | Agent tool | Agent | add or correct usage-event labels |
 | [Pi Code subagent](amp/docs/tools/pi-code-subagent.md) | Agent tool | Agent | ask Pi Coding Agent for read-only advice |
 | [Send to thread](amp/docs/tools/send-to-thread.md) | Agent tool | Agent | send a message to another Amp thread |
-| [Spawn worker](amp/docs/tools/spawn-worker.md) | Agent tool | Agent | start a bounded worker thread that reports back |
+| [Spawn subagent](amp/docs/tools/spawn-subagent.md) | Agent tool | Agent | start a bounded subagent thread that reports back |
 | [DeepSeek V4 Pro](amp/docs/tools/deepseek-v4-pro.md) | Agent mode | Mode picker | run an experimental DeepSeek-backed agent mode |
 | [GLM 5.2](amp/docs/tools/glm-5-2.md) | Agent mode | Mode picker | run an experimental GLM-backed agent mode |
 | [Codex usage command](amp/docs/tools/codex-usage.md) | Command | Command palette | show Codex usage limits |

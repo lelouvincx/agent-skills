@@ -71,7 +71,7 @@ safety:
     - "Malformed worker responses can leave the parent thread title unchanged."
     - "Archive failure leaves the worker thread unarchived for inspection."
 related:
-  - "spawn-worker"
+  - "spawn-subagent"
 tags:
   - "agent_tool"
   - "logseq"

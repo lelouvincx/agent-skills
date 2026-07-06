@@ -163,7 +163,7 @@ An optional `agent.end` finalizer may later enrich a pending capture with compac
 
 Tracked artifact activity also creates usage events when the signal is reliable: edits or reviews of `AGENTS.md`, `SKILL.md`, `amp/docs/tools/*.md`, plugin prompts, plugin docs, subagent prompts, or invocations of tracked plugin capabilities, commands, modes, and subagent wrappers.
 
-A passive `tool.result` handler captures terminal invocations for the first reliable tracked tool set: `claude_code_subagent`, `pi_code_subagent`, and `spawn_worker`. It records the tool name, terminal status, compact summary, artifact metadata, and privacy booleans. It must not store raw tool input, raw output, error text, prompts, transcripts, or command payloads. Dataset-maintenance capabilities such as `track_event` and `label_skill_plugin_usage` are excluded from self-capture.
+A passive `tool.result` handler captures terminal invocations for the first reliable tracked tool set: `claude_code_subagent`, `pi_code_subagent`, and `spawn_subagent`. It records the tool name, terminal status, compact summary, artifact metadata, and privacy booleans. It must not store raw tool input, raw output, error text, prompts, transcripts, or command payloads. Dataset-maintenance capabilities such as `track_event` and `label_skill_plugin_usage` are excluded from self-capture.
 
 ## Permissions and side effects
 
