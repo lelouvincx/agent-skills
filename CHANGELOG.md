@@ -23,6 +23,7 @@ and this project does not currently use versioned releases.
 
 - Rename the `spawn_worker` Amp capability to `spawn_subagent`. [#59](https://github.com/lelouvincx/agent-skills/pull/59)
 - Replace the browser automation remote skill with `agent-browser`.
+- Add a compact GOV.UK-style message contract to the `send_to_thread` capability doc. [#59](https://github.com/lelouvincx/agent-skills/pull/59) [#60](https://github.com/lelouvincx/agent-skills/pull/60)
 - Manage migrated skills from upstream remote sources, including Holistics, Matt Pocock, and Impeccable skill sources plus shared Holistics references. [#46](https://github.com/lelouvincx/agent-skills/pull/46)
 - Run project resolution through `uvx` and document `uv`/`uvx` prerequisites for local and Orb setup. [#45](https://github.com/lelouvincx/agent-skills/pull/45)
 - Rework README and maintenance docs for clearer human setup, Amp capability tables, and agent-facing repository maintenance guidance. [#18](https://github.com/lelouvincx/agent-skills/pull/18) [#41](https://github.com/lelouvincx/agent-skills/pull/41) [#47](https://github.com/lelouvincx/agent-skills/pull/47)
