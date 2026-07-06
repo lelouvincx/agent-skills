@@ -21,6 +21,7 @@ and this project does not currently use versioned releases.
 
 ### Changed
 
+- Document explicit `/subagent` and `|subagent` trigger forms for the spawn subagent capability.
 - Rename the `spawn_worker` Amp capability to `spawn_subagent`. [#59](https://github.com/lelouvincx/agent-skills/pull/59)
 - Replace the browser automation remote skill with `agent-browser`.
 - Manage migrated skills from upstream remote sources, including Holistics, Matt Pocock, and Impeccable skill sources plus shared Holistics references. [#46](https://github.com/lelouvincx/agent-skills/pull/46)

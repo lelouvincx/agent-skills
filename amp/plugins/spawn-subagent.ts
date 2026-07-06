@@ -16,7 +16,8 @@ export default function (amp: PluginAPI) {
 		name: 'spawn_subagent',
 		description: [
 			'Launch a new independent subagent thread for a bounded implementation or investigation task.',
-			'Trigger phrases include spawn subagent, subagent thread, launch a subagent, parallel agent, background subagent, delegate this slice, and run this in parallel.',
+			'Trigger phrases include /subagent, |subagent, spawn subagent, subagent thread, launch a subagent, parallel agent, background subagent, delegate this slice, and run this in parallel.',
+			'When a user prompt starts with /subagent or |subagent, treat the remaining prompt as bounded instructions for this tool. Prefer |subagent at the start of an Amp user prompt when / is reserved for the command palette.',
 			'Use this when the current thread is acting as the design/coordinator thread and wants a subagent to execute one clear slice while the main thread keeps iterating on the broader design.',
 			'Give the subagent concrete scope, constraints, expected output, and validation instructions. Do not wait for the subagent.',
 			'The subagent is instructed to privately reconstruct parent-thread intent before executing so incidental recent context does not replace the original task intent.',
