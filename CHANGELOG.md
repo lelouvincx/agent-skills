@@ -21,7 +21,7 @@ and this project does not currently use versioned releases.
 
 ### Changed
 
-- Rename the `spawn_worker` Amp capability to `spawn_subagent`.
+- Rename the `spawn_worker` Amp capability to `spawn_subagent`. [#59](https://github.com/lelouvincx/agent-skills/pull/59)
 - Replace the browser automation remote skill with `agent-browser`.
 - Manage migrated skills from upstream remote sources, including Holistics, Matt Pocock, and Impeccable skill sources plus shared Holistics references. [#46](https://github.com/lelouvincx/agent-skills/pull/46)
 - Run project resolution through `uvx` and document `uv`/`uvx` prerequisites for local and Orb setup. [#45](https://github.com/lelouvincx/agent-skills/pull/45)
