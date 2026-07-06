@@ -10,10 +10,6 @@ created: "2026-06-20"
 updated: "2026-07-05"
 amp_thread_id:
   T-019ee5a6-032c-7009-9c49-bef9be1543ea: "initial RFC design"
-dependency:
-  - type: "handoff"
-    title: "handoff-claude-code-subagent.md"
-    path: "./handoff-claude-code-subagent.md"
 inputs:
   - "explicit user mention of Claude Code"
   - "curated Amp brief and optional context"
