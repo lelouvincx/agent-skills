@@ -200,6 +200,7 @@ def validate_type(path: Path, field: str, value: object, expected: str, errors: 
 def markdown_h2s(path: Path) -> list[str]:
     text = path.read_text(encoding="utf-8")
     body = text.split("\n---", 1)[1] if text.startswith("---\n") and "\n---" in text[4:] else text
+    body = re.sub(r"^```.*?^```", "", body, flags=re.MULTILINE | re.DOTALL)
     return re.findall(r"^## (.+)$", body, re.MULTILINE)
 
 

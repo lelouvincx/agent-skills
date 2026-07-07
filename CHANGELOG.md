@@ -21,6 +21,7 @@ and this project does not currently use versioned releases.
 
 ### Changed
 
+- Use Markdown section headings for `send_to_thread` and `spawn_subagent` completion reports. [#62](https://github.com/lelouvincx/agent-skills/pull/62)
 - Document explicit `/subagent` and `|subagent` trigger forms for the spawn subagent capability and agent instructions. [#61](https://github.com/lelouvincx/agent-skills/pull/61)
 - Remove a stale RFC handoff dependency path that failed RFC validation. [#61](https://github.com/lelouvincx/agent-skills/pull/61)
 - Rename the `spawn_worker` Amp capability to `spawn_subagent`. [#59](https://github.com/lelouvincx/agent-skills/pull/59)
