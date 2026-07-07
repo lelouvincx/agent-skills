@@ -9,8 +9,10 @@ export default function (amp: PluginAPI) {
 		name: 'send_to_thread',
 		description: [
 			'Send a text user message to an existing Amp thread by thread ID.',
-			'Use this to let worker threads report completion, blockers, or follow-up results back to the parent design/coordinator thread.',
-			'When reporting worker completion to a busy parent thread, set steer=true so the message is preferred when the thread next dequeues work.',
+			'Use this to let subagent threads report completion, blockers, or follow-up results back to the parent design/coordinator thread.',
+			'When message is a human-readable report, use Markdown headings for each section and put the status or answer first. Use short active sentences, avoid repeated context and process narration, and end with the smallest next action or "No follow-up needed".',
+			'Subagent completion reports should use Markdown headings: ## Subagent thread, ## Status, ## Summary, ## Evidence when useful, ## Validation, and ## Next.',
+			'When reporting subagent completion to a busy parent thread, set steer=true so the message is preferred when the thread next dequeues work.',
 		].join(' '),
 		inputSchema: {
 			type: 'object',
@@ -21,7 +23,7 @@ export default function (amp: PluginAPI) {
 				},
 				message: {
 					type: 'string',
-					description: 'Text message to send to the target thread.',
+					description: 'Text message to send to the target thread. For human-readable reports, follow the documented message contract: status or answer first; Markdown headings for each section; short active sentences; no repeated context or process narration; concrete bullets only when useful; end with the smallest next action or "No follow-up needed". Subagent reports should use headings: ## Subagent thread, ## Status, ## Summary, optional ## Evidence, ## Validation, and ## Next. Raw logs, code snippets, structured data, and quoted source text may keep their original format.',
 				},
 				steer: {
 					type: 'boolean',

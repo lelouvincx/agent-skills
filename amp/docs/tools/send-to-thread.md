@@ -104,22 +104,31 @@ When `message` is a human-readable report, keep it short and write it in GOV.UK 
 - use concrete bullets only when they help the reader act
 - end with the smallest next action, or say `No follow-up needed`
 
-Subagent completion reports should use this compact shape:
+Subagent completion reports should use Markdown headings for each section:
 
 ```text
-Subagent thread: <thread-id>
-Status: <done | blocked | needs-review>
+## Subagent thread
 
-Summary:
+<thread-id>
+
+## Status
+
+<done | blocked | needs-review>
+
+## Summary
+
 <lead with the outcome or blocker>
 
-Evidence:
+## Evidence
+
 - <specific evidence, only if useful>
 
-Validation:
+## Validation
+
 <what was checked, or "not run" with the reason>
 
-Next:
+## Next
+
 <no follow-up needed, or the smallest next action>
 ```
 
@@ -141,7 +150,7 @@ Report subagent completion:
 {
   "threadID": "T-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
   "steer": true,
-  "message": "Subagent thread: T-yyyy...\nStatus: done\n\nSummary:\nChecked the docs. The capability contract matches the plugin behavior.\n\nValidation:\nHeading check passed.\n\nNext:\nNo follow-up needed."
+  "message": "## Subagent thread\n\nT-yyyy...\n\n## Status\n\ndone\n\n## Summary\n\nChecked the docs. The capability contract matches the plugin behavior.\n\n## Validation\n\nHeading check passed.\n\n## Next\n\nNo follow-up needed."
 }
 ```
 

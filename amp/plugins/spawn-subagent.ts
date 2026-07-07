@@ -66,19 +66,35 @@ Execute the bounded task represented by the subagent instructions in that recons
 When complete or blocked, call the send_to_thread tool with:
 - threadID: ${ctx.thread.id}
 - steer: true
-- message: a concise structured report using this format:
+- message: a concise structured report using Markdown headings for each section:
 
-Subagent thread: ${thread.id}
-Status: done | blocked
-Task summary:
-Files changed:
-Validation:
-Open questions / blockers:
-Follow-up needed:
+## Subagent thread
+
+${thread.id}
+
+## Status
+
+done | blocked
+
+## Summary
+
+Lead with the outcome or blocker.
+
+## Evidence
+
+- Specific evidence, only if useful.
+
+## Validation
+
+What was checked, or "not run" with the reason.
+
+## Next
+
+No follow-up needed, or the smallest next action.
 
 You decide whether parent follow-up is required, but interpret it narrowly. Optional parent review, FYI summaries, or "review the diff if desired" are not required follow-up. Required follow-up means you cannot safely finish without parent input, such as a decision between alternatives, missing context, permission, a blocker, or explicit next instructions.
 
-If the report is terminal and Follow-up needed is empty or none, then after the send_to_thread report succeeds, call archive_current_thread to archive this subagent thread. Do not archive before the parent-thread report is sent. If you are blocked or require parent input, do not archive yet; wait for the parent thread to reply with follow-up instructions. After completing follow-up, send a new terminal report and archive yourself when no required follow-up remains.
+If the report is terminal and ## Next says "No follow-up needed", then after the send_to_thread report succeeds, call archive_current_thread to archive this subagent thread. Do not archive before the parent-thread report is sent. If you are blocked or require parent input, do not archive yet; wait for the parent thread to reply with follow-up instructions. After completing follow-up, send a new terminal report and archive yourself when no required follow-up remains.
 
 ${instructions}`
 
