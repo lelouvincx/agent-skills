@@ -23,7 +23,7 @@
 - Prefer `bin/project-resolve <spoken-name> --json` when agents need to resolve project names.
 - Set `AGENTS_REGISTRY_ENV` to force an environment such as `local`, `amp-orb`, or `vps`; otherwise the resolver auto-detects where possible.
 - Set `AGENTS_REGISTRY_WORKSPACE_ROOT` when a host uses a different workspace root than the registry default.
-- PR number should always presented in changelog entry
+- After opening PR, add another commit for adding PR number into the changelog entry
 
 ## Amp artifacts
 

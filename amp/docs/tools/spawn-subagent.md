@@ -38,7 +38,7 @@ runtime:
   dependencies:
     - "send_to_thread tool available to subagent"
     - "archive_current_thread tool available to subagent"
-    - "read_thread tool available to subagent when parent intent reconstruction is needed"
+    - "read_thread tool available to subagent for parent intent reconstruction"
   env: []
   reads:
     - "current thread id"
@@ -55,7 +55,7 @@ safety:
   user_gate: "agent_decision"
   constraints:
     - "Subagent must receive bounded instructions with scope, constraints, output, and validation."
-    - "Subagent must privately reconstruct parent-thread intent before executing when the bounded task depends on broader context."
+    - "Subagent must use read_thread to privately reconstruct parent-thread intent before executing when the bounded task depends on broader context."
     - "Caller must not poll or wait for the subagent."
     - "Subagent is instructed to report completion through send_to_thread with steer=true."
     - "Subagent decides whether follow-up is required, distinguishing optional parent review from required parent input."
@@ -86,23 +86,21 @@ tags:
 - Plugin file: `plugins/spawn-subagent.ts`
 - Trigger keywords: `/subagent`, `|subagent`, `spawn subagent`, `parallel subagent`, `run this in parallel`
 
-Note: prefer `|subagent` for start-of-prompt use because Amp reserves `/` for the command palette.
-
 When invoking from the start of a prompt, prefer `|subagent` because Amp reserves `/` for the command palette.
 
 ## Contract
 
 Required inputs:
 
-| Field | Type | Notes |
-| --- | --- | --- |
-| `instructions` | `string` | Must be non-empty. Include scope, constraints, success criteria, and validation. |
+| Field          | Type     | Notes                                                                                                                         |
+| -------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `instructions` | `string` | Must be non-empty. Include exact scope, non-goals, expected report shape, and the validation the subagent should run or skip. |
 
 Optional inputs:
 
-| Field | Type | Default | Notes |
-| --- | --- | --- | --- |
-| `mode` | `smart \| deep \| rush` | `deep` | Built-in Amp agent mode for the subagent. |
+| Field             | Type                                                       | Default  | Notes                                                                                                                                                             |
+| ----------------- | ---------------------------------------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `mode`            | `smart \| deep \| rush`                                    | `deep`   | Built-in Amp agent mode for the subagent.                                                                                                                         |
 | `reasoningEffort` | `none \| minimal \| low \| medium \| high \| xhigh \| max` | `medium` | Reasoning effort pinned for the subagent. Amp's GPT-5.5 guidance says `medium` is the right default for normal deep work; `high` can cost more and perform worse. |
 
 Output is a short text confirmation: `Started <mode>/<reasoningEffort> subagent in <threadID>. Do not poll or wait for it.`
@@ -111,13 +109,32 @@ Output is a short text confirmation: `Started <mode>/<reasoningEffort> subagent 
 
 The tool validates `instructions`, normalizes the built-in mode and reasoning effort, obtains a built-in agent with `amp.getBuiltinAgent`, creates a child thread with the current thread as `parentThreadID`, and appends a structured subagent prompt.
 
-The prompt tells the subagent that the parent owns the broader design, the subagent owns only the bounded task, and the subagent must preserve parent-thread intent. Before executing, the subagent has an explicit private intent-reconstruction step: use `read_thread` on the parent thread when available, or otherwise inspect the parent thread as fully as available, then infer and keep distinct the original user intent, any later user redirects, the latest coherent requested outcome, and how the bounded subagent task supports that outcome. The subagent must not let incidental recent-message context replace the original task intent; if reconstructed intent and the subagent instructions appear to conflict, it should follow explicit latest redirects and otherwise report the ambiguity as a blocker instead of guessing.
+The prompt treats `read_thread` as the source of truth for parent context. It does not fall back to static prompt reconstruction because `read_thread` is more reliable and avoids redundant context load for subagents.
 
-When done or blocked, the subagent must call `send_to_thread` with a concise structured report that uses Markdown headings for each section. The subagent decides whether follow-up is required, but must interpret that narrowly: optional parent review, FYI summaries, or “review the diff if desired” are not required follow-up. Required follow-up means the subagent cannot safely finish without parent input, such as a decision between alternatives, missing context, permission, a blocker, or explicit next instructions. If the report is terminal and `## Next` says `No follow-up needed`, the subagent then calls `archive_current_thread` to archive itself. If it is blocked or requires parent input, it stays unarchived so the parent can reply; after completing any follow-up, it sends a new terminal report and archives itself.
+The prompt gives the subagent two phases:
+
+- Before work:
+  - Preserve parent-thread intent.
+  - Use `read_thread` on the parent thread.
+  - Keep distinct the original user intent, later user redirects, the latest coherent requested outcome, and how the bounded subagent task supports that outcome.
+  - Do not let incidental recent-message context replace the original task intent.
+  - If reconstructed intent and subagent instructions appear to conflict, follow explicit latest redirects and otherwise report the ambiguity as a blocker instead of guessing.
+- After work:
+  - Call `send_to_thread` with a concise structured report that uses Markdown headings for each section.
+  - Interpret required follow-up narrowly: optional parent review, FYI summaries, or “review the diff if desired” are not required follow-up.
+  - Required follow-up means the subagent cannot safely finish without parent input, such as a decision between alternatives, missing context, permission, a blocker, or explicit next instructions.
+  - If the report is terminal and `## Next` says `No follow-up needed`, call `archive_current_thread` to archive itself.
+  - If blocked or requiring parent input, stay unarchived so the parent can reply.
+  - After completing follow-up, send a new terminal report and archive itself.
 
 ## Permissions and side effects
 
-This tool creates a new Amp thread, appends a user message to it, and instructs that subagent to archive itself after a terminal report. The subagent inherits the selected built-in mode's tool permissions and may make code changes if its task asks for implementation. The parent thread does not wait for the subagent and should not poll it.
+- Creates a new Amp thread.
+- Appends a user message to the new thread.
+- Instructs the subagent to archive itself after a terminal report.
+- The subagent inherits the selected built-in mode's tool permissions.
+- The subagent may make code changes if its task asks for implementation.
+- The parent thread does not wait for the subagent and should not poll it.
 
 ## Examples
 
@@ -149,4 +166,9 @@ Spawn a faster subagent:
 
 ## Maintenance notes
 
-Update this doc when built-in agent modes, reasoning efforts, parent-thread intent reconstruction, subagent report format, self-archive behavior, or the relationship with `send_to_thread` changes. Keep examples bounded; this tool is for parallel slices, not broad delegation.
+- Update this doc when built-in agent modes or reasoning efforts change.
+- Update this doc when parent-thread intent reconstruction changes.
+- Update this doc when the subagent report format changes.
+- Update this doc when self-archive behavior changes.
+- Update this doc when the relationship with `send_to_thread` changes.
+- Keep examples bounded; this tool is for parallel slices, not broad delegation.
