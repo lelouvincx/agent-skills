@@ -21,6 +21,7 @@ and this project does not currently use versioned releases.
 
 ### Changed
 
+- Document the `send_to_thread` `steer=true` rationale for GPT-5.5 deep-mode parent threads. [#64](https://github.com/lelouvincx/agent-skills/pull/64)
 - Clarify and reflow the `spawn_subagent` capability docs for `read_thread` intent reconstruction and diff-friendly maintenance. [#63](https://github.com/lelouvincx/agent-skills/pull/63)
 - Use Markdown section headings for `send_to_thread` and `spawn_subagent` completion reports. [#62](https://github.com/lelouvincx/agent-skills/pull/62)
 - Document explicit `/subagent` and `|subagent` trigger forms for the spawn subagent capability and agent instructions. [#61](https://github.com/lelouvincx/agent-skills/pull/61)

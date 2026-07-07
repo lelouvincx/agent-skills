@@ -142,6 +142,8 @@ The tool trims `threadID` and `message`, rejects empty values, obtains the targe
 
 This tool writes to another Amp thread. With `steer=true`, the message can influence the next step of a busy target thread. It does not read target messages and does not validate that the target thread is semantically the intended recipient.
 
+Use `steer=true` for subagent completion reports because the parent thread usually runs Amp's deep mode, which uses GPT-5.5. The [GPT-5.5 model card](https://ampcode.com/models/gpt-5.5) says the model is easy to steer in the agent loop: it is more interactive, easier to correct, better at continuing from a concrete target, and strongest when the task has a clear outcome and a way to verify success. A compact completion report gives the busy parent thread that concrete target.
+
 ## Examples
 
 Report subagent completion:
