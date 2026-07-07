@@ -12,6 +12,10 @@
     "sem": {
       "args": ["mcp"],
       "command": "/opt/homebrew/bin/sem"
+    },
+    "readai": {
+      "args": ["-y", "mcp-remote", "https://api.read.ai/mcp"],
+      "command": "npx"
     }
   },
   "amp.permissions": [

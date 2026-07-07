@@ -9,6 +9,7 @@ and this project does not currently use versioned releases.
 
 ### Added
 
+- Add ReadAI as a global Amp MCP server through `mcp-remote`. [#66](https://github.com/lelouvincx/agent-skills/pull/66)
 - Add `writing-investigation-docs` for evidence-first investigation, incident, PR decision, and RFC-style notes, plus `skill-tests` for fixture-based skill feedback loops. [#65](https://github.com/lelouvincx/agent-skills/pull/65)
 - Add a changelog and enforce changelog updates for every pull request. [#54](https://github.com/lelouvincx/agent-skills/pull/54)
 - Add `explaining-technical-concepts`, GOV.UK style, ponytail, writing-great-skills, modern-web-guidance, Remotion, shadcn/ui, teaching, grilling, copywriting, and other reusable local or remote skills. [#53](https://github.com/lelouvincx/agent-skills/pull/53) [#37](https://github.com/lelouvincx/agent-skills/pull/37) [#29](https://github.com/lelouvincx/agent-skills/pull/29) [#26](https://github.com/lelouvincx/agent-skills/pull/26) [#24](https://github.com/lelouvincx/agent-skills/pull/24) [#23](https://github.com/lelouvincx/agent-skills/pull/23) [#22](https://github.com/lelouvincx/agent-skills/pull/22) [#21](https://github.com/lelouvincx/agent-skills/pull/21) [#20](https://github.com/lelouvincx/agent-skills/pull/20) [#16](https://github.com/lelouvincx/agent-skills/pull/16) [#15](https://github.com/lelouvincx/agent-skills/pull/15) [#13](https://github.com/lelouvincx/agent-skills/pull/13)
