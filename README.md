@@ -47,6 +47,7 @@ See [PROJECTS.md](PROJECTS.md) for the generated project list.
 | [ponytail-review](skills/ponytail-review/SKILL.md) | Remote | review code for over-engineering only |
 | [ponytail-help](skills/ponytail-help/SKILL.md) | Remote | show ponytail commands and modes |
 | [writing-great-skills](skills/writing-great-skills/SKILL.md) | Remote | write and edit skills well |
+| [writing-investigation-docs](skills/writing-investigation-docs/SKILL.md) | Local | write evidence-first investigation and decision docs |
 | [explaining-technical-concepts](skills/explaining-technical-concepts/SKILL.md) | Local | explain technical concepts so they are easy to understand |
 | [govuk-style](skills/govuk-style/SKILL.md) | Remote | write clear plain-English prose |
 | [impeccable](skills/impeccable/SKILL.md) | Remote | design, review, and improve frontend interfaces |
@@ -59,6 +60,12 @@ See [PROJECTS.md](PROJECTS.md) for the generated project list.
 | [search-docs](skills/search-docs/SKILL.md) | Remote | search Holistics documentation |
 | [visualize-data](skills/visualize-data/SKILL.md) | Remote | create charts and tables from data |
 | [holistics-migrate-power-bi](skills/holistics-migrate-power-bi/SKILL.md) | Remote | migrate Power BI models and reports to Holistics |
+
+## Skill behavior tests
+
+Use [skill-tests](skill-tests/README.md) to improve skills with repeatable fixtures, self-checks and user feedback tags.
+
+Start there when a skill works sometimes but not reliably enough. Add a fixture for the failure mode, run the skill against it, review the output with tags, then update the skill only when the failure generalizes.
 
 ## Amp capabilities
 
