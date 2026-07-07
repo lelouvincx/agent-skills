@@ -12,7 +12,7 @@ skill-tests/
   <skill-name>/
     README.md
     fixtures/
-      <case-name>.md
+      001-<case-name>.md
 ```
 
 Use each skill folder for:
@@ -21,6 +21,8 @@ Use each skill folder for:
 - the prompt used to run the test
 - acceptance checks for the rewritten output
 - rules for when feedback should change the skill
+
+Give every fixture a stable ID in the filename and title. Use the skill prefix plus a 3-digit number in the title, for example `WID-001`, so feedback can refer to fixtures without relying only on filenames.
 
 Do not commit routine full transcripts. Use the PR thread or Amp thread as the run log. Commit a new fixture or skill change only when the failure generalizes.
 

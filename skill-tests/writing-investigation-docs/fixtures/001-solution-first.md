@@ -1,4 +1,4 @@
-# Fixture: solution-first investigation note
+# Fixture WID-001: solution-first investigation note
 
 ## Summary
 

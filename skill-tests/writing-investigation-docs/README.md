@@ -35,7 +35,7 @@ The rewritten document passes when:
 
 ## Fixtures
 
-- `fixtures/solution-first.md`: catches solution-first structure.
-- `fixtures/duplicated-root-cause.md`: catches repeated meanings and overlong evidence.
+- `WID-001` in `fixtures/001-solution-first.md`: catches solution-first structure.
+- `WID-002` in `fixtures/002-duplicated-root-cause.md`: catches repeated meanings and overlong evidence.
 
 When a skill edit fixes one fixture, rerun the other as a holdout.

@@ -1,4 +1,4 @@
-# Fixture: duplicated root cause and overlong evidence
+# Fixture WID-002: duplicated root cause and overlong evidence
 
 ## Summary
 
