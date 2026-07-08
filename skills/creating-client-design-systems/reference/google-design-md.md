@@ -1,29 +1,29 @@
 # Google DESIGN.md reference
 
-This reference captures the parts of Google's alpha DESIGN.md format that are useful for client design-system work. Refresh it periodically from the upstream spec instead of expanding the main skill.
+This reference captures the parts of Google's alpha DESIGN.md format that are useful for client design-system work. Refresh it periodically from the upstream spec instead of expanding `SKILL.md`.
 
 ## CLI
 
-Use the published CLI rather than memorized command variants:
+Use the published CLI rather than memorized command variants.
 
 ```bash
 npx @google/design.md lint <path-to-design.md>
 ```
 
-Other useful commands include `diff`, `export`, and `spec`.
+Other useful commands: `diff`, `export`, `spec`.
 
 ## Structure
 
-A DESIGN.md file has two layers:
+A DESIGN.md file has two layers.
 
-1. YAML front matter with machine-readable design tokens.
-2. Markdown prose with human-readable design rationale.
+1. YAML front matter: machine-readable design tokens.
+2. Markdown prose: human-readable design rationale.
 
 Tokens are the normative values. Prose explains why and how to apply them.
 
 ## Section order
 
-Sections can be omitted, but sections that are present should appear in this order:
+Sections can be omitted. Present sections should appear in this order.
 
 1. `Overview`
 2. `Colors`

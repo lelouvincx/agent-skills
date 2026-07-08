@@ -1,50 +1,48 @@
 ---
 name: creating-client-design-systems
-description: Creates and maintains Google DESIGN.md files for client or product visual identities, especially Holistics dashboard themes. Use when asked to create a design.md, extract a brand into reusable design tokens, theme a Holistics client demo, or keep dashboard AML styling aligned with a documented design system.
+description: Creates Google DESIGN.md design contracts from client or product brands. Use when asked to create a design.md, extract brand tokens, theme a Holistics demo, or align dashboard AML styling with a documented visual identity.
 ---
 
 # Creating client design systems
 
-Turn a client, product, or dashboard brand into a reusable Google-style `DESIGN.md` file, then use it as the source of truth for implementation.
+Create a design contract: brand evidence → Google-style `DESIGN.md` → matching implementation.
 
-Use Google's DESIGN.md spec and CLI for structure and validation; do not use the Stitch-specific `design-md` skill unless the task is actually about Google Stitch.
+Use `reference/google-design-md.md` only when you need the current Google section order, token schema, or starter skeleton.
 
 When editing `DESIGN.md`, use the lint command from `npx @google/design.md` rather than relying on memory; Google's alpha syntax can change.
 
-Use `reference/google-design-md.md` when you need the current section order, token schema, or starter skeleton.
-
 ## Workflow
 
-1. **Find the brand source**
+1. **Anchor the brand evidence**
    - Prefer official brand guidelines, website pages, product screenshots, existing dashboards, logos, or customer-provided assets.
-   - If no formal guideline exists, state which source became the brand reference.
+   - Complete when the final response can name the source used, or explicitly say no reliable source was available.
 
 2. **Create or update the design file**
    - Default path for client work: `clients/<client-name>/design.md`.
    - Preserve existing useful decisions instead of replacing the file wholesale.
-   - Keep the file both machine-readable and human-readable.
+   - Complete when the file has machine-readable tokens and human-readable rationale, or the task is intentionally reference-only.
 
 3. **Use Google DESIGN.md structure**
-   - YAML front matter contains normative tokens.
-   - Markdown prose explains rationale and usage.
-   - Check `reference/google-design-md.md` for the current section order and starter shape.
+   - Keep normative values in YAML front matter and rationale in Markdown prose.
+   - Consult `reference/google-design-md.md` before creating a new file or making structural changes.
+   - Complete when the file lints or remaining lint findings are intentional and reported.
 
 4. **Model tokens for implementation**
-   - Include `version`, `name`, `description`, `colors`, `typography`, `rounded`, `spacing`, and `components` when useful.
-   - Use token references such as `{colors.primary}` inside component definitions.
-   - Name colors by role first, not just hue: `primary`, `surface`, `text`, `muted`, `success`, `warning`, `danger`, `info`.
+   - Name colors by role first, not just hue.
    - For dashboards, include categorical palette guidance and any sequential/diverging palette guidance needed for charts.
+   - Complete when dashboard-critical roles, typography, shape, spacing, and component patterns are either specified or deliberately omitted.
 
 5. **Connect to Holistics assets when relevant**
    - Treat `design.md` as upstream of `*.theme.aml`, `*.page.aml`, dashboards, and chart palette decisions.
    - Document the theme identifiers and dashboard files that implement the design.
-   - If a design decision cannot be encoded directly in AML, record it as implementation guidance in prose.
+   - Complete when every modified Holistics asset can be traced back to a token or prose decision.
 
 6. **Validate and fix findings**
    - Run the DESIGN.md linter through `npx @google/design.md`.
    - Fix errors and meaningful WCAG contrast warnings.
-   - Orphan-token warnings are acceptable only when the token is intentionally documented for future dashboard or chart use; mention that in the final summary.
+   - Treat orphan-token warnings as acceptable only when the token is intentionally documented for future dashboard or chart use.
    - If AMQL changed, run `holistics aml validate` after edits.
+   - Complete when validation results and intentional warnings are ready to report.
 
 ## Final response
 
