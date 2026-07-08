@@ -9,21 +9,9 @@ Turn a client, product, or dashboard brand into a reusable Google-style `DESIGN.
 
 Use Google's DESIGN.md spec and CLI for structure and validation; do not use the Stitch-specific `design-md` skill unless the task is actually about Google Stitch.
 
-## When working in Holistics projects
+When editing `DESIGN.md`, use the lint command from `npx @google/design.md` rather than relying on memory; Google's alpha syntax can change.
 
-If the workspace contains `.aml` files, also load and follow the `develop-amql` and `search-docs` skills.
-
-For AMQL changes, always run:
-
-```bash
-holistics aml validate
-```
-
-For `DESIGN.md` changes, run:
-
-```bash
-npx @google/design.md lint path/to/design.md
-```
+Use `reference/google-design-md.md` when you need the current section order, token schema, or starter skeleton.
 
 ## Workflow
 
@@ -39,15 +27,7 @@ npx @google/design.md lint path/to/design.md
 3. **Use Google DESIGN.md structure**
    - YAML front matter contains normative tokens.
    - Markdown prose explains rationale and usage.
-   - Sections should appear in this order when present:
-     1. `Overview`
-     2. `Colors`
-     3. `Typography`
-     4. `Layout`
-     5. `Elevation & Depth`
-     6. `Shapes`
-     7. `Components`
-     8. `Do's and Don'ts`
+   - Check `reference/google-design-md.md` for the current section order and starter shape.
 
 4. **Model tokens for implementation**
    - Include `version`, `name`, `description`, `colors`, `typography`, `rounded`, `spacing`, and `components` when useful.
@@ -61,82 +41,10 @@ npx @google/design.md lint path/to/design.md
    - If a design decision cannot be encoded directly in AML, record it as implementation guidance in prose.
 
 6. **Validate and fix findings**
-   - Run `npx @google/design.md lint <file>`.
+   - Run the DESIGN.md linter through `npx @google/design.md`.
    - Fix errors and meaningful WCAG contrast warnings.
    - Orphan-token warnings are acceptable only when the token is intentionally documented for future dashboard or chart use; mention that in the final summary.
    - If AMQL changed, run `holistics aml validate` after edits.
-
-## DESIGN.md skeleton
-
-Use this as the starting shape, then trim or expand based on evidence:
-
-```markdown
----
-version: alpha
-name: Client Name
-description: Short description of the visual identity and implementation context.
-colors:
-  primary: "#000000"
-  on-primary: "#FFFFFF"
-  surface: "#FFFFFF"
-  text: "#111827"
-typography:
-  heading:
-    fontFamily: Inter
-    fontSize: 2rem
-    fontWeight: 700
-    lineHeight: 1.15
-  body:
-    fontFamily: Inter
-    fontSize: 1rem
-    fontWeight: 400
-    lineHeight: 1.5
-rounded:
-  sm: 4px
-  md: 8px
-spacing:
-  sm: 8px
-  md: 16px
-components:
-  card:
-    backgroundColor: "{colors.surface}"
-    textColor: "{colors.text}"
-    rounded: "{rounded.md}"
----
-
-## Overview
-
-State the brand source, visual atmosphere, and target experience.
-
-## Colors
-
-Explain color roles, accessibility constraints, and chart palette usage.
-
-## Typography
-
-Explain font choices, hierarchy, and dashboard readability constraints.
-
-## Layout
-
-Explain spacing, density, grid behavior, and dashboard composition.
-
-## Elevation & Depth
-
-Explain shadows, borders, layering, and card treatment.
-
-## Shapes
-
-Explain radius, pills, sharpness, and geometry.
-
-## Components
-
-Explain cards, buttons, filters, KPI tiles, charts, tables, and chips.
-
-## Do's and Don'ts
-
-- Do ...
-- Don't ...
-```
 
 ## Final response
 
