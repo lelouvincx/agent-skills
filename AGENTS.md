@@ -19,8 +19,8 @@
 - Some remote skills depend on shared generated references. For example, Holistics AMQL skills fetch `references/` from `github.com/holistics/skills`; treat that directory as generated runtime support.
 - To remove a local skill, delete `skills/<name>/`.
 - To remove a remote skill, remove it from `remote-skills.yaml`, delete its directory, remove related `.gitignore` entries, then run `./sync-skills.sh --remote`.
-- For the project registry, use `projects.yaml` as the source of truth and `bin/project-resolve` as the executable interface for humans, agents, and scripts.
-- Prefer `bin/project-resolve <spoken-name> --json` when agents need to resolve project names.
+- For the project registry, use `projects.yaml` as the source of truth and `project-resolve` as the executable interface for humans, agents, and scripts.
+- Prefer `project-resolve <spoken-name> --json` when agents need to resolve project names.
 - Set `AGENTS_REGISTRY_ENV` to force an environment such as `local`, `amp-orb`, or `vps`; otherwise the resolver auto-detects where possible.
 - Set `AGENTS_REGISTRY_WORKSPACE_ROOT` when a host uses a different workspace root than the registry default.
 - After opening PR, add another commit for adding PR number into the changelog entry

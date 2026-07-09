@@ -56,3 +56,9 @@
 
 - Holistics offer calls with prospects/customers to evaluate the product better
 - When writing internal team updates (Slack/Notion posts), default to prose with minimal section labels ("Updates:" / "Next:"). 3-5 sentences max. Drop context the audience already has (attendees, agenda recap). Credit teammates by @mention. Owner-only next steps, not granular checklists. Match the platform's native format, not markdown doc structure.
+
+## Project registry
+
+- Use `project-resolve <spoken-name> --json` to resolve project names, paths, and GitHub repositories before guessing. It is projected from the `agent-skills` repo into `~/.local/bin` by `sync-skills.sh` so it works from other project directories.
+- Respect `AGENTS_REGISTRY_ENV` when set; otherwise let the resolver auto-detect the environment.
+- Respect `AGENTS_REGISTRY_WORKSPACE_ROOT` when a host uses a different workspace root than the registry default.
