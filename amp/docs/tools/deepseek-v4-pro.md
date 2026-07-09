@@ -95,10 +95,25 @@ Agent definition:
 Tools:
 
 ```text
-shell_command, shell_command_status, apply_patch, web_search, read_web_page,
-Task, skill, load_plugin, read_thread, find_thread, librarian, oracle,
-finder, view_media, painter, archive_current_thread, manage_automation,
-send_message_to_agg, mcp__*
+shell_command
+shell_command_status
+apply_patch
+web_search
+read_web_page
+Task
+skill
+load_plugin
+read_thread
+find_thread
+librarian
+oracle
+finder
+view_media
+painter
+archive_current_thread
+manage_automation
+send_message_to_agg
+mcp__*
 ```
 
 The static metadata comment includes a matching `@amp-agent-mode` entry. Amp clients can use this to discover the mode.
