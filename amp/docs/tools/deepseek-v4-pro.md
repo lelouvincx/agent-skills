@@ -3,7 +3,7 @@ doc_schema: "amp-plugin-capability/v1"
 title: "DeepSeek V4 Pro"
 slug: "deepseek-v4-pro"
 status: "active"
-summary: "Registers an experimental DeepSeek V4 Pro-backed Amp agent mode for implementation work."
+summary: "Registers an experimental DeepSeek V4 Pro-backed Amp agent mode using the deprecated built-in Deep mode prompt and tool list."
 capability:
   id: "deepseek-v4-pro"
   type: "agent_mode"
@@ -16,12 +16,12 @@ plugin:
   scope: "system"
   install_source: "local"
   metadata_comments:
-    - "@amp-plugin — DeepSeek V4 Pro agent mode."
+    - "@amp-plugin \u2014 DeepSeek V4 Pro agent mode."
     - "@amp-agent-mode {\"key\":\"deepseek-v4-pro\",\"label\":\"DeepSeek V4 Pro\"}"
 amp:
   api_docs_source: "amp plugins show-docs"
   agent_options_source: "amp plugins show-agent-options --json"
-  last_verified: "2026-06-28"
+  last_verified: "2026-07-09"
 contract:
   input_kind: "user_prompt"
   output_kind: "agent_thread"
@@ -41,8 +41,8 @@ runtime:
   reads:
     - "workspace files through selected tools"
   writes:
-    - "workspace files through create_file/edit_file when the agent chooses those tools"
-    - "shell side effects through Bash when approved by Amp permissions"
+    - "workspace files through apply_patch when the agent chooses that tool"
+    - "shell side effects through shell_command when approved by Amp permissions"
   network:
     - "Baseten DeepSeek V4 Pro model endpoint"
     - "web tools when invoked by the agent"
@@ -53,13 +53,13 @@ safety:
   user_gate: "user selects agent mode"
   constraints:
     - "Requires amp.experimental to be available."
-    - "Uses a fixed curated tool list."
-    - "Uses a custom senior-engineer implementation prompt."
+    - "Uses the same system prompt and tool list as the deprecated built-in Deep mode (deep-classic)."
     - "Reasoning effort is set to xhigh."
   risks:
     - "Experimental agent-mode API may change."
     - "The mode can edit files and run shell commands through its tool list."
 related:
+  - "deep-classic"
 tags:
   - "agent-mode"
   - "deepseek"
@@ -70,7 +70,7 @@ tags:
 
 ## Summary
 
-`deepseek-v4-pro` registers an experimental Amp agent mode backed by `baseten/deepseek-ai/DeepSeek-V4-Pro`. It uses a senior-engineer implementation prompt, a curated tool list, and `xhigh` reasoning effort.
+`deepseek-v4-pro` registers an experimental Amp agent mode backed by `baseten/deepseek-ai/DeepSeek-V4-Pro`. It uses the same system prompt and tool list as the deprecated built-in Deep mode (`deep-classic`), with `xhigh` reasoning effort.
 
 ## Invocation
 
@@ -96,19 +96,21 @@ Agent definition:
 Available tools:
 
 ```text
-Read, finder, Bash, create_file, edit_file, web_search, read_web_page,
-read_thread, find_thread, skill, oracle, librarian, view_media, painter
+shell_command, shell_command_status, apply_patch, web_search, read_web_page,
+Task, skill, load_plugin, read_thread, find_thread, librarian, oracle,
+finder, view_media, painter, archive_current_thread, manage_automation,
+send_message_to_agg, mcp__*
 ```
 
 The static metadata comment includes a matching `@amp-agent-mode` entry, which Amp clients can use for mode discovery.
 
 ## Behavior
 
-When the plugin loads, it checks `amp.experimental`. If unavailable, it logs `Experimental plugin API is not available.` and does not register the mode. If available, it creates a custom agent with the DeepSeek V4 Pro model, a senior-engineer coding prompt, a curated tool list, and then registers the agent mode.
+When the plugin loads, it checks `amp.experimental`. If unavailable, it logs `Experimental plugin API is not available.` and does not register the mode. If available, it creates a custom agent with the DeepSeek V4 Pro model, the Deep mode system prompt, the Deep mode tool list, and then registers the agent mode.
 
 ## Permissions and side effects
 
-This is a full coding agent. It can read files, create files, edit files, run Bash, use web tools, ask Oracle, call Librarian, inspect media, and use Painter if those tools are invoked and permitted by Amp. It can modify the workspace when the task calls for implementation.
+This is a full coding agent. It can read files, apply patches, run shell commands, spawn Task subagents, use web tools, ask Oracle, call Librarian, inspect media, use Painter, archive threads, manage automations, send messages to aggregated threads, and use MCP tools if those tools are invoked and permitted by Amp. It can modify the workspace when the task calls for implementation.
 
 ## Examples
 
@@ -128,4 +130,4 @@ Fix the failing test in this repository. Read the relevant code first, make the 
 
 ## Maintenance notes
 
-Because this uses `amp.experimental`, refresh this doc after Amp plugin API updates. Keep the `@amp-agent-mode` static metadata synchronized with the runtime `registerAgentMode` key and label.
+Because this uses `amp.experimental`, refresh this doc after Amp plugin API updates. Keep the `@amp-agent-mode` static metadata synchronized with the runtime `registerAgentMode` key and label. Keep the prompt and tool list synchronized with `plugins/deep-classic.ts`; this mode is intended to differ only by model, mode metadata, and reasoning effort.
