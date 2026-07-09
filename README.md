@@ -79,7 +79,6 @@ Start there when a skill works sometimes but not reliably enough. Add a fixture 
 | [Send to thread](amp/docs/tools/send-to-thread.md) | Agent tool | Agent | send a message to another Amp thread |
 | [Spawn subagent](amp/docs/tools/spawn-subagent.md) | Agent tool | Agent | start a bounded subagent thread that reports back |
 | [DeepSeek V4 Pro](amp/docs/tools/deepseek-v4-pro.md) | Agent mode | Mode picker | run an experimental DeepSeek-backed agent mode |
-| [GLM 5.2](amp/docs/tools/glm-5-2.md) | Agent mode | Mode picker | run an experimental GLM-backed agent mode |
 | [Codex usage command](amp/docs/tools/codex-usage.md) | Command | Command palette | show Codex usage limits |
 | [Logseq log current task](amp/docs/tools/logseq-log-current-task.md) | Command + agent tool | Command palette / Agent | log the current Amp task into Logseq |
 | [Track event](amp/docs/tools/track-event.md) | Command | Command palette | record skill or plugin usage manually |

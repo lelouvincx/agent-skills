@@ -52,6 +52,7 @@ and this project does not currently use versioned releases.
 
 - Remove unused or retired skills, including context window notifier, caveman, holistics-query, sql-formatter, grill-me, grill-with-docs, and teach. [#12](https://github.com/lelouvincx/agent-skills/pull/12) [#17](https://github.com/lelouvincx/agent-skills/pull/17) [#27](https://github.com/lelouvincx/agent-skills/pull/27) [#36](https://github.com/lelouvincx/agent-skills/pull/36)
 - Remove stale duplicated README maintenance sections after moving agent-facing instructions into `AGENTS.md`. [#41](https://github.com/lelouvincx/agent-skills/pull/41) [#47](https://github.com/lelouvincx/agent-skills/pull/47)
+- Remove the `glm-5.2` experimental agent mode plugin and capability doc, since GLM 5.2 is now the default model for the built-in `low` mode per [The Dial](https://ampcode.com/news/the-dial). [#72](https://github.com/lelouvincx/agent-skills/pull/72)
 
 ### Fixed
 

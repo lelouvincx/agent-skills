@@ -32,7 +32,6 @@ Use these sources in order when adding or refreshing a document:
 ### Agent modes
 
 - [DeepSeek V4 Pro](./deepseek-v4-pro.md)
-- [GLM 5.2](./glm-5-2.md)
 
 ### Commands
 

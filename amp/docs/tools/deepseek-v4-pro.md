@@ -53,14 +53,13 @@ safety:
   user_gate: "user selects agent mode"
   constraints:
     - "Requires amp.experimental to be available."
-    - "Uses the same fixed tool list as GLM 5.2."
-    - "Uses the same custom agent instructions as GLM 5.2."
+    - "Uses a fixed curated tool list."
+    - "Uses a custom senior-engineer implementation prompt."
     - "Reasoning effort is set to xhigh."
   risks:
     - "Experimental agent-mode API may change."
     - "The mode can edit files and run shell commands through its tool list."
 related:
-  - "glm-5-2"
 tags:
   - "agent-mode"
   - "deepseek"
@@ -71,7 +70,7 @@ tags:
 
 ## Summary
 
-`deepseek-v4-pro` registers an experimental Amp agent mode backed by `baseten/deepseek-ai/DeepSeek-V4-Pro`. It uses the same senior-engineer implementation prompt and curated tool list as `glm-5.2`, with `xhigh` reasoning effort.
+`deepseek-v4-pro` registers an experimental Amp agent mode backed by `baseten/deepseek-ai/DeepSeek-V4-Pro`. It uses a senior-engineer implementation prompt, a curated tool list, and `xhigh` reasoning effort.
 
 ## Invocation
 
@@ -105,7 +104,7 @@ The static metadata comment includes a matching `@amp-agent-mode` entry, which A
 
 ## Behavior
 
-When the plugin loads, it checks `amp.experimental`. If unavailable, it logs `Experimental plugin API is not available.` and does not register the mode. If available, it creates a custom agent with the DeepSeek V4 Pro model, the same senior-engineer coding prompt as GLM 5.2, the same curated tool list, and then registers the agent mode.
+When the plugin loads, it checks `amp.experimental`. If unavailable, it logs `Experimental plugin API is not available.` and does not register the mode. If available, it creates a custom agent with the DeepSeek V4 Pro model, a senior-engineer coding prompt, a curated tool list, and then registers the agent mode.
 
 ## Permissions and side effects
 
@@ -125,8 +124,8 @@ Fix the failing test in this repository. Read the relevant code first, make the 
 
 - Mode does not appear: confirm `amp.experimental` is available and the plugin loaded successfully.
 - Model errors: verify `baseten/deepseek-ai/DeepSeek-V4-Pro` appears in `amp plugins show-agent-options --json`.
-- Tool unavailable: compare the tool list in `plugins/deepseek-v4-pro-mode.ts` with `plugins/glm-52-mode.ts` and `amp plugins show-agent-options --json`.
+- Tool unavailable: compare the tool list in `plugins/deepseek-v4-pro-mode.ts` with `amp plugins show-agent-options --json`.
 
 ## Maintenance notes
 
-Because this uses `amp.experimental`, refresh this doc after Amp plugin API updates. Keep the `@amp-agent-mode` static metadata synchronized with the runtime `registerAgentMode` key and label. Keep the prompt and tool list synchronized with `plugins/glm-52-mode.ts`; this mode is intended to differ only by model identity, mode metadata, and reasoning effort.
+Because this uses `amp.experimental`, refresh this doc after Amp plugin API updates. Keep the `@amp-agent-mode` static metadata synchronized with the runtime `registerAgentMode` key and label.
