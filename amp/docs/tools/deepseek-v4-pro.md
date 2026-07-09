@@ -16,7 +16,7 @@ plugin:
   scope: "system"
   install_source: "local"
   metadata_comments:
-    - "@amp-plugin \u2014 DeepSeek V4 Pro agent mode."
+    - "@amp-plugin — DeepSeek V4 Pro agent mode."
     - "@amp-agent-mode {\"key\":\"deepseek-v4-pro\",\"label\":\"DeepSeek V4 Pro\"}"
 amp:
   api_docs_source: "amp plugins show-docs"
