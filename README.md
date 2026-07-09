@@ -18,15 +18,16 @@ cd agent-skills
 ```
 
 This copies the runtime files into `~/.config/amp` and fetches remote skills.
+It also symlinks scripts from `bin/` into `~/.local/bin`, so they can be used from any project when `~/.local/bin` is on `PATH`.
 
 ## Use the project registry
 
 `projects.yaml` maps short project names to local paths and GitHub repositories.
 
 ```bash
-bin/project-resolve logseq --path
-bin/project-resolve "log this to logseq" --github
-bin/project-resolve dbt --json
+project-resolve logseq --path
+project-resolve "log this to logseq" --github
+project-resolve dbt --json
 ```
 
 See [PROJECTS.md](PROJECTS.md) for the generated project list.

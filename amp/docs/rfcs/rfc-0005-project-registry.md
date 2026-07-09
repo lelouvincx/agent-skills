@@ -7,9 +7,10 @@ file: "rfc-0005-project-registry.md"
 status: "Implemented (initial registry and resolver)"
 summary: "Map spoken project names to GitHub repositories and environment-relative local paths, with generated docs, a resolver CLI, and a short AI skill."
 created: "2026-07-01"
-updated: "2026-07-05"
+updated: "2026-07-09"
 amp_thread_id:
   T-019f1cc3-406e-75d8-877b-64fc80f2e8d3: "initial RFC design"
+  T-019f452f-e283-7492-b330-eb362e66aa69: "document PATH-level resolver usage outside the agent-skills checkout"
 implementation:
   - path: "../../../projects.yaml"
   - path: "../../../PROJECTS.md"
@@ -123,7 +124,7 @@ Required resolver host dependencies:
 The generated Markdown view is created with:
 
 ```bash
-bin/project-resolve --generate-md > PROJECTS.md
+project-resolve --generate-md > PROJECTS.md
 ```
 
 ## Behavior
@@ -138,7 +139,7 @@ The environment variable name is intentionally `AGENTS_REGISTRY_ENV` because thi
 
 `AGENTS_REGISTRY_WORKSPACE_ROOT` overrides the selected environment's `workspace_root` at runtime. Use it for hosts whose checkout root differs from the registry default, especially Amp Orb or VPS environments where the workspace path may change.
 
-`bin/project-resolve` resolves a query in this order:
+`project-resolve` resolves a query in this order:
 
 1. Exact project key.
 2. Exact alias.
@@ -157,7 +158,7 @@ The desired flow is:
             │
             ▼
 ╭────────────────────────╮
-│ bin/project-resolve    │
+│ project-resolve        │
 │ exact + fuzzy matching │
 ╰───────────┬────────────╯
             │
@@ -175,9 +176,9 @@ The resolver reads `projects.yaml` and environment variables. It does not write 
 
 `PROJECTS.md` is generated documentation. It must not become a second source of truth.
 
-The AI skill is intentionally short. Its job is only to route future agents to `bin/project-resolve` and `projects.yaml`, not to duplicate the mapping.
+The AI skill is intentionally short. Its job is only to route future agents to `project-resolve` and `projects.yaml`, not to duplicate the mapping.
 
-`sync-skills.sh` projects `projects.yaml` and `PROJECTS.md` into `~/.config/amp` so Amp runtime artifacts have the same registry source and human-readable view as this repo.
+`sync-skills.sh` projects `projects.yaml` and `PROJECTS.md` into `~/.config/amp` and symlinks `bin/project-resolve` into `~/.local/bin/project-resolve`, so the resolver can be used from other project checkouts when `~/.local/bin` is on `PATH`.
 
 ## Examples
 
@@ -187,10 +188,10 @@ Example commands:
 # prerequisite: uv and uvx on PATH; pyyaml/rapidfuzz are provided by uvx
 command -v uv >/dev/null && command -v uvx >/dev/null
 
-bin/project-resolve logseq --path
-bin/project-resolve "log this to logseq" --github
-bin/project-resolve dbt --json
-AGENTS_REGISTRY_ENV=vps bin/project-resolve prefect --path
+project-resolve logseq --path
+project-resolve "log this to logseq" --github
+project-resolve dbt --json
+AGENTS_REGISTRY_ENV=vps project-resolve prefect --path
 ```
 
 Initial important mappings:
@@ -216,7 +217,7 @@ Initial important mappings:
 - Do not automatically clone missing repositories in the first version.
 - `projects.yaml` is the source of truth.
 - `PROJECTS.md` must be updated in the same change when mappings change.
-- `sync-skills.sh` must project `projects.yaml` and `PROJECTS.md` into `~/.config/amp`.
+- `sync-skills.sh` must project `projects.yaml` and `PROJECTS.md` into `~/.config/amp`, and must expose `bin/project-resolve` through `~/.local/bin` for cross-project use.
 - Projects must declare one of the known ownership entities: `lelouvincx`, `lelouvincx-bot`, `holistics`, or `open-source`.
 - Prefer adding aliases for common spoken phrases instead of weakening fuzzy-match thresholds.
 - Keep GitHub values as compact slugs such as `owner/repo`, not full URLs, unless the value is explicitly `null` for a parent workspace.
