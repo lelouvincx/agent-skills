@@ -6,7 +6,6 @@
 // when the command is invoked or the tool is called from an Amp thread.
 
 import type {
-	AgentReasoningEffort,
 	BuiltinAgentMode,
 	PluginAPI,
 	PluginCommandContext,
@@ -16,8 +15,7 @@ import type {
 } from '@ampcode/plugin'
 
 const LOGSEQ_REPO = process.env.AMP_LOGSEQ_GRAPH_DIR ?? '/Users/lelouvincx/Developer/second-brain-logseq'
-const WORKER_MODE: BuiltinAgentMode = 'deep'
-const WORKER_REASONING_EFFORT: AgentReasoningEffort = 'medium'
+const WORKER_MODE = 'medium' as BuiltinAgentMode
 const WORKER_TIMEOUT_MS = 10 * 60 * 1000
 const WORKER_WAIT_RETRY_DELAY_MS = 1_000
 const PARENT_RECENT_MESSAGE_SEED_LIMIT = 20
@@ -98,7 +96,7 @@ async function logCurrentTask(amp: PluginAPI, ctx: LogContext, hint: string, max
 
 	const parentThreadID = ctx.thread.id
 	const parentExcerpt = await parentThreadExcerpt(ctx.thread)
-	const workerAgent = amp.getBuiltinAgent(WORKER_MODE, { reasoningEffort: WORKER_REASONING_EFFORT })
+	const workerAgent = amp.getBuiltinAgent(WORKER_MODE)
 	const workerThread = await workerAgent.createThread({
 		parentThreadID,
 		show: false,

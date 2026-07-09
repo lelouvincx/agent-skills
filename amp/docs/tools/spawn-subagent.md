@@ -20,7 +20,7 @@ plugin:
 amp:
   api_docs_source: "amp plugins show-docs"
   agent_options_source: "amp plugins show-agent-options --json"
-  last_verified: "2026-06-24"
+  last_verified: "2026-07-09"
 contract:
   input_kind: "json_schema"
   output_kind: "text"
@@ -100,14 +100,13 @@ Optional inputs:
 
 | Field             | Type                                                       | Default  | Notes                                                                                                                                                             |
 | ----------------- | ---------------------------------------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `mode`            | `smart \| deep \| rush`                                    | `deep`   | Built-in Amp agent mode for the subagent.                                                                                                                         |
-| `reasoningEffort` | `none \| minimal \| low \| medium \| high \| xhigh \| max` | `medium` | Reasoning effort pinned for the subagent. Amp's GPT-5.5 guidance says `medium` is the right default for normal deep work; `high` can cost more and perform worse. |
+| `mode`            | `low \| medium \| high \| ultra` | `medium` | Built-in Amp agent mode for the subagent. |
 
-Output is a short text confirmation: `Started <mode>/<reasoningEffort> subagent in <threadID>. Do not poll or wait for it.`
+Output is a short text confirmation: `Started <mode> subagent in <threadID>. Do not poll or wait for it.`
 
 ## Behavior
 
-The tool validates `instructions`, normalizes the built-in mode and reasoning effort, obtains a built-in agent with `amp.getBuiltinAgent`, creates a child thread with the current thread as `parentThreadID`, and appends a structured subagent prompt.
+The tool validates `instructions`, normalizes the built-in mode, obtains a built-in agent with `amp.getBuiltinAgent`, creates a child thread with the current thread as `parentThreadID`, and appends a structured subagent prompt.
 
 The prompt treats `read_thread` as the source of truth for parent context. It does not fall back to static prompt reconstruction because `read_thread` is more reliable and avoids redundant context load for subagents.
 
@@ -138,7 +137,7 @@ The prompt gives the subagent two phases:
 
 ## Examples
 
-Spawn a default deep subagent:
+Spawn a default medium subagent:
 
 ```json
 {
@@ -150,8 +149,7 @@ Spawn a faster subagent:
 
 ```json
 {
-  "mode": "rush",
-  "reasoningEffort": "medium",
+  "mode": "low",
   "instructions": "Run the focused docs heading consistency check and report failures only."
 }
 ```
@@ -159,8 +157,7 @@ Spawn a faster subagent:
 ## Troubleshooting
 
 - `instructions are required`: pass a non-empty task brief.
-- `mode must be one of...`: use only `smart`, `deep`, or `rush`.
-- `reasoningEffort must be one of...`: use the supported reasoning enum.
+- `mode must be one of...`: use only `low`, `medium`, `high`, or `ultra`.
 - Subagent does not report back: inspect the child thread ID from the return value and check whether `send_to_thread` is available.
 - Subagent reports back but remains visible: check whether `archive_current_thread` is available to the subagent, then archive the child thread manually if needed.
 
