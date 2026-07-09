@@ -24,6 +24,7 @@ and this project does not currently use versioned releases.
 
 ### Changed
 
+- Document `AMP_NO_TUI=1` as an Amp remote control thread signal.
 - Enable remote Amp thread creation in shared Amp settings. [#68](https://github.com/lelouvincx/agent-skills/pull/68)
 - Document the `send_to_thread` `steer=true` rationale for GPT-5.5 deep-mode parent threads. [#64](https://github.com/lelouvincx/agent-skills/pull/64)
 - Clarify and reflow the `spawn_subagent` capability docs for `read_thread` intent reconstruction and diff-friendly maintenance. [#63](https://github.com/lelouvincx/agent-skills/pull/63)
