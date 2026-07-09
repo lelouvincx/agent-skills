@@ -143,6 +143,7 @@ Fix the failing test in this repository. Read the relevant code first, make the 
 ## Troubleshooting
 
 - Mode does not appear: check that `amp.experimental` is available and the plugin loaded successfully.
+- Plugin load errors: run `amp plugins list`; syntax/runtime errors are reported next to `deepseek-v4-pro-mode.ts`.
 - Model errors: check that `baseten/deepseek-ai/DeepSeek-V4-Pro` appears in `amp plugins show-agent-options --json`.
 - Tool unavailable: compare the tool list in `plugins/deepseek-v4-pro-mode.ts` with `amp plugins show-agent-options --json`.
 
@@ -159,3 +160,5 @@ amp plugins add --auto-update @amp/deep-classic
 Then compare this plugin with `~/.config/amp/plugins/deep-classic.ts`. Treat that file as the local source for the latest Deep Classic prompt and tools.
 
 Keep the copied prompt to the static instruction region from Amp's upstream `thread-actors/src/inference/system-prompts/deep.md.njk`. This mode should differ only by model, mode metadata and reasoning effort.
+
+When copying prompt text into the plugin's TypeScript template literal, escape any literal backtick as `\`` and keep the closing template delimiter visible before the tool list. A malformed prompt string prevents the plugin from loading at all.

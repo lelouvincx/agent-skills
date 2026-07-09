@@ -58,6 +58,7 @@ and this project does not currently use versioned releases.
 
 ### Fixed
 
+- Fix the `deepseek-v4-pro` Amp plugin prompt literal so the agent mode loads again. [#75](https://github.com/lelouvincx/agent-skills/pull/75)
 - Fix project resolver guidance to use the PATH-level `project-resolve` command from other project directories. [#70](https://github.com/lelouvincx/agent-skills/pull/70)
 - Fix Holistics query guidance for documentation links, pooling, dataset IDs, and optional SQL generation. [#2](https://github.com/lelouvincx/agent-skills/pull/2) [#3](https://github.com/lelouvincx/agent-skills/pull/3)
 - Fix remote skill sync edge cases around YAML frontmatter, `PERSONAL.md` change detection, order-independent parsing, portable hashing, and generated frontmatter delimiters. [#9](https://github.com/lelouvincx/agent-skills/pull/9) [#25](https://github.com/lelouvincx/agent-skills/pull/25)
