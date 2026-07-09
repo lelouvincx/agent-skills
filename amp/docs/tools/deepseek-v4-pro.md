@@ -58,8 +58,7 @@ safety:
   risks:
     - "Experimental agent-mode API may change."
     - "The mode can edit files and run shell commands through its tool list."
-related:
-  - "deep-classic"
+related: []
 tags:
   - "agent-mode"
   - "deepseek"
