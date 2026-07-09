@@ -20,7 +20,7 @@ plugin:
 amp:
   api_docs_source: "amp plugins show-docs"
   agent_options_source: "amp plugins show-agent-options --json"
-  last_verified: "2026-07-02"
+  last_verified: "2026-07-09"
 contract:
   input_kind: "json_schema"
   output_kind: "text"
@@ -56,7 +56,7 @@ runtime:
     - "parent Amp thread title"
     - "worker thread archive state"
   network:
-    - "Amp built-in deep agent runtime"
+    - "Amp built-in medium agent runtime"
   logs:
     - "plugin load log"
 safety:
@@ -119,8 +119,7 @@ Runtime defaults:
 | Setting                     | Value                                                                       |
 | --------------------------- | --------------------------------------------------------------------------- |
 | Logseq repo                 | `AMP_LOGSEQ_GRAPH_DIR` or `/Users/lelouvincx/Developer/second-brain-logseq` |
-| Worker mode                 | `deep`                                                                      |
-| Worker reasoning effort     | `medium` (Amp GPT-5.5 recommended default for normal deep work)             |
+| Worker mode                 | `medium`                                                                    |
 | Worker timeout              | 10 minutes                                                                  |
 | Worker wait retry delay     | 1 second for transient `Plugin thread.messages timed out` errors            |
 | Parent recent-message seed  | 20 messages                                                                 |
@@ -130,7 +129,7 @@ Runtime defaults:
 
 ## Behavior
 
-The agent tool checks for an active thread and uses the optional `hint` input. The command-palette command checks for an active thread, prompts for an optional hint, then calls the same internal logging flow used by the tool. That shared flow reads up to 20 recent messages only as a seed for link/outcome extraction, spawns a hidden built-in `deep/medium` worker thread, and sends it a Logseq-specific prompt. While waiting for the worker, transient `Plugin thread.messages timed out` errors are retried until the worker timeout expires. The prompt places the optional hint near the end, after the worker rules and immediately before the required final-response format. The worker has an explicit private intent-reconstruction step: read the parent Amp thread, infer the original user intent, the latest coherent requested outcome, and the durable result to log, then proceed from that reconstructed intent. The worker is asked to log task entries in `pages/Backlog.md` first: update a matching backlog block when possible, otherwise create one concise backlog task block. Today's journal should then contain only a short reference back to that backlog task, under `Done`, `Tasks`, or `Notes` according to the task state.
+The agent tool checks for an active thread and uses the optional `hint` input. The command-palette command checks for an active thread, prompts for an optional hint, then calls the same internal logging flow used by the tool. That shared flow reads up to 20 recent messages only as a seed for link/outcome extraction, spawns a hidden built-in `medium` worker thread, and sends it a Logseq-specific prompt. While waiting for the worker, transient `Plugin thread.messages timed out` errors are retried until the worker timeout expires. The prompt places the optional hint near the end, after the worker rules and immediately before the required final-response format. The worker has an explicit private intent-reconstruction step: read the parent Amp thread, infer the original user intent, the latest coherent requested outcome, and the durable result to log, then proceed from that reconstructed intent. The worker is asked to log task entries in `pages/Backlog.md` first: update a matching backlog block when possible, otherwise create one concise backlog task block. Today's journal should then contain only a short reference back to that backlog task, under `Done`, `Tasks`, or `Notes` according to the task state.
 
 Before choosing or writing a block, the worker must treat the Logseq graph's canonical map as the source of truth: read `pages/Canonical Pages.md`, then read the corresponding canonical project/rule pages named there, especially `pages/Projects.md`, `pages/Backlog.md`, and relevant rule pages. The backlog task's `project:: [[...]]`, priority, title, and placement must be coherent with that canonical project taxonomy and any matching active backlog task. If the recent-message seed, reconstructed intent, and canonical pages disagree, the worker should prefer the reconstructed original thread intent and canonical project mapping over incidental recent-message context.
 

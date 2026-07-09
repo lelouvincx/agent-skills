@@ -4,12 +4,10 @@
 // instructions for reporting back through send_to_thread, then archiving itself
 // once no follow-up is needed.
 
-import type { AgentReasoningEffort, BuiltinAgentMode, PluginAPI } from '@ampcode/plugin'
+import type { BuiltinAgentMode, PluginAPI } from '@ampcode/plugin'
 
-const DEFAULT_MODE: BuiltinAgentMode = 'deep'
-const DEFAULT_REASONING_EFFORT: AgentReasoningEffort = 'medium'
-const BUILTIN_MODES = new Set(['smart', 'deep', 'rush'])
-const REASONING_EFFORTS = new Set(['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'])
+const DEFAULT_MODE = 'medium' as BuiltinAgentMode
+const BUILTIN_MODES = new Set(['low', 'medium', 'high', 'ultra'])
 
 export default function (amp: PluginAPI) {
 	amp.registerTool({
@@ -22,7 +20,7 @@ export default function (amp: PluginAPI) {
 			'Give the subagent concrete scope, constraints, expected output, and validation instructions. Do not wait for the subagent.',
 			'The subagent is instructed to privately reconstruct parent-thread intent before executing so incidental recent context does not replace the original task intent.',
 			'The subagent is instructed to report back to this thread with a structured summary via send_to_thread, decide whether parent follow-up is required, then archive itself with archive_current_thread once no required follow-up remains.',
-			"Defaults to the built-in deep agent with medium reasoning effort, Amp's recommended GPT-5.5 default for normal deep work.",
+			"Defaults to Amp's built-in medium mode.",
 		].join(' '),
 		inputSchema: {
 			type: 'object',
@@ -33,13 +31,8 @@ export default function (amp: PluginAPI) {
 				},
 				mode: {
 					type: 'string',
-					enum: ['smart', 'deep', 'rush'],
-					description: 'Optional built-in Amp agent mode for the subagent. Defaults to deep.',
-				},
-				reasoningEffort: {
-					type: 'string',
-					enum: ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'],
-					description: "Optional reasoning effort for the subagent. Defaults to medium, Amp's recommended GPT-5.5 default for normal deep work.",
+					enum: ['low', 'medium', 'high', 'ultra'],
+					description: 'Optional built-in Amp agent mode for the subagent. Defaults to medium.',
 				},
 			},
 			required: ['instructions'],
@@ -51,9 +44,8 @@ export default function (amp: PluginAPI) {
 				throw new Error('instructions are required')
 			}
 			const mode = normalizeMode(input.mode)
-			const reasoningEffort = normalizeReasoningEffort(input.reasoningEffort)
 
-			const subagent = amp.getBuiltinAgent(mode, { reasoningEffort })
+			const subagent = amp.getBuiltinAgent(mode)
 			const thread = await subagent.createThread({ parentThreadID: ctx.thread.id })
 			const message = `You are a subagent thread spawned by parent thread ${ctx.thread.id}.
 
@@ -103,7 +95,7 @@ ${instructions}`
 				content: message,
 			})
 
-			return `Started ${mode}/${reasoningEffort} subagent in ${thread.id}. Do not poll or wait for it.`
+			return `Started ${mode} subagent in ${thread.id}. Do not poll or wait for it.`
 		},
 	})
 }
@@ -111,15 +103,7 @@ ${instructions}`
 function normalizeMode(raw: unknown): BuiltinAgentMode {
 	const mode = String(raw || DEFAULT_MODE).trim()
 	if (!BUILTIN_MODES.has(mode)) {
-		throw new Error('mode must be one of: smart, deep, rush')
+		throw new Error('mode must be one of: low, medium, high, ultra')
 	}
 	return mode as BuiltinAgentMode
-}
-
-function normalizeReasoningEffort(raw: unknown): AgentReasoningEffort {
-	const reasoningEffort = String(raw || DEFAULT_REASONING_EFFORT).trim()
-	if (!REASONING_EFFORTS.has(reasoningEffort)) {
-		throw new Error('reasoningEffort must be one of: none, minimal, low, medium, high, xhigh, max')
-	}
-	return reasoningEffort as AgentReasoningEffort
 }
