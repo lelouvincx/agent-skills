@@ -9,6 +9,7 @@ and this project does not currently use versioned releases.
 
 ### Added
 
+- Add a personal `agent-browser` overlay documenting the existing local persistent browser profile.
 - Add `creating-client-design-systems` for Google DESIGN.md files that guide client branding and Holistics dashboard themes. [#67](https://github.com/lelouvincx/agent-skills/pull/67)
 - Add ReadAI as a global Amp MCP server through `mcp-remote`. [#66](https://github.com/lelouvincx/agent-skills/pull/66)
 - Add `writing-investigation-docs` for evidence-first investigation, incident, PR decision, and RFC-style notes, plus `skill-tests` for fixture-based skill feedback loops. [#65](https://github.com/lelouvincx/agent-skills/pull/65)
