@@ -21,7 +21,7 @@ plugin:
 amp:
   api_docs_source: "amp plugins show-docs"
   agent_options_source: "amp plugins show-agent-options --json"
-  last_verified: "2026-07-09"
+  last_verified: "2026-07-10"
 contract:
   input_kind: "user_prompt"
   output_kind: "agent_thread"
