@@ -4,6 +4,7 @@
   "amp.git.commit.ampThread.enabled": false,
   "amp.git.commit.coauthor.enabled": false,
   "amp.internal.deepReasoningEffort": "xhigh",
+  "amp.remoteThreadCreation.enabled": true,
   "amp.mcpServers": {
     "ffmpeg-mcp": {
       "args": ["-y", "@bitscorp-mcp/mcp-ffmpeg"],
