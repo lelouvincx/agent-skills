@@ -3,7 +3,7 @@ doc_schema: "amp-plugin-capability/v1"
 title: "DeepSeek V4 Pro"
 slug: "deepseek-v4-pro"
 status: "active"
-summary: "Registers an experimental DeepSeek V4 Pro-backed Amp agent mode using the deprecated built-in Deep mode prompt and tool list."
+summary: "Registers an experimental DeepSeek V4 Pro-backed Amp agent mode mirroring Amp's deep-classic prompt and tool contract."
 capability:
   id: "deepseek-v4-pro"
   type: "agent_mode"
@@ -53,7 +53,7 @@ safety:
   user_gate: "user selects agent mode"
   constraints:
     - "Requires amp.experimental to be available."
-    - "Uses the same system prompt and tool list as the deprecated built-in Deep mode (deep-classic)."
+    - "Mirrors Amp's deep-classic prompt and tool contract."
     - "Reasoning effort is set to xhigh."
   risks:
     - "Experimental agent-mode API may change."
@@ -69,7 +69,7 @@ tags:
 
 ## Summary
 
-`deepseek-v4-pro` registers an experimental Amp agent mode backed by `baseten/deepseek-ai/DeepSeek-V4-Pro`. It uses the same system prompt and tool list as the deprecated built-in Deep mode (`deep-classic`), with `xhigh` reasoning effort.
+`deepseek-v4-pro` registers an experimental Amp agent mode backed by `baseten/deepseek-ai/DeepSeek-V4-Pro`. It mirrors Amp's `deep-classic` prompt and tool contract, with `xhigh` reasoning effort.
 
 ## Invocation
 
@@ -137,4 +137,4 @@ To refresh the Deep prompt and tool contract, install or update Amp's Deep Class
 amp plugins add --auto-update @amp/deep-classic
 ```
 
-Then compare this plugin with `~/.config/amp/plugins/deep-classic.ts`. Keep the prompt and tool list synchronized with that file; this mode is intended to differ only by model, mode metadata, and reasoning effort.
+Then compare this plugin with `~/.config/amp/plugins/deep-classic.ts`. Treat that file as the local refresh source for the latest Deep Classic prompt and tool list. The copied prompt should remain the static instruction region from Amp's upstream `thread-actors/src/inference/system-prompts/deep.md.njk`; this mode is intended to differ only by model, mode metadata, and reasoning effort.
