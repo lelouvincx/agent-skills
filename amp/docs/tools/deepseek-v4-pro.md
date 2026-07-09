@@ -129,4 +129,12 @@ Fix the failing test in this repository. Read the relevant code first, make the 
 
 ## Maintenance notes
 
-Because this uses `amp.experimental`, refresh this doc after Amp plugin API updates. Keep the `@amp-agent-mode` static metadata synchronized with the runtime `registerAgentMode` key and label. Keep the prompt and tool list synchronized with `plugins/deep-classic.ts`; this mode is intended to differ only by model, mode metadata, and reasoning effort.
+Because this uses `amp.experimental`, refresh this doc after Amp plugin API updates. Keep the `@amp-agent-mode` static metadata synchronized with the runtime `registerAgentMode` key and label.
+
+To refresh the Deep prompt and tool contract, install or update Amp's Deep Classic plugin:
+
+```bash
+amp plugins add --auto-update @amp/deep-classic
+```
+
+Then compare this plugin with `~/.config/amp/plugins/deep-classic.ts`. Keep the prompt and tool list synchronized with that file; this mode is intended to differ only by model, mode metadata, and reasoning effort.
