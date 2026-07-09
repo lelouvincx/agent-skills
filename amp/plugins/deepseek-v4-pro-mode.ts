@@ -62,7 +62,8 @@ Report outcomes honestly. Don't claim tests pass when they don't, don't suppress
 
 ## High-Impact Actions
 
-Ask before taking actions that are destructive, hard to reverse, or shared with others, such as deleting untracked data, deleting branches, discarding work with \`
+Ask before taking actions that are destructive, hard to reverse, or shared with others, such as deleting untracked data, deleting branches, discarding work with \`git checkout\` or \`git restore\`, rewriting history, pushing code, or changing shared infrastructure. Approval applies to the action requested, not to later follow-up actions after the state changes.
+`
 
 const DEEP_TOOLS = [
 	'shell_command',
