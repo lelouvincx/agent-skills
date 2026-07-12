@@ -7,7 +7,7 @@ description: "Chooses between direct work, Amp's built-in Task tool, and spawn_s
 
 Choose the delegation mechanism from what the parent needs next.
 
-The source of truth for these rules is the [Spawn Subagent capability document](../../amp/docs/tools/spawn-subagent.md). Update that document before changing this skill.
+The source of truth for these rules is the [Delegating Subagents artifact document](../../amp/docs/tools/delegating-subagents.md). Keep it aligned with the related [Spawn Subagent capability document](../../amp/docs/tools/spawn-subagent.md).
 
 ## Decision
 

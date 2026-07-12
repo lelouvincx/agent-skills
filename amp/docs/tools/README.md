@@ -24,6 +24,10 @@ Use these sources in order when adding or refreshing a document:
 
 All active documents use `amp-artifact/v2`, which supports skills and plugin capabilities. V1 is retained only as a historical reference.
 
+### Skills
+
+- [Delegating Subagents](./delegating-subagents.md)
+
 ### Agent-callable tools
 
 - [Claude Code Subagent](./claude-code-subagent.md)

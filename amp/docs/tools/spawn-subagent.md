@@ -69,6 +69,7 @@ safety:
     - "Subagent can preserve the wrong intent if it relies only on recent or incidental parent-thread context."
     - "Subagent may modify files according to its built-in agent mode permissions."
 related:
+  - "delegating-subagents"
   - "send-to-thread"
 tags:
   - "subagent"
