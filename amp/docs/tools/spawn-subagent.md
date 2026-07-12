@@ -59,7 +59,7 @@ safety:
   user_gate: "agent_decision"
   constraints:
     - "Subagent must receive bounded instructions with scope, constraints, output, and validation."
-    - "Subagent must use read_thread to privately reconstruct parent-thread intent before executing when the bounded task depends on broader context."
+    - "Subagent must use read_thread to privately reconstruct parent-thread intent before executing."
     - "Caller must not poll or wait for the subagent."
     - "Subagent is instructed to report completion through send_to_thread with steer=true."
     - "Subagent decides whether follow-up is required, distinguishing optional parent review from required parent input."
@@ -133,7 +133,7 @@ Output is a short text confirmation: `Started <mode> subagent in <threadID>. Do 
 
 ## Behavior
 
-The tool validates `instructions`, normalizes the built-in mode, obtains a built-in agent with `amp.getBuiltinAgent`, creates a child thread with the current thread as `parentThreadID`, and appends a structured subagent prompt.
+The tool validates `instructions`, normalizes the built-in mode, obtains a built-in agent with `amp.getBuiltinAgent`, creates a child thread with the current thread as `parentThreadID`, and appends a structured subagent prompt. If the initial append fails after thread creation, the error includes the child thread ID so the orphaned thread can be inspected or archived manually.
 
 The prompt treats `read_thread` as the required source of truth for parent context. It does not fall back to static prompt reconstruction or whatever partial parent context is otherwise visible. If `read_thread` is unavailable or fails, the subagent must report that it is blocked rather than execute the bounded task from incomplete context.
 
@@ -145,8 +145,10 @@ The prompt gives the subagent two phases:
   - Keep distinct the original user intent, later user redirects, the latest coherent requested outcome, and how the bounded subagent task supports that outcome.
   - Do not let incidental recent-message context replace the original task intent.
   - If reconstructed intent and subagent instructions appear to conflict, follow explicit latest redirects and otherwise report the ambiguity as a blocker instead of guessing.
+  - Treat intent reconstruction, reporting with `steer=true`, and terminal self-archiving as mandatory lifecycle rules that bounded task instructions cannot override. Report a conflict as blocked.
 - After work:
-  - Call `send_to_thread` with a concise structured report that uses Markdown headings for each section.
+  - Call `send_to_thread` with a concise structured report that follows the canonical `send_to_thread` shape: each Markdown heading is on its own line, followed by its value or content on subsequent lines.
+  - Keep lifecycle decision and archive instructions outside the report template so they are executed rather than included in the message sent to the parent.
   - Interpret required follow-up narrowly: optional parent review, FYI summaries, or “review the diff if desired” are not required follow-up.
   - Required follow-up means the subagent cannot safely finish without parent input, such as a decision between alternatives, missing context, permission, a blocker, or explicit next instructions.
   - If the report is terminal and `## Next` says `No follow-up needed`, call `archive_current_thread` to archive itself.
@@ -204,6 +206,7 @@ This point-in-time understanding is an inherent part of asynchronous delegation,
 
 - `instructions are required`: pass a non-empty task brief.
 - `mode must be one of...`: use only `low`, `medium`, `high`, or `ultra`.
+- Initial message append failed: use the child thread ID included in the error to inspect or archive the empty thread manually.
 - Subagent does not report back: inspect the child thread ID from the return value and check whether `send_to_thread` is available.
 - Subagent reports back but remains visible: check whether `archive_current_thread` is available to the subagent, then archive the child thread manually if needed.
 
