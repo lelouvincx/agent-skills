@@ -54,5 +54,6 @@ New documents use `amp-artifact/v2`, which supports skills and plugin capabiliti
 
 ## Maintenance files
 
-- [_schema.md](./_schema.md) defines the versioned frontmatter schema.
-- [_template.md](./_template.md) provides a copyable skeleton for new capability docs.
+- [_schema.md](./_schema.md) defines the current `amp-artifact/v2` frontmatter schema.
+- [_schema-v1.md](./_schema-v1.md) preserves the supported `amp-plugin-capability/v1` schema.
+- [_template.md](./_template.md) provides a copyable skeleton for new artifact docs.

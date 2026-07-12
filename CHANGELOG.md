@@ -9,6 +9,7 @@ and this project does not currently use versioned releases.
 
 ### Added
 
+- Preserve the original Amp plugin capability schema as a versioned v1 reference.
 - Add `delegating-subagents` to choose between built-in `Task`, asynchronous `spawn_subagent`, and direct work. [#78](https://github.com/lelouvincx/agent-skills/pull/78)
 - Add a dedicated TypeScript workspace for developing with the Amp SDK. [#77](https://github.com/lelouvincx/agent-skills/pull/77)
 - Add version-controlled `deep-classic` and `smart-classic` Amp agent modes with capability documentation. [#76](https://github.com/lelouvincx/agent-skills/pull/76)
