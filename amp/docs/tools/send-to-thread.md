@@ -117,7 +117,7 @@ Subagent completion reports should use Markdown headings for each section:
 
 ## Status
 
-<done | blocked | needs-review>
+<done | blocked>
 
 ## Summary
 
@@ -169,11 +169,25 @@ Send a normal follow-up:
 }
 ```
 
+### Scenario stress test
+
+| Scenario | Expected behavior |
+| --- | --- |
+| A subagent completes while the parent may be busy | Send the structured `done` report with `steer=true`. Use `No follow-up needed` when only normal parent integration remains. |
+| A subagent cannot continue without parent input | Send a structured `blocked` report with `steer=true`. Put one smallest required action or question in `## Next`. |
+| The parent answers an open child thread | Target the child thread ID with the missing decision or context. `steer=false` is sufficient when the child is idle and waiting. |
+| A non-urgent FYI is sent to another thread | Use `steer=false`. The full subagent report template is optional when the message is not a completion report. |
+| The payload is a raw log, code snippet, structured data, or source quote | Preserve the useful source format instead of forcing the human-readable report style. |
+| The target is active but the message should not redirect its next step | Use `steer=false`; do not mark routine updates as steering messages. |
+
+`steer=true` controls queue priority. Use it for completion reports and blockers that should influence a busy parent's next turn, not for routine updates.
+
 ## Troubleshooting
 
 - `threadID is required`: pass a non-empty thread ID.
 - `message is required`: pass a non-empty message.
 - Message went to the wrong place: confirm the target thread ID before sending.
+- Send to an archived or inaccessible thread fails: confirm the thread still exists and is writable, then send to the correct active thread.
 - Parent thread did not react immediately: use `steer=true` for subagent completion reports when the target thread is busy.
 
 ## Maintenance notes

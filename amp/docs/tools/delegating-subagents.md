@@ -102,6 +102,33 @@ Loading the skill only adds instructions to agent context. The skill itself does
 - Running a bounded test investigation needed before the current response: use built-in `Task`.
 - Implementing an independent slice that should report back to a continuing coordinator thread: use `spawn_subagent`.
 
+### Scenario stress test
+
+| Scenario | Choice | Why |
+| --- | --- | --- |
+| Read one known file, find one exact symbol, or make one localized edit | Direct work | Delegation costs more than the task. |
+| Trace a behavior across several local modules | `finder` | A specialist search tool already owns the job. |
+| Explain architecture in an external repository | `librarian` | External codebase understanding is specialist work. |
+| Get a second opinion on a genuinely hard review or design decision | `oracle` | Expert judgment is needed, not a general worker. |
+| Investigate a bounded failure whose result determines the current response | Built-in `Task` | The parent needs the result before this turn can finish. |
+| Run two independent checks whose results are both needed now | Parallel built-in `Task` calls | The work is independent and remains in-turn. |
+| Implement an independent slice while the parent continues shaping the design | `spawn_subagent` | The work benefits from a durable child thread and asynchronous reporting. |
+| Investigate a slice that may require a later product or architecture decision from the parent | `spawn_subagent` | The child can remain open for required follow-up. |
+| "Ask an agent to check this" with no asynchronous or durable-thread requirement | Built-in `Task` | Generic requests for an agent do not imply `spawn_subagent`. |
+| "Spawn a subagent", "run this in parallel", `/subagent`, or `\|subagent` | `spawn_subagent` | The user explicitly selected the durable asynchronous mechanism. Bound the brief before invoking it. |
+| Two workers would edit the same file or depend on each other's uncommitted changes | Do not parallelize | Overlapping writes are not independent; use one worker or work directly. |
+| The parent has not decided what should be built | Keep designing in the parent | Do not delegate understanding or ask a worker to choose the product direction. |
+| The result is neither needed now nor useful as durable follow-up | Do not delegate | There is no useful coordination outcome. |
+
+An explicit mechanism request wins over the default decision order, unless it would create an unsafe or overlapping write. Explicit `spawn_subagent` requests still need a bounded brief; they do not justify broad delegation.
+
+The stress-test invariants are:
+
+- lifecycle decides between built-in `Task` and `spawn_subagent`, not task difficulty alone
+- generic “agent” wording selects built-in `Task`; explicit spawn or parallel-thread wording selects `spawn_subagent`
+- parallelism requires independent work and non-overlapping writes
+- the parent always owns decisions, synthesis, integration, and final verification
+
 ## Troubleshooting
 
 - Skill unavailable: confirm `skills/delegating-subagents/SKILL.md` exists and run `./sync-skills.sh`.
