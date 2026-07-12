@@ -133,8 +133,11 @@ The initial CI job boundaries should follow repository responsibilities rather t
 | `validate-projection` | run `sync-skills.sh` with an isolated `HOME` and `AMP_CONFIG_DIR` |
 | `validate-plugins` | build changed plugin TypeScript where a build command is defined |
 | `validate-sdk` | run reproducible npm checks for `sdk/**` changes |
+| `validation-gate` | require the selector and every applicable subsystem check to succeed |
 
 Basic file hygiene may run as a dedicated CI job or as the same pre-commit configuration over all tracked files. It must not duplicate PR-level changelog policy.
+
+Branch protection should require the stable `Validation gate` check rather than every conditional subsystem job. Keep `require-changelog-update` separate because it enforces PR policy rather than repository correctness. Internal validation jobs may then evolve without requiring branch-protection changes.
 
 ## Behavior
 
@@ -233,4 +236,4 @@ The first implementation phase should add pre-commit file hygiene and existing A
 
 ## Open questions
 
-- Which CI jobs should become required status checks in GitHub branch protection? Repository-owner approval is required before changing this shared setting.
+None. Configure `Validation gate` and `require-changelog-update` as the required status checks when repository-owner access is available.

@@ -196,3 +196,57 @@ jobs:
       - name: Install SDK dependencies from lockfile
         run: npm ci
         working-directory: sdk
+
+  validation-gate:
+    name: Validation gate
+    if: always()
+    needs:
+      - select-checks
+      - validate-amp-artifacts
+      - validate-project-registry
+      - validate-projection
+      - validate-plugins
+      - validate-sdk
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Require successful applicable checks
+        env:
+          SELECT_RESULT: ${{ needs.select-checks.result }}
+          AMP_SELECTED: ${{ needs.select-checks.outputs.amp }}
+          AMP_RESULT: ${{ needs.validate-amp-artifacts.result }}
+          REGISTRY_SELECTED: ${{ needs.select-checks.outputs.registry }}
+          REGISTRY_RESULT: ${{ needs.validate-project-registry.result }}
+          PROJECTION_SELECTED: ${{ needs.select-checks.outputs.projection }}
+          PROJECTION_RESULT: ${{ needs.validate-projection.result }}
+          PLUGINS_SELECTED: ${{ needs.select-checks.outputs.plugins }}
+          PLUGINS_RESULT: ${{ needs.validate-plugins.result }}
+          SDK_SELECTED: ${{ needs.select-checks.outputs.sdk }}
+          SDK_RESULT: ${{ needs.validate-sdk.result }}
+        run: |
+          if [ "$SELECT_RESULT" != "success" ]; then
+            echo "Select validation jobs: $SELECT_RESULT"
+            exit 1
+          fi
+
+          check_result() {
+            name="$1"
+            selected="$2"
+            result="$3"
+
+            if [ "$selected" = "true" ] && [ "$result" != "success" ]; then
+              echo "$name was selected but finished with: $result"
+              exit 1
+            fi
+
+            if [ "$selected" != "true" ] && [ "$result" != "skipped" ]; then
+              echo "$name was not selected but finished with: $result"
+              exit 1
+            fi
+          }
+
+          check_result "Amp validation" "$AMP_SELECTED" "$AMP_RESULT"
+          check_result "Registry validation" "$REGISTRY_SELECTED" "$REGISTRY_RESULT"
+          check_result "Projection validation" "$PROJECTION_SELECTED" "$PROJECTION_RESULT"
+          check_result "Plugin validation" "$PLUGINS_SELECTED" "$PLUGINS_RESULT"
+          check_result "SDK validation" "$SDK_SELECTED" "$SDK_RESULT"
