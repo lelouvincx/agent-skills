@@ -142,6 +142,7 @@ The prompt gives the subagent two phases:
   - If reconstructed intent and subagent instructions appear to conflict, follow explicit latest redirects and otherwise report the ambiguity as a blocker instead of guessing.
 - After work:
   - Call `send_to_thread` with a concise structured report that uses Markdown headings for each section.
+  - Keep the subagent thread ID and terminal status inline in their headings (`## Subagent thread: <id>` and `## Status: done | blocked`), and delimit the report template from the surrounding instructions.
   - Interpret required follow-up narrowly: optional parent review, FYI summaries, or “review the diff if desired” are not required follow-up.
   - Required follow-up means the subagent cannot safely finish without parent input, such as a decision between alternatives, missing context, permission, a blocker, or explicit next instructions.
   - If the report is terminal and `## Next` says `No follow-up needed`, call `archive_current_thread` to archive itself.
