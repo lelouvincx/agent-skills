@@ -14,6 +14,8 @@
 - Use `project-resolve <spoken-name> --json` rather than guessing project paths or repositories.
 - When curating `projects.yaml`, inspect `zoxide query --list --score`; keep durable, specific project roots and omit generated directories or generic workspace parents.
 - Respect `AGENTS_REGISTRY_ENV` and `AGENTS_REGISTRY_WORKSPACE_ROOT` when resolving projects.
+- Before changing the project-registry schema or resolver behavior, read `bin/AGENTS.md`.
 - `remote-skills.yaml` declares remote skills. Commit registry entries and intentional overlays, not fetched payloads under `skills/`.
+- Before changing `remote-skills.yaml` or its generated payload ignores, read `skills/AGENTS.md`.
 
-More specific instructions live in the `amp/`, `bin/`, `skills/`, and `skill-tests/` subdirectories.
+Other directory-specific instructions are loaded on demand from nested `AGENTS.md` files.
