@@ -31,7 +31,9 @@ Use these sources in order when adding or refreshing a document:
 
 ### Agent modes
 
+- [Deep Classic](./deep-classic.md)
 - [DeepSeek V4 Pro](./deepseek-v4-pro.md)
+- [Smart Classic](./smart-classic.md)
 
 ### Commands
 
