@@ -3,7 +3,7 @@ doc_schema: "amp-plugin-capability/v1"
 title: "Spawn Subagent"
 slug: "spawn-subagent"
 status: "active"
-summary: "Launches a bounded independent Amp subagent thread, instructs it to report back with send_to_thread, then archives itself."
+summary: "Launches a bounded independent Amp subagent thread, with companion skill guidance for choosing it over built-in Task."
 capability:
   id: "spawn_subagent"
   type: "agent_tool"
@@ -20,7 +20,7 @@ plugin:
 amp:
   api_docs_source: "amp plugins show-docs"
   agent_options_source: "amp plugins show-agent-options --json"
-  last_verified: "2026-07-09"
+  last_verified: "2026-07-12"
 contract:
   input_kind: "json_schema"
   output_kind: "text"
