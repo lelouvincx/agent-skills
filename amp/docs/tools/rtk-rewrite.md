@@ -22,7 +22,7 @@ amp:
   docs_sources:
     api_docs: "amp plugins show-docs"
     agent_options: "amp plugins show-agent-options --json"
-  last_verified: "2026-06-28"
+  last_verified: "2026-07-12"
 contract:
   input_kind: "plugin_event"
   output_kind: "tool_call_result"
@@ -38,7 +38,7 @@ runtime:
     - "spawnSync: rtk rewrite -- <cmd>"
     - "ctx.logger.log"
   dependencies:
-    - "rtk >= 0.23.0 on PATH; verified with rtk 0.42.4"
+    - "rtk >= 0.23.0 on PATH; verified with rtk 0.43.0"
   env:
     - "XDG_CACHE_HOME"
   reads:
@@ -94,7 +94,7 @@ Input is Amp's `ToolCallEvent`. The handler returns a `ToolCallResult`:
 | `rtk rewrite` exit `3` with changed stdout | same modify result; `rtk` classified the rewrite as ask/default |
 | `rtk rewrite` exit `1`, `2`, or other | `{ action: "allow" }` |
 
-The plugin checks `rtk --version` once and requires `rtk >= 0.23.0`. It is currently verified against `rtk 0.42.4`.
+The plugin checks `rtk --version` once and requires `rtk >= 0.23.0`. It is currently verified against `rtk 0.43.0`.
 
 ## Behavior
 
@@ -123,7 +123,7 @@ If `rtk rewrite` returns a changed command with exit code `0`, Amp receives the 
 
 ## Troubleshooting
 
-- Plugin disabled: install or upgrade `rtk` to at least `0.23.0`; Homebrew currently provides `0.42.4` via `brew upgrade rtk`.
+- Plugin disabled: install or upgrade `rtk` to at least `0.23.0`; Homebrew currently provides `0.43.0` via `brew upgrade rtk`.
 - Command was not rewritten: run `rtk rewrite -- <cmd>` manually and inspect the exit code.
 - Rewrite looks wrong: fix the `rtk` registry; this plugin intentionally delegates all rewrite logic to `rtk rewrite`.
 - Cache looks stale: remove `$XDG_CACHE_HOME/rtk-hook-version-ok-0.23.0` or `~/.cache/rtk-hook-version-ok-0.23.0` and reload plugins.

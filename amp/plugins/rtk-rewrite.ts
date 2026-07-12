@@ -13,7 +13,7 @@
 //   2           Deny rule matched → pass through (permission rules handle it)
 //   3 + stdout  Ask/default verdict → rewrite, but let the permission system prompt
 //
-// Requires: rtk >= 0.23.0 on $PATH. Verified with rtk 0.42.4.
+// Requires: rtk >= 0.23.0 on $PATH. Verified with rtk 0.43.0.
 
 import { spawnSync } from 'node:child_process'
 import { existsSync, mkdirSync } from 'node:fs'
@@ -24,7 +24,7 @@ import type { PluginAPI } from '@ampcode/plugin'
 const MIN_RTK_MAJOR = 0
 const MIN_RTK_MINOR = 23
 const MIN_RTK_VERSION = `${MIN_RTK_MAJOR}.${MIN_RTK_MINOR}.0`
-const VERIFIED_RTK_VERSION = '0.42.4'
+const VERIFIED_RTK_VERSION = '0.43.0'
 
 function checkRtkVersionOnce(logger: { log: (m: string) => void; warn?: (m: string) => void }): boolean {
 	const cacheDir = process.env.XDG_CACHE_HOME ?? join(homedir(), '.cache')
