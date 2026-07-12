@@ -7,6 +7,8 @@ description: "Chooses between Amp's built-in Task tool and spawn_subagent. Use w
 
 Choose the delegation mechanism from what the parent needs next.
 
+The source of truth for these rules is the [Spawn Subagent capability document](../../amp/docs/tools/spawn-subagent.md). Update that document before changing this skill.
+
 ## Decision
 
 1. Use built-in `Task` when the parent needs the result before it can continue. The worker returns one final summary inside the current turn.

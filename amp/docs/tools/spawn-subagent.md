@@ -94,6 +94,12 @@ Both tools delegate work to an Amp subagent with a separate context window and t
 
 Prefer built-in `Task` for ordinary in-turn delegation because it has less coordination overhead. Prefer `spawn_subagent` for durable asynchronous delegation, visible child-thread history, or work that may require follow-up.
 
+### Decision-guidance artifact
+
+The capability contract produces [`skills/delegating-subagents/SKILL.md`](../../../skills/delegating-subagents/SKILL.md) as its reusable decision-guidance artifact. The skill operationalizes this comparison whenever an agent considers delegation: use built-in `Task` for in-turn work, `spawn_subagent` for asynchronous child-thread work, or neither when direct execution is cheaper.
+
+`amp/AGENTS.md` requires the agent to load this skill before delegating so the documented choice is applied consistently. Keep the capability document as the source of truth: update this document first when the decision rules change, then update the skill and agent instruction to match.
+
 ## Invocation
 
 - Surface: agent-callable tool
@@ -185,4 +191,5 @@ Spawn a faster subagent:
 - Update this doc when self-archive behavior changes.
 - Update this doc when the relationship with `send_to_thread` changes.
 - Re-check the comparison with built-in `Task` when Amp changes its documented subagent lifecycle.
+- Update this capability document before changing its `delegating-subagents` skill artifact.
 - Keep examples bounded; this tool is for parallel slices, not broad delegation.
