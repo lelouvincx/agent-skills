@@ -4,14 +4,20 @@ code: "RFC-0008"
 title: "Layered local and CI validation"
 slug: "layered-validation"
 file: "rfc-0008-layered-validation.md"
-status: "Draft"
+status: "Implemented (repository validation; required-check configuration pending)"
 summary: "Run fast repository checks locally for early feedback while retaining authoritative, path-aware validation and PR policy in GitHub Actions."
 created: "2026-07-12"
 updated: "2026-07-12"
 amp_thread_id:
   T-019f5757-2d35-7280-9c53-6cac7c21cbca: "researched past PR validation and designed the layered local and CI validation model"
 dependency: []
-implementation: []
+implementation:
+  - path: "../../../.pre-commit-config.yaml"
+  - path: "../../../.github/workflows/ci.yml"
+  - path: "../../../scripts/check-project-registry"
+  - path: "../../../scripts/check-project-resolver"
+  - path: "../../../scripts/check-projection"
+  - path: "../../../scripts/check-plugin-builds"
 inputs:
   - name: "changed repository files"
     kind: "staged files, pushed commits, or pull request diff"
@@ -227,7 +233,4 @@ The first implementation phase should add pre-commit file hygiene and existing A
 
 ## Open questions
 
-- Should pre-push hooks be installed by default or documented as optional?
-- Should `npm audit` block SDK changes, given that advisory changes can fail without a repository change?
-- Which Amp plugins need dedicated build commands rather than one shared Bun invocation?
-- Should basic file hygiene run on every CI pull request or only when supported file types change?
+- Which CI jobs should become required status checks in GitHub branch protection? Repository-owner approval is required before changing this shared setting.

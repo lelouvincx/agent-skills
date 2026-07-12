@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+
+if ! command -v git >/dev/null 2>&1; then
+	echo "error: git is required to find tracked Amp plugins" >&2
+	exit 1
+fi
+
+if ! command -v bun >/dev/null 2>&1; then
+	echo "error: Bun is required to build Amp plugins" >&2
+	exit 1
+fi
+
+plugins=()
+while IFS= read -r plugin; do
+	plugins+=("$plugin")
+done < <(git -C "$REPO_DIR" ls-files 'amp/plugins/*.ts')
+
+if [ "${#plugins[@]}" -eq 0 ]; then
+	echo "error: no tracked Amp plugins found" >&2
+	exit 1
+fi
+
+out_dir="$(mktemp -d)"
+trap 'rm -rf "$out_dir"' EXIT
+
+(
+	cd "$REPO_DIR"
+	bun build "${plugins[@]}" \
+		--target=node \
+		--external=@ampcode/plugin \
+		--outdir="$out_dir"
+)
+
+echo "Amp plugin build check passed (${#plugins[@]} plugins)"

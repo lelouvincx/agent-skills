@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/check-project-registry.XXXXXX")"
+tmp_dir="$(CDPATH= cd -- "$tmp_dir" && pwd)"
+trap 'rm -rf "$tmp_dir"' EXIT
+
+AGENTS_REGISTRY_ENV=local \
+AGENTS_REGISTRY_WORKSPACE_ROOT="$HOME/Developer" \
+  "$repo_root/bin/project-resolve" --generate-md > "$tmp_dir/PROJECTS.md"
+
+if ! diff -u "$repo_root/PROJECTS.md" "$tmp_dir/PROJECTS.md"; then
+  printf '%s\n' 'PROJECTS.md is out of date. Regenerate it with:' >&2
+  printf '%s\n' '  project-resolve --generate-md > PROJECTS.md' >&2
+  exit 1
+fi
+
+printf '%s\n' 'Project registry documentation is up to date.'
