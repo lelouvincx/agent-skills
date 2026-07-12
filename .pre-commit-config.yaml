@@ -1,0 +1,99 @@
+default_stages: [pre-commit]
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: check-added-large-files
+        stages: [pre-commit]
+      - id: check-executables-have-shebangs
+        stages: [pre-commit]
+      - id: check-json
+        stages: [pre-commit]
+      - id: check-merge-conflict
+        stages: [pre-commit]
+      - id: check-shebang-scripts-are-executable
+        stages: [pre-commit]
+      - id: check-yaml
+        stages: [pre-commit]
+      - id: end-of-file-fixer
+        stages: [pre-commit]
+      - id: mixed-line-ending
+        args: [--fix=lf]
+        stages: [pre-commit]
+      - id: trailing-whitespace
+        stages: [pre-commit]
+
+  - repo: local
+    hooks:
+      - id: amp-validator-tests
+        name: Test Amp artifact validator
+        entry: python -m unittest amp/scripts/test_validate_plugin_docs.py
+        language: python
+        additional_dependencies: [PyYAML==6.0.3]
+        pass_filenames: false
+        files: ^(?:amp/(?:docs/tools|plugins)/|amp/scripts/(?:test_validate_plugin_docs|validate-plugin-docs)\.py$|\.github/workflows/ci\.yml$|\.pre-commit-config\.yaml$)
+
+      - id: validate-amp-artifacts
+        name: Validate Amp artifacts
+        entry: python amp/scripts/validate-plugin-docs.py
+        language: python
+        additional_dependencies: [PyYAML==6.0.3]
+        pass_filenames: false
+        files: ^(?:amp/(?:docs/tools|plugins)/|amp/scripts/(?:test_validate_plugin_docs|validate-plugin-docs)\.py$|\.github/workflows/ci\.yml$|\.pre-commit-config\.yaml$)
+
+      - id: validate-amp-rfcs
+        name: Validate Amp RFCs
+        entry: python3 amp/scripts/validate-rfcs.py
+        language: system
+        pass_filenames: false
+        files: ^(?:amp/docs/rfcs/|amp/scripts/validate-rfcs\.py$|\.github/workflows/ci\.yml$|\.pre-commit-config\.yaml$)
+
+      - id: shell-syntax
+        name: Check shell syntax
+        entry: bash -n
+        language: system
+        types: [shell]
+
+      - id: generated-project-docs
+        name: Check generated project documentation
+        entry: >-
+          bash -c 'tmp="$(mktemp)"; trap '\''rm -f "$tmp"'\'' EXIT;
+          AGENTS_REGISTRY_ENV=local AGENTS_REGISTRY_WORKSPACE_ROOT="$HOME/Developer"
+          python bin/project-resolve --generate-md > "$tmp" && diff -u PROJECTS.md "$tmp"'
+        language: python
+        additional_dependencies: [PyYAML==6.0.3, rapidfuzz==3.14.3]
+        pass_filenames: false
+        files: ^(?:projects\.yaml|PROJECTS\.md|bin/project-resolve|scripts/check-project-registry|\.pre-commit-config\.yaml)$
+
+      - id: check-projection
+        name: Check isolated runtime projection
+        entry: scripts/check-projection
+        language: system
+        pass_filenames: false
+        stages: [pre-push]
+        files: ^(?:\.agents/|amp/|bin/|skills/|projects\.yaml$|PROJECTS\.md$|remote-skills\.yaml$|sync-skills\.sh$|scripts/check-projection$|\.pre-commit-config\.yaml$)
+
+      - id: check-project-resolver
+        name: Check project resolver behavior
+        entry: scripts/check-project-resolver
+        language: system
+        pass_filenames: false
+        stages: [pre-push]
+        files: ^(?:projects\.yaml$|PROJECTS\.md$|bin/project-resolve$|scripts/check-project-resolver$|\.pre-commit-config\.yaml$)
+
+      - id: check-plugin-builds
+        name: Build Amp plugins
+        entry: scripts/check-plugin-builds
+        language: system
+        pass_filenames: false
+        stages: [pre-push]
+        files: ^(?:amp/plugins/.*\.ts$|scripts/check-plugin-builds$|\.pre-commit-config\.yaml$)
+
+      - id: validate-sdk
+        name: Validate SDK dependencies
+        entry: npm ci --prefix sdk
+        language: system
+        pass_filenames: false
+        stages: [pre-push]
+        files: ^(?:sdk/|\.pre-commit-config\.yaml$)

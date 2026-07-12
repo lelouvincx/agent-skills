@@ -1,0 +1,116 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+resolver="$repo_root/bin/project-resolve"
+tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/check-project-resolver.XXXXXX")"
+tmp_dir="$(CDPATH= cd -- "$tmp_dir" && pwd)"
+trap 'rm -rf "$tmp_dir"' EXIT
+
+registry="$tmp_dir/projects.yaml"
+workspace="$tmp_dir/workspace"
+mkdir -p "$workspace"
+cat > "$registry" <<'YAML'
+version: 1
+ownership_entities:
+  test:
+    description: Test owner.
+environments:
+  local:
+    workspace_root: /unused
+  alternate:
+    workspace_root: /alternate
+projects:
+  alpha:
+    github: example/alpha
+    owner: test
+    dir: alpha
+    aliases:
+      - first project
+    description: Alpha project.
+  beta:
+    github: example/beta
+    owner: test
+    dir: nested/beta
+  local-only:
+    github: null
+    owner: test
+    dir: local-only
+  shared-a:
+    github: example/shared
+    owner: test
+    dir: shared-a
+  shared-b:
+    github: other/shared
+    owner: test
+    dir: shared-b
+YAML
+
+run_resolver() {
+  AGENTS_REGISTRY_ENV=local \
+  AGENTS_REGISTRY_WORKSPACE_ROOT="$workspace" \
+    "$resolver" --registry "$registry" "$@"
+}
+
+expect_output() {
+  expected="$1"
+  shift
+  actual="$(run_resolver "$@")"
+  if [[ "$actual" != "$expected" ]]; then
+    printf 'Unexpected output for project-resolve %s\nExpected: %s\nActual:   %s\n' "$*" "$expected" "$actual" >&2
+    exit 1
+  fi
+}
+
+expect_failure() {
+  if run_resolver "$@" > "$tmp_dir/stdout" 2> "$tmp_dir/stderr"; then
+    printf 'Expected project-resolve %s to fail.\n' "$*" >&2
+    exit 1
+  fi
+}
+
+expect_output "$workspace/alpha" alpha --path
+expect_output 'example/alpha' alpha --github
+expect_output 'https://github.com/example/alpha' alpha --https
+expect_output 'git@github.com:example/alpha.git' alpha --ssh
+expect_output 'example/alpha' 'first project' --github
+expect_output $'alpha\nbeta\nlocal-only\nshared-a\nshared-b' --list
+
+json_result="$(run_resolver alpha --json)"
+JSON_RESULT="$json_result" EXPECTED_PATH="$workspace/alpha" python3 <<'PY'
+import json
+import os
+
+result = json.loads(os.environ["JSON_RESULT"])
+assert result["key"] == "alpha"
+assert result["environment"] == "local"
+assert result["local_path"] == os.environ["EXPECTED_PATH"]
+assert result["github"] == "example/alpha"
+assert result["github_https"] == "https://github.com/example/alpha"
+assert result["github_ssh"] == "git@github.com:example/alpha.git"
+PY
+
+actual="$(AGENTS_REGISTRY_ENV=alternate "$resolver" --registry "$registry" alpha --path)"
+[[ "$actual" == '/alternate/alpha' ]] || {
+  printf 'AGENTS_REGISTRY_ENV override returned %s\n' "$actual" >&2
+  exit 1
+}
+
+actual="$(AGENTS_REGISTRY_ENV=alternate "$resolver" --registry "$registry" --env local alpha --path)"
+[[ "$actual" == '/unused/alpha' ]] || {
+  printf '%s\n' '--env did not override AGENTS_REGISTRY_ENV.' >&2
+  exit 1
+}
+
+expect_failure 'totally-unknown-zzzzzzzz'
+expect_failure shared --github
+expect_failure local-only --github
+expect_failure --env missing alpha
+
+printf 'projects: [\n' > "$tmp_dir/malformed.yaml"
+if AGENTS_REGISTRY_ENV=local "$resolver" --registry "$tmp_dir/malformed.yaml" --list > "$tmp_dir/stdout" 2> "$tmp_dir/stderr"; then
+  printf '%s\n' 'Expected a malformed registry to fail.' >&2
+  exit 1
+fi
+
+printf '%s\n' 'Project resolver contracts passed.'

@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+
+if ! command -v rsync >/dev/null 2>&1; then
+	echo "error: rsync is required to check the runtime projection" >&2
+	exit 1
+fi
+
+tmp_home="$(mktemp -d)"
+trap 'rm -rf "$tmp_home"' EXIT
+
+HOME="$tmp_home" \
+	AMP_CONFIG_DIR="$tmp_home/.config/amp" \
+	"$REPO_DIR/sync-skills.sh"
+
+for path in \
+	".config/amp/AGENTS.md" \
+	".config/amp/settings.json" \
+	".config/amp/plugins" \
+	".config/amp/docs" \
+	".config/amp/projects.yaml" \
+	".config/amp/PROJECTS.md"; do
+	if [ ! -e "$tmp_home/$path" ]; then
+		echo "error: projection did not create $path" >&2
+		exit 1
+	fi
+done
+
+for skill in "$REPO_DIR"/skills/*/; do
+	name="$(basename "$skill")"
+	for target in ".agents/skills/$name" ".claude/skills/$name"; do
+		if [ ! -L "$tmp_home/$target" ] || [ "$(readlink "$tmp_home/$target")" != "$skill" ]; then
+			echo "error: projection did not link $target to $skill" >&2
+			exit 1
+		fi
+	done
+done
+
+resolver="$tmp_home/.local/bin/project-resolve"
+if [ ! -L "$resolver" ] || [ "$(readlink "$resolver")" != "$REPO_DIR/bin/project-resolve" ] || [ ! -x "$resolver" ]; then
+	echo "error: projection did not create an executable project-resolve link" >&2
+	exit 1
+fi
+
+echo "Projection check passed"

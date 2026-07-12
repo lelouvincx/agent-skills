@@ -70,6 +70,32 @@ Use [skill-tests](skill-tests/README.md) to improve skills with repeatable fixtu
 
 Start there when a skill works sometimes but not reliably enough. Add a fixture for the failure mode, run the skill against it, review the output with tags, then update the skill only when the failure generalizes.
 
+## Validation
+
+Install [pre-commit](https://pre-commit.com), then enable the fast commit hooks and optional integration checks:
+
+```bash
+pre-commit install
+pre-commit install --hook-type pre-push
+pre-commit run
+pre-commit run --hook-stage pre-push
+```
+
+Pre-push checks additionally require `uv`/`uvx`, `rsync`, Bun 1.3.14 or newer, and npm. The SDK check uses `npm ci` and the committed lockfile. To debug a failure, run its repository command directly:
+
+```bash
+python3 -m unittest amp/scripts/test_validate_plugin_docs.py
+python3 amp/scripts/validate-plugin-docs.py
+python3 amp/scripts/validate-rfcs.py
+scripts/check-project-registry
+scripts/check-projection
+scripts/check-project-resolver
+scripts/check-plugin-builds
+npm ci --prefix sdk
+```
+
+Local hooks provide early feedback and may be bypassed with `--no-verify`; GitHub Actions remains authoritative. Changelog enforcement is PR-only, and remote synchronization (`./sync-skills.sh --remote`) remains an explicit maintenance operation.
+
 ## Amp capabilities
 
 | Capability | Type | Where it appears | Use it to |
