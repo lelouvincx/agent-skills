@@ -4,3 +4,4 @@
 - Keep fixtures small, realistic, and focused on one failure mode.
 - Do not commit routine full transcripts; record durable failures as tags, fixtures, or concise README updates.
 - Change a skill only when the failure generalizes, then rerun the failing fixture and one holdout fixture.
+- Each directory here maps 1:1 with each skill in [skills](../skills/)
