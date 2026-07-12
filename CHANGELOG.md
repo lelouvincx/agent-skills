@@ -9,6 +9,7 @@ and this project does not currently use versioned releases.
 
 ### Added
 
+- Add a dedicated TypeScript workspace for developing with the Amp SDK.
 - Add version-controlled `deep-classic` and `smart-classic` Amp agent modes with capability documentation. [#76](https://github.com/lelouvincx/agent-skills/pull/76)
 - Add a personal `agent-browser` overlay documenting the existing local persistent browser profile. [#71](https://github.com/lelouvincx/agent-skills/pull/71)
 - Add `creating-client-design-systems` for Google DESIGN.md files that guide client branding and Holistics dashboard themes. [#67](https://github.com/lelouvincx/agent-skills/pull/67)

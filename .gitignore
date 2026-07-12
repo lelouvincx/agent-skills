@@ -115,6 +115,8 @@ skills/holistics-migrate-power-bi/SKILL.md
 skills/holistics-migrate-power-bi/.remote-source
 skills/holistics-migrate-power-bi/references/
 
+sdk/node_modules/
+
 skills/impeccable/SKILL.md
 skills/impeccable/.remote-source
 skills/impeccable/reference/
