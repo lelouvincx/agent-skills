@@ -9,6 +9,7 @@ and this project does not currently use versioned releases.
 
 ### Added
 
+- Add `delegating-subagents` to choose between built-in `Task`, asynchronous `spawn_subagent`, and direct work. [#78](https://github.com/lelouvincx/agent-skills/pull/78)
 - Add a dedicated TypeScript workspace for developing with the Amp SDK. [#77](https://github.com/lelouvincx/agent-skills/pull/77)
 - Add version-controlled `deep-classic` and `smart-classic` Amp agent modes with capability documentation. [#76](https://github.com/lelouvincx/agent-skills/pull/76)
 - Add a personal `agent-browser` overlay documenting the existing local persistent browser profile. [#71](https://github.com/lelouvincx/agent-skills/pull/71)
@@ -27,6 +28,7 @@ and this project does not currently use versioned releases.
 
 ### Changed
 
+- Document when to use Amp's built-in `Task` tool versus the asynchronous `spawn_subagent` capability. [#78](https://github.com/lelouvincx/agent-skills/pull/78)
 - Default plugin-spawned helper agents to Amp `medium` mode and document the OpenAI-backed rationale for that default in plugin guidance. [#74](https://github.com/lelouvincx/agent-skills/pull/74)
 - Update the `deepseek-v4-pro` agent mode to use the deprecated built-in Deep mode prompt and tool list (matching `deep-classic`), replacing the previous GLM 5.2-era prompt and narrower tool set. [#73](https://github.com/lelouvincx/agent-skills/pull/73)
 - Document `AMP_NO_TUI=1` as an Amp remote control thread signal. [#69](https://github.com/lelouvincx/agent-skills/pull/69)

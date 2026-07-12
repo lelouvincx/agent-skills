@@ -3,7 +3,7 @@ doc_schema: "amp-plugin-capability/v1"
 title: "Spawn Subagent"
 slug: "spawn-subagent"
 status: "active"
-summary: "Launches a bounded independent Amp subagent thread, instructs it to report back with send_to_thread, then archives itself."
+summary: "Launches a bounded independent Amp subagent thread, with companion skill guidance for choosing it over built-in Task."
 capability:
   id: "spawn_subagent"
   type: "agent_tool"
@@ -20,7 +20,7 @@ plugin:
 amp:
   api_docs_source: "amp plugins show-docs"
   agent_options_source: "amp plugins show-agent-options --json"
-  last_verified: "2026-07-09"
+  last_verified: "2026-07-12"
 contract:
   input_kind: "json_schema"
   output_kind: "text"
@@ -77,6 +77,28 @@ tags:
 ## Summary
 
 `spawn_subagent` starts an independent Amp subagent thread for one bounded implementation or investigation slice. It lets a coordinator thread keep working while the child thread reports back later through `send_to_thread`, then archives itself after a terminal final report when no required follow-up is needed.
+
+It complements Amp's built-in `Task` tool rather than replacing it. Use `Task` when the parent needs a bounded subagent's final result within its current turn. Use `spawn_subagent` when the work should continue in an addressable child thread while the parent keeps working.
+
+### Relationship with built-in Task
+
+Both tools delegate work to an Amp subagent with a separate context window and tool access. Their lifecycle and coordination models differ:
+
+| Use | Built-in `Task` | `spawn_subagent` |
+| --- | --- | --- |
+| Parent flow | Receives the subagent's final summary through the current tool call | Returns a child thread ID immediately; the parent must not wait or poll |
+| Context | Starts fresh with the task brief supplied by the parent | Starts fresh, then uses `read_thread` to reconstruct parent intent |
+| Follow-up | The user and parent cannot guide it mid-task | The child can remain open for required parent input |
+| Reporting | Returns one final summary | Reports through `send_to_thread`, then archives itself when no follow-up is required |
+| Best fit | Ordinary bounded delegation whose result is needed in the current turn | Work needing durable asynchronous execution, visible child-thread history, or possible parent follow-up |
+
+Before delegating, use a direct or specialist tool when it already covers the job; for example, prefer exact reads, direct searches, `finder`, `librarian`, or `oracle` over a generic subagent. Otherwise, prefer built-in `Task` for ordinary in-turn delegation because it has less coordination overhead. Prefer `spawn_subagent` when the work needs durable asynchronous execution, visible child-thread history, or possible parent follow-up.
+
+### Decision-guidance artifact
+
+The capability contract produces [`skills/delegating-subagents/SKILL.md`](../../../skills/delegating-subagents/SKILL.md) as its reusable decision-guidance artifact. The skill operationalizes this comparison whenever an agent considers delegation: use a direct or specialist tool when sufficient, built-in `Task` for ordinary in-turn work, or `spawn_subagent` for durable asynchronous child-thread work.
+
+`amp/AGENTS.md` requires the agent to load this skill before delegating so the documented choice is applied consistently.
 
 ## Invocation
 
@@ -168,4 +190,5 @@ Spawn a faster subagent:
 - Update this doc when the subagent report format changes.
 - Update this doc when self-archive behavior changes.
 - Update this doc when the relationship with `send_to_thread` changes.
+- Re-check the comparison with built-in `Task` when Amp changes its documented subagent lifecycle.
 - Keep examples bounded; this tool is for parallel slices, not broad delegation.

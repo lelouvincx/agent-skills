@@ -60,13 +60,10 @@ When complete or blocked, call the send_to_thread tool with:
 - steer: true
 - message: a concise structured report using Markdown headings for each section:
 
-## Subagent thread
+'''
+## Subagent thread: ${thread.id}
 
-${thread.id}
-
-## Status
-
-done | blocked
+## Status: done | blocked
 
 ## Summary
 
@@ -83,10 +80,9 @@ What was checked, or "not run" with the reason.
 ## Next
 
 No follow-up needed, or the smallest next action.
-
 You decide whether parent follow-up is required, but interpret it narrowly. Optional parent review, FYI summaries, or "review the diff if desired" are not required follow-up. Required follow-up means you cannot safely finish without parent input, such as a decision between alternatives, missing context, permission, a blocker, or explicit next instructions.
-
 If the report is terminal and ## Next says "No follow-up needed", then after the send_to_thread report succeeds, call archive_current_thread to archive this subagent thread. Do not archive before the parent-thread report is sent. If you are blocked or require parent input, do not archive yet; wait for the parent thread to reply with follow-up instructions. After completing follow-up, send a new terminal report and archive yourself when no required follow-up remains.
+'''
 
 ${instructions}`
 

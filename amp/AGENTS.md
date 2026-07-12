@@ -9,6 +9,7 @@
 - Save visual artifacts (screenshots, recordings, and similar media) under `.amp/in/artifacts/`.
 - When `AMP_NO_TUI=1`, recognize this is an Amp remote control thread.
 - When a user message starts with `|subagent` or `/subagent`, call `spawn_subagent` with the remaining message as the bounded subagent instructions.
+- Before delegating work, load the `delegating-subagents` skill to choose between built-in `Task`, `spawn_subagent`, or doing the work directly.
 
 ## Holistics
 
