@@ -9,7 +9,7 @@ and this project does not currently use versioned releases.
 
 ### Added
 
-- Add `testing4` and `duty-support` to the shared project registry. [#85](https://github.com/lelouvincx/agent-skills/pull/85)
+- Add `testing4` and `duty-support` to the shared project registry and document zoxide-based registry maintenance. [#85](https://github.com/lelouvincx/agent-skills/pull/85)
 - Preserve the original Amp plugin capability schema as a versioned v1 reference. [#80](https://github.com/lelouvincx/agent-skills/pull/80)
 - Add `delegating-subagents` to choose between built-in `Task`, asynchronous `spawn_subagent`, and direct work. [#78](https://github.com/lelouvincx/agent-skills/pull/78)
 - Add a dedicated TypeScript workspace for developing with the Amp SDK. [#77](https://github.com/lelouvincx/agent-skills/pull/77)
