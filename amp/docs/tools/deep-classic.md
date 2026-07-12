@@ -95,3 +95,11 @@ Deep (classic)
 ## Maintenance notes
 
 Keep this document in sync with `plugins/deep-classic.ts`. Update this document first before changing the model, reasoning effort, mode metadata, prompt, or tool access.
+
+To refresh the plugin's system prompt, tool list, and model from Amp's maintained copy, run:
+
+```bash
+amp plugins add --auto-update @amp/deep-classic
+```
+
+After the update, review the runtime diff, document any contract changes here first, copy the resulting plugin into `amp/plugins/deep-classic.ts`, and run `./sync-skills.sh` so the repository remains the source of truth.

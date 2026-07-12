@@ -95,3 +95,11 @@ Smart (classic)
 ## Maintenance notes
 
 Keep this document in sync with `plugins/smart-classic.ts`. Update this document first before changing the model, reasoning effort, mode metadata, prompt, or tool access.
+
+To refresh the plugin's system prompt, tool list, and model from Amp's maintained copy, run:
+
+```bash
+amp plugins add --auto-update @amp/smart-classic
+```
+
+After the update, review the runtime diff, document any contract changes here first, copy the resulting plugin into `amp/plugins/smart-classic.ts`, and run `./sync-skills.sh` so the repository remains the source of truth.
