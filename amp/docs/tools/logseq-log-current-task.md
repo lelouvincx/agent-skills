@@ -1,40 +1,41 @@
 ---
-doc_schema: "amp-plugin-capability/v1"
+doc_schema: "amp-artifact/v2"
 title: "Logseq: Log Current Task"
 slug: "logseq-log-current-task"
 status: "active"
-summary: "Adds a command-palette command and an agent-callable tool that log the current Amp thread task into a Logseq graph and rename the Amp thread from the Logseq task title."
-capability:
+summary: "Adds an agent-callable tool that logs the current Amp thread task into a Logseq graph and renames the Amp thread from the Logseq task title."
+artifact:
   id: "logseq_log_current_task"
   type: "agent_tool"
   surface: "agent"
   invocation: "tool_call"
-  registration_api: "amp.registerTool"
   api_stability: "stable"
-plugin:
+source:
+  kind: "plugin"
   file: "plugins/logseq-manual-log.ts"
   scope: "system"
   install_source: "local"
+  registration_api: "amp.registerTool"
   metadata_comments:
     - "@i-know-the-amp-plugin-api-is-wip-and-very-experimental-right-now"
 amp:
-  api_docs_source: "amp plugins show-docs"
-  agent_options_source: "amp plugins show-agent-options --json"
+  docs_sources:
+    api_docs: "amp plugins show-docs"
+    agent_options: "amp plugins show-agent-options --json"
   last_verified: "2026-07-09"
 contract:
   input_kind: "json_schema"
   output_kind: "text"
+  trigger: "tool_call"
+  allowed_tools: []
   event: null
-  command_id: "logseq-log-current-task"
+  command_id: null
   agent_mode_key: null
   optional_inputs:
     - "hint"
 runtime:
   uses:
     - "amp.registerTool"
-    - "amp.registerCommand"
-    - "ctx.ui.input"
-    - "ctx.ui.notify"
     - "ctx.thread.messages"
     - "amp.getBuiltinAgent"
     - "Agent.createThread"
@@ -61,7 +62,7 @@ runtime:
     - "plugin load log"
 safety:
   permission_level: "manual-tool-with-worker-write"
-  user_gate: "explicit in-thread tool call, command-palette invocation, or agent decision plus optional hint"
+  user_gate: "explicit in-thread tool call or agent decision plus optional hint"
   constraints:
     - "Does not run automatically from lifecycle events."
     - "Requires an active Amp thread."
@@ -71,6 +72,7 @@ safety:
     - "Malformed worker responses can leave the parent thread title unchanged."
     - "Archive failure leaves the worker thread unarchived for inspection."
 related:
+  - "logseq-log-current-task-command"
   - "spawn-subagent"
 tags:
   - "agent_tool"
@@ -83,17 +85,13 @@ tags:
 
 ## Summary
 
-`logseq-log-current-task` provides the command-palette action `logseq: Log current task`. `logseq_log_current_task` provides the same behavior as an agent-callable tool. Both surfaces log the durable outcome of the current Amp thread into the configured Logseq graph. The agent tool is meant to be called directly from the active Amp thread when the user asks to log the current task, without using the command palette. Both surfaces start a hidden built-in Amp worker to perform the Logseq edit, wait for its result, then rename the parent Amp thread from the Logseq task title.
+`logseq_log_current_task` logs the durable outcome of the current Amp thread into the configured Logseq graph. It starts a hidden built-in Amp worker to perform the Logseq edit, waits for its result, then renames the parent Amp thread from the Logseq task title.
 
 ## Invocation
 
 - Surface: agent-callable tool
 - Registered with: `amp.registerTool`
 - Tool name: `logseq_log_current_task`
-- Command surface: command palette
-- Command registered with: `amp.registerCommand`
-- Command ID: `logseq-log-current-task`
-- Palette label: `logseq: Log current task`
 - Plugin file: `plugins/logseq-manual-log.ts`
 
 ## Contract
@@ -105,14 +103,6 @@ The agent tool requires an active thread and accepts one optional JSON input:
 | `hint` | `string` | Optional target, note, or source link, such as `update DAT-594` or a Slack/PR/Notion URL. |
 
 Agent tool output is plain text. On success it includes the worker summary, the new parent thread title, and the worker archive result. On failure it returns the worker thread ID and the reason the worker was left unarchived for inspection.
-
-The command-palette command accepts no JSON input. It requires an active thread. When invoked, it opens a UI input prompt:
-
-| Prompt field  | Notes                                                                                     |
-| ------------- | ----------------------------------------------------------------------------------------- |
-| Title         | `Log current task to Logseq`                                                              |
-| Message       | Optional target, note, or source link, such as `update DAT-594` or a Slack/PR/Notion URL. |
-| Submit button | `Log to Logseq`                                                                           |
 
 Runtime defaults:
 
@@ -129,7 +119,7 @@ Runtime defaults:
 
 ## Behavior
 
-The agent tool checks for an active thread and uses the optional `hint` input. The command-palette command checks for an active thread, prompts for an optional hint, then calls the same internal logging flow used by the tool. That shared flow reads up to 20 recent messages only as a seed for link/outcome extraction, spawns a hidden built-in `medium` worker thread, and sends it a Logseq-specific prompt. While waiting for the worker, transient `Plugin thread.messages timed out` errors are retried until the worker timeout expires. The prompt places the optional hint near the end, after the worker rules and immediately before the required final-response format. The worker has an explicit private intent-reconstruction step: read the parent Amp thread, infer the original user intent, the latest coherent requested outcome, and the durable result to log, then proceed from that reconstructed intent. The worker is asked to log task entries in `pages/Backlog.md` first: update a matching backlog block when possible, otherwise create one concise backlog task block. Today's journal should then contain only a short reference back to that backlog task, under `Done`, `Tasks`, or `Notes` according to the task state.
+The agent tool checks for an active thread and uses the optional `hint` input. Its logging flow reads up to 20 recent messages only as a seed for link/outcome extraction, spawns a hidden built-in `medium` worker thread, and sends it a Logseq-specific prompt. While waiting for the worker, transient `Plugin thread.messages timed out` errors are retried until the worker timeout expires. The prompt places the optional hint near the end, after the worker rules and immediately before the required final-response format. The worker has an explicit private intent-reconstruction step: read the parent Amp thread, infer the original user intent, the latest coherent requested outcome, and the durable result to log, then proceed from that reconstructed intent. The worker is asked to log task entries in `pages/Backlog.md` first: update a matching backlog block when possible, otherwise create one concise backlog task block. Today's journal should then contain only a short reference back to that backlog task, under `Done`, `Tasks`, or `Notes` according to the task state.
 
 Before choosing or writing a block, the worker must treat the Logseq graph's canonical map as the source of truth: read `pages/Canonical Pages.md`, then read the corresponding canonical project/rule pages named there, especially `pages/Projects.md`, `pages/Backlog.md`, and relevant rule pages. The backlog task's `project:: [[...]]`, priority, title, and placement must be coherent with that canonical project taxonomy and any matching active backlog task. If the recent-message seed, reconstructed intent, and canonical pages disagree, the worker should prefer the reconstructed original thread intent and canonical project mapping over incidental recent-message context.
 
@@ -139,7 +129,7 @@ The worker's final answer must include a plain-text `Thread title: [Project] tas
 
 ## Permissions and side effects
 
-Both surfaces can write to the configured Logseq graph through the spawned worker, rename the parent Amp thread through the Amp CLI, and create and usually archive a hidden Amp worker thread. This capability does not automatically log thread lifecycle events; the user must invoke the command-palette action, ask the active Amp thread to log the task, or the agent must otherwise decide to call the tool.
+The tool can write to the configured Logseq graph through the spawned worker, rename the parent Amp thread through the Amp CLI, and create and usually archive a hidden Amp worker thread. It does not automatically log thread lifecycle events; the user must ask the active Amp thread to log the task or the agent must otherwise decide to call the tool.
 
 ## Examples
 
@@ -157,12 +147,6 @@ Log the current thread with an optional hint:
 }
 ```
 
-Run from the command palette:
-
-```text
-logseq: Log current task
-```
-
 ## Troubleshooting
 
 - `Open an Amp thread before running...`: switch to a thread and ask Amp to call the tool again.
@@ -170,8 +154,7 @@ logseq: Log current task
 - Rename failed or title missing: inspect the worker's final response and rename the parent thread manually with the `[Project] task title` pattern if needed.
 - Archive failed: archive the worker manually after inspecting it.
 - Wrong Logseq graph: set `AMP_LOGSEQ_GRAPH_DIR` before starting Amp.
-- Command cancelled: the UI prompt returned `undefined`; invoke again and submit a hint or blank input.
 
 ## Maintenance notes
 
-Update this doc when the command contract, agent tool schema, worker prompt, Backlog-first task logging behavior, journal-reference behavior, Logseq conventions, `input::` reference-link behavior, parent thread rename behavior, default graph path, worker mode, worker wait retry behavior, timeout, or archive behavior changes. This capability is a manual command-palette command plus agent-callable tool; it intentionally has no `agent.start` hook or `agent.end` hook.
+Update this doc when the agent tool schema, worker prompt, Backlog-first task logging behavior, journal-reference behavior, Logseq conventions, `input::` reference-link behavior, parent thread rename behavior, default graph path, worker mode, worker wait retry behavior, timeout, or archive behavior changes. This capability is an agent-callable tool; it intentionally has no `agent.start` hook or `agent.end` hook.

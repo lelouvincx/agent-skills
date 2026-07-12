@@ -18,7 +18,9 @@ source:
   registration_api: null
   metadata_comments: []
 amp:
-  docs_sources: ["skills/example/SKILL.md"]
+  docs_sources:
+    api_docs: null
+    agent_options: null
   last_verified: "YYYY-MM-DD"
 contract:
   input_kind: "natural_language"
@@ -28,6 +30,7 @@ contract:
   event: null
   command_id: null
   agent_mode_key: null
+  # Optional documented extensions: required_inputs, optional_inputs, model.
 runtime:
   uses: []
   dependencies: []

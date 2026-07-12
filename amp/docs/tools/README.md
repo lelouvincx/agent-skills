@@ -22,12 +22,13 @@ Use these sources in order when adding or refreshing a document:
 
 ## Capability documents
 
-New documents use `amp-artifact/v2`, which supports skills and plugin capabilities. Existing plugin documents can remain on `amp-plugin-capability/v1` until otherwise edited.
+All active documents use `amp-artifact/v2`, which supports skills and plugin capabilities. V1 is retained only as a historical reference.
 
 ### Agent-callable tools
 
 - [Claude Code Subagent](./claude-code-subagent.md)
 - [Label Skill/Plugin Usage](./label-skill-plugin-usage.md)
+- [Logseq: Log Current Task](./logseq-log-current-task.md)
 - [Pi Code Subagent](./pi-code-subagent.md)
 - [Spawn Subagent](./spawn-subagent.md)
 - [Send to Thread](./send-to-thread.md)
@@ -41,7 +42,7 @@ New documents use `amp-artifact/v2`, which supports skills and plugin capabiliti
 ### Commands
 
 - [Codex Usage Command](./codex-usage.md)
-- [Logseq: Log Current Task](./logseq-log-current-task.md)
+- [Logseq: Log Current Task Command](./logseq-log-current-task-command.md)
 - [Track Event](./track-event.md)
 
 ### Event handlers
@@ -55,5 +56,5 @@ New documents use `amp-artifact/v2`, which supports skills and plugin capabiliti
 ## Maintenance files
 
 - [_schema.md](./_schema.md) defines the current `amp-artifact/v2` frontmatter schema.
-- [_schema-v1.md](./_schema-v1.md) preserves the supported `amp-plugin-capability/v1` schema.
+- [_schema-v1.md](./_schema-v1.md) preserves the historical `amp-plugin-capability/v1` schema.
 - [_template.md](./_template.md) provides a copyable skeleton for new artifact docs.

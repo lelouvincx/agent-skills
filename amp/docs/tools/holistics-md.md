@@ -1,29 +1,33 @@
 ---
-doc_schema: "amp-plugin-capability/v1"
+doc_schema: "amp-artifact/v2"
 title: "Holistics Markdown Result Renderer"
 slug: "holistics-md"
 status: "active"
 summary: "Rewrites selected Holistics MCP YAML result_data blocks into Markdown tables before the result reaches the model."
-capability:
+artifact:
   id: "holistics-md.tool-result"
   type: "event_handler"
   surface: "plugin_event_pipeline"
   invocation: "plugin_event"
-  registration_api: "amp.on"
   api_stability: "stable"
-plugin:
+source:
+  kind: "plugin"
   file: "plugins/holistics-md.ts"
   scope: "system"
   install_source: "local"
+  registration_api: "amp.on"
   metadata_comments:
     - "@i-know-the-amp-plugin-api-is-wip-and-very-experimental-right-now"
 amp:
-  api_docs_source: "amp plugins show-docs"
-  agent_options_source: "amp plugins show-agent-options --json"
+  docs_sources:
+    api_docs: "amp plugins show-docs"
+    agent_options: "amp plugins show-agent-options --json"
   last_verified: "2026-06-24"
 contract:
   input_kind: "plugin_event"
   output_kind: "tool_result_result"
+  trigger: "plugin_event"
+  allowed_tools: []
   event: "tool.result"
   command_id: null
   agent_mode_key: null

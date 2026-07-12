@@ -1,29 +1,33 @@
 ---
-doc_schema: "amp-plugin-capability/v1"
+doc_schema: "amp-artifact/v2"
 title: "macOS Turn End Notifier"
 slug: "macos-turn-end-notifier"
 status: "active"
 summary: "Sends a native macOS notification whenever an agent turn ends."
-capability:
+artifact:
   id: "macos-turn-end-notifier.agent-end"
   type: "event_handler"
   surface: "plugin_event_pipeline"
   invocation: "plugin_event"
-  registration_api: "amp.on"
   api_stability: "stable"
-plugin:
+source:
+  kind: "plugin"
   file: "plugins/macos-turn-end-notifier.ts"
   scope: "system"
   install_source: "local"
+  registration_api: "amp.on"
   metadata_comments:
     - "@i-know-the-amp-plugin-api-is-wip-and-very-experimental-right-now"
 amp:
-  api_docs_source: "amp plugins show-docs"
-  agent_options_source: "amp plugins show-agent-options --json"
+  docs_sources:
+    api_docs: "amp plugins show-docs"
+    agent_options: "amp plugins show-agent-options --json"
   last_verified: "2026-06-27"
 contract:
   input_kind: "plugin_event"
   output_kind: "system_notification"
+  trigger: "plugin_event"
+  allowed_tools: []
   event: "agent.end"
   command_id: null
   agent_mode_key: null
