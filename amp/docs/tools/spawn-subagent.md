@@ -78,6 +78,22 @@ tags:
 
 `spawn_subagent` starts an independent Amp subagent thread for one bounded implementation or investigation slice. It lets a coordinator thread keep working while the child thread reports back later through `send_to_thread`, then archives itself after a terminal final report when no required follow-up is needed.
 
+It complements Amp's built-in `Task` tool rather than replacing it. Use `Task` when the parent needs a bounded subagent's final result within its current turn. Use `spawn_subagent` when the work should continue in an addressable child thread while the parent keeps working.
+
+### Relationship with built-in Task
+
+Both tools delegate work to an Amp subagent with a separate context window and tool access. Their lifecycle and coordination models differ:
+
+| Use | Built-in `Task` | `spawn_subagent` |
+| --- | --- | --- |
+| Parent flow | Receives the subagent's final summary through the current tool call | Returns a child thread ID immediately; the parent must not wait or poll |
+| Context | Starts fresh with the task brief supplied by the parent | Starts fresh, then uses `read_thread` to reconstruct parent intent |
+| Follow-up | The user and parent cannot guide it mid-task | The child can remain open for required parent input |
+| Reporting | Returns one final summary | Reports through `send_to_thread`, then archives itself when no follow-up is required |
+| Best fit | Work whose result is needed before the parent proceeds | Independent work that can run while the coordinator continues |
+
+Prefer built-in `Task` for ordinary in-turn delegation because it has less coordination overhead. Prefer `spawn_subagent` for durable asynchronous delegation, visible child-thread history, or work that may require follow-up.
+
 ## Invocation
 
 - Surface: agent-callable tool
@@ -168,4 +184,5 @@ Spawn a faster subagent:
 - Update this doc when the subagent report format changes.
 - Update this doc when self-archive behavior changes.
 - Update this doc when the relationship with `send_to_thread` changes.
+- Re-check the comparison with built-in `Task` when Amp changes its documented subagent lifecycle.
 - Keep examples bounded; this tool is for parallel slices, not broad delegation.
