@@ -29,6 +29,7 @@ and this project does not currently use versioned releases.
 
 ### Changed
 
+- Update the RTK rewrite capability's verified stable version to `0.43.0`.
 - Migrate active Amp capability documentation and validation to the role-preserving `amp-artifact/v2` contract, including separate Logseq tool and command artifacts and the first skill artifact. [#81](https://github.com/lelouvincx/agent-skills/pull/81)
 - Expand Amp capability documentation into an artifact schema that supports both plugin capabilities and skills. [#79](https://github.com/lelouvincx/agent-skills/pull/79)
 - Document when to use Amp's built-in `Task` tool versus the asynchronous `spawn_subagent` capability. [#78](https://github.com/lelouvincx/agent-skills/pull/78)
