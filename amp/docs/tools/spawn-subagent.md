@@ -98,7 +98,7 @@ Before delegating, use a direct or specialist tool when it already covers the jo
 
 The capability contract produces [`skills/delegating-subagents/SKILL.md`](../../../skills/delegating-subagents/SKILL.md) as its reusable decision-guidance artifact. The skill operationalizes this comparison whenever an agent considers delegation: use a direct or specialist tool when sufficient, built-in `Task` for ordinary in-turn work, or `spawn_subagent` for durable asynchronous child-thread work.
 
-`amp/AGENTS.md` requires the agent to load this skill before delegating so the documented choice is applied consistently. Keep the capability document as the source of truth: update this document first when the decision rules change, then update the skill and agent instruction to match.
+`amp/AGENTS.md` requires the agent to load this skill before delegating so the documented choice is applied consistently.
 
 ## Invocation
 
@@ -142,7 +142,6 @@ The prompt gives the subagent two phases:
   - If reconstructed intent and subagent instructions appear to conflict, follow explicit latest redirects and otherwise report the ambiguity as a blocker instead of guessing.
 - After work:
   - Call `send_to_thread` with a concise structured report that uses Markdown headings for each section.
-  - Keep the subagent thread ID and terminal status inline in their headings (`## Subagent thread: <id>` and `## Status: done | blocked`), and delimit the report template from the surrounding instructions.
   - Interpret required follow-up narrowly: optional parent review, FYI summaries, or “review the diff if desired” are not required follow-up.
   - Required follow-up means the subagent cannot safely finish without parent input, such as a decision between alternatives, missing context, permission, a blocker, or explicit next instructions.
   - If the report is terminal and `## Next` says `No follow-up needed`, call `archive_current_thread` to archive itself.
@@ -192,5 +191,4 @@ Spawn a faster subagent:
 - Update this doc when self-archive behavior changes.
 - Update this doc when the relationship with `send_to_thread` changes.
 - Re-check the comparison with built-in `Task` when Amp changes its documented subagent lifecycle.
-- Update this capability document before changing its `delegating-subagents` skill artifact.
 - Keep examples bounded; this tool is for parallel slices, not broad delegation.
