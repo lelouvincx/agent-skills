@@ -6,9 +6,9 @@ status: "active"
 last_reviewed: "2026-06-24"
 ---
 
-# Amp plugin capability docs
+# Amp artifact docs
 
-This folder documents the active local Amp plugin capabilities. The unit of documentation is a capability, not a plugin file: one plugin can expose a tool, command, event handler, agent mode, or future Amp extension surface.
+This folder documents active local Amp artifacts. The unit of documentation is an artifact, not a source file: one plugin can expose multiple capabilities, while one skill is loaded from its `SKILL.md` contract.
 
 ## Source of truth
 
@@ -18,8 +18,11 @@ Use these sources in order when adding or refreshing a document:
 2. `amp plugins show-docs` for the Amp plugin API and supported registration surfaces.
 3. `amp plugins show-agent-options --json` for plugin-agent models and built-in tool names.
 4. `plugins/*.ts` for registered names, schemas, side effects, dependencies, and behavior.
+5. `skills/*/SKILL.md` for skill names, descriptions, declared tools, instructions, and behavior.
 
 ## Capability documents
+
+New documents use `amp-artifact/v2`, which supports skills and plugin capabilities. Existing plugin documents can remain on `amp-plugin-capability/v1` until otherwise edited.
 
 ### Agent-callable tools
 

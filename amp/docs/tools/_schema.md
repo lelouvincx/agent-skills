@@ -1,68 +1,79 @@
 ---
-title: "Amp Plugin Capability Schema"
-slug: "amp-plugin-capability-schema"
-doc_schema: "amp-plugin-doc-schema/v1"
+title: "Amp Artifact Schema"
+slug: "amp-artifact-schema"
+doc_schema: "amp-artifact-doc-schema/v2"
 status: "active"
-last_reviewed: "2026-06-24"
+last_reviewed: "2026-07-12"
 ---
 
-# Amp plugin capability schema
+# Amp artifact schema
 
-Use `doc_schema: "amp-plugin-capability/v1"` for one document per capability exposed by an Amp plugin.
+Use `doc_schema: "amp-artifact/v2"` for one document per Amp artifact. An artifact can be exposed by a plugin or loaded as a skill. Existing documents using `amp-plugin-capability/v1` remain valid and can migrate when otherwise edited.
 
 ## Frontmatter contract
 
 Required top-level fields:
 
 ```yaml
-doc_schema: "amp-plugin-capability/v1"
+doc_schema: "amp-artifact/v2"
 title: "Human-readable name"
 slug: "stable-url-safe-slug"
 status: "active"
 summary: "One-sentence description."
 ```
 
-Required capability metadata:
+Required artifact metadata:
 
 ```yaml
-capability:
+artifact:
   id: "registered-name-or-stable-id"
-  type: "agent_tool"
-  surface: "agent"
-  invocation: "tool_call"
-  registration_api: "amp.registerTool"
+  type: "skill"
+  surface: "agent_context"
+  invocation: "skill_load"
   api_stability: "stable"
 ```
 
-Required plugin metadata:
+Required source metadata:
 
 ```yaml
-plugin:
-  file: "plugins/example.ts"
+source:
+  kind: "skill"
+  file: "skills/example/SKILL.md"
   scope: "system"
   install_source: "local"
+  registration_api: null
   metadata_comments: []
 ```
+
+`source.kind` determines how the artifact is provided:
+
+- `plugin`: `source.registration_api` must name the Amp API that registers the artifact.
+- `skill`: `source.registration_api` must be `null`; the skill frontmatter is its registration contract.
 
 Required Amp verification metadata:
 
 ```yaml
 amp:
-  api_docs_source: "amp plugins show-docs"
-  agent_options_source: "amp plugins show-agent-options --json"
-  last_verified: "2026-06-24"
+  docs_sources: []
+  last_verified: "2026-07-12"
 ```
+
+Use commands, manuals, or source files in `docs_sources`, for example `amp plugins show-docs` for a plugin or `skills/example/SKILL.md` for a local skill.
 
 Required contract metadata:
 
 ```yaml
 contract:
-  input_kind: "json_schema"
-  output_kind: "text"
+  input_kind: "natural_language"
+  output_kind: "instructions"
+  trigger: "description_match_or_explicit_load"
+  allowed_tools: []
   event: null
   command_id: null
   agent_mode_key: null
 ```
+
+For skills, copy any declared `allowed-tools` entries into `contract.allowed_tools`. An empty list means the skill does not declare an allowlist; it does not mean the skill can use no tools.
 
 Required runtime metadata:
 
@@ -96,17 +107,19 @@ tags: []
 
 ## Enum values
 
-`capability.type` values:
+`artifact.type` values:
 
+- `skill` for a `SKILL.md` loaded into agent context
 - `agent_tool` for `amp.registerTool(...)`
 - `command` for `amp.registerCommand(...)`
 - `event_handler` for `amp.on(...)`
 - `agent_mode` for `amp.registerAgentMode(...)`
 - `status_item` for `amp.experimental.createStatusItem(...)`
-- `helper_agent` for internal agents worth documenting as standalone capabilities
+- `helper_agent` for internal agents worth documenting as standalone artifacts
 
-`capability.surface` values should describe where the capability appears:
+`artifact.surface` values should describe where the artifact appears:
 
+- `agent_context`
 - `agent`
 - `command_palette`
 - `plugin_event_pipeline`
@@ -114,8 +127,9 @@ tags: []
 - `status_bar`
 - `internal`
 
-`capability.invocation` values should describe how it runs:
+`artifact.invocation` values should describe how it runs:
 
+- `skill_load`
 - `tool_call`
 - `command_palette`
 - `plugin_event`
@@ -123,15 +137,31 @@ tags: []
 - `status_update`
 - `internal_call`
 
-`capability.api_stability` values:
+`artifact.api_stability` values:
 
 - `stable`
 - `experimental`
 - `mixed`
 
+## Artifact invariants
+
+Skill documents must use this combination:
+
+```yaml
+artifact:
+  type: "skill"
+  surface: "agent_context"
+  invocation: "skill_load"
+source:
+  kind: "skill"
+  registration_api: null
+```
+
+All other artifact types must use `source.kind: "plugin"` and a non-empty `source.registration_api`.
+
 ## Required Markdown headings
 
-Each capability doc must use this H2 order:
+Each artifact doc must use this H2 order:
 
 ```markdown
 ## Summary
@@ -144,4 +174,8 @@ Each capability doc must use this H2 order:
 ## Maintenance notes
 ```
 
-Keep the headings identical even when a capability type does not use every concept. For example, an event handler still has an `Invocation` section describing its event trigger, and an agent mode still has a `Contract` section describing the model, prompt, and tools.
+Keep the headings identical for every artifact type. For example, a skill's `Invocation` section describes its description match and explicit loading behavior, while its `Contract` section describes the instructions, declared tools, and expected result.
+
+## Version compatibility
+
+`amp-plugin-capability/v1` is retained for existing plugin capability documents. New documents should use `amp-artifact/v2`. Migrate a v1 document by renaming `capability` to `artifact`, replacing `plugin` with `source`, replacing the two Amp source scalars with `amp.docs_sources`, and adding `contract.trigger` and `contract.allowed_tools`.

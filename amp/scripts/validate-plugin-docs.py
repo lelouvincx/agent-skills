@@ -11,7 +11,7 @@ from pathlib import Path
 AMP_ROOT = Path(__file__).resolve().parents[1]
 DOCS_DIR = AMP_ROOT / "docs" / "tools"
 
-REQUIRED_TOP_LEVEL = {
+V1_REQUIRED_TOP_LEVEL = {
     "doc_schema": "scalar",
     "title": "scalar",
     "slug": "scalar",
@@ -27,7 +27,7 @@ REQUIRED_TOP_LEVEL = {
     "tags": "list",
 }
 
-REQUIRED_NESTED = {
+V1_REQUIRED_NESTED = {
     "capability": {
         "id": "scalar",
         "type": "scalar",
@@ -71,7 +71,7 @@ REQUIRED_NESTED = {
     },
 }
 
-ENUMS = {
+V1_ENUMS = {
     "capability.type": {
         "agent_tool",
         "command",
@@ -97,6 +97,63 @@ ENUMS = {
         "internal_call",
     },
     "capability.api_stability": {"stable", "experimental", "mixed"},
+}
+
+V2_REQUIRED_TOP_LEVEL = {
+    "doc_schema": "scalar",
+    "title": "scalar",
+    "slug": "scalar",
+    "status": "scalar",
+    "summary": "scalar",
+    "artifact": "mapping",
+    "source": "mapping",
+    "amp": "mapping",
+    "contract": "mapping",
+    "runtime": "mapping",
+    "safety": "mapping",
+    "related": "list",
+    "tags": "list",
+}
+
+V2_REQUIRED_NESTED = {
+    "artifact": {
+        "id": "scalar",
+        "type": "scalar",
+        "surface": "scalar",
+        "invocation": "scalar",
+        "api_stability": "scalar",
+    },
+    "source": {
+        "kind": "scalar",
+        "file": "scalar",
+        "scope": "scalar",
+        "install_source": "scalar",
+        "registration_api": "nullable_scalar",
+        "metadata_comments": "list",
+    },
+    "amp": {
+        "docs_sources": "list",
+        "last_verified": "scalar",
+    },
+    "contract": {
+        "input_kind": "scalar",
+        "output_kind": "scalar",
+        "trigger": "nullable_scalar",
+        "allowed_tools": "list",
+        "event": "nullable_scalar",
+        "command_id": "nullable_scalar",
+        "agent_mode_key": "nullable_scalar",
+    },
+    "runtime": V1_REQUIRED_NESTED["runtime"],
+    "safety": V1_REQUIRED_NESTED["safety"],
+}
+
+V2_ENUMS = {
+    "artifact.type": V1_ENUMS["capability.type"] | {"skill"},
+    "artifact.surface": V1_ENUMS["capability.surface"] | {"agent_context"},
+    "artifact.invocation": V1_ENUMS["capability.invocation"] | {"skill_load"},
+    "artifact.api_stability": V1_ENUMS["capability.api_stability"],
+    "source.kind": {"plugin", "skill"},
 }
 
 REQUIRED_H2S = [
@@ -205,16 +262,26 @@ def markdown_h2s(path: Path) -> list[str]:
 
 
 def validate_schema_contract(path: Path, data: dict[str, object], errors: list[str]) -> None:
-    for field, expected in REQUIRED_TOP_LEVEL.items():
+    schema = data.get("doc_schema")
+    if schema == "amp-plugin-capability/v1":
+        required_top_level = V1_REQUIRED_TOP_LEVEL
+        required_nested = V1_REQUIRED_NESTED
+        enums = V1_ENUMS
+    elif schema == "amp-artifact/v2":
+        required_top_level = V2_REQUIRED_TOP_LEVEL
+        required_nested = V2_REQUIRED_NESTED
+        enums = V2_ENUMS
+    else:
+        errors.append(f"{path}: unsupported doc_schema {schema!r}")
+        return
+
+    for field, expected in required_top_level.items():
         if field not in data:
             errors.append(f"{path}: missing required frontmatter field {field}")
             continue
         validate_type(path, field, data[field], expected, errors)
 
-    if data.get("doc_schema") != "amp-plugin-capability/v1":
-        errors.append(f"{path}: doc_schema must be 'amp-plugin-capability/v1'")
-
-    for section, fields in REQUIRED_NESTED.items():
+    for section, fields in required_nested.items():
         value = data.get(section)
         if not isinstance(value, dict):
             continue
@@ -225,7 +292,7 @@ def validate_schema_contract(path: Path, data: dict[str, object], errors: list[s
                 continue
             validate_type(path, full_field, value[field], expected, errors)
 
-    for field, allowed in ENUMS.items():
+    for field, allowed in enums.items():
         section, key = field.split(".")
         section_value = data.get(section)
         value = section_value.get(key) if isinstance(section_value, dict) else None
@@ -236,6 +303,21 @@ def validate_schema_contract(path: Path, data: dict[str, object], errors: list[s
     last_verified = amp.get("last_verified") if isinstance(amp, dict) else None
     if isinstance(last_verified, str) and not re.match(r"^\d{4}-\d{2}-\d{2}$", last_verified):
         errors.append(f"{path}: amp.last_verified must use YYYY-MM-DD")
+
+    if schema == "amp-artifact/v2":
+        artifact = data.get("artifact")
+        source = data.get("source")
+        if isinstance(artifact, dict) and isinstance(source, dict):
+            artifact_type = artifact.get("type")
+            source_kind = source.get("kind")
+            registration_api = source.get("registration_api")
+            if artifact_type == "skill":
+                if artifact.get("surface") != "agent_context" or artifact.get("invocation") != "skill_load":
+                    errors.append(f"{path}: skill artifacts must use surface 'agent_context' and invocation 'skill_load'")
+                if source_kind != "skill" or registration_api is not None:
+                    errors.append(f"{path}: skill artifacts must use source.kind 'skill' and a null registration_api")
+            elif source_kind != "plugin" or not isinstance(registration_api, str) or not registration_api:
+                errors.append(f"{path}: plugin artifacts must use source.kind 'plugin' and a non-empty registration_api")
 
     h2s = markdown_h2s(path)
     if h2s != REQUIRED_H2S:

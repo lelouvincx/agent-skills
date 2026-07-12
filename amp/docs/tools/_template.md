@@ -1,28 +1,30 @@
 ---
-doc_schema: "amp-plugin-capability/v1"
-title: "Capability Name"
-slug: "capability-name"
+doc_schema: "amp-artifact/v2"
+title: "Artifact Name"
+slug: "artifact-name"
 status: "active"
-summary: "One sentence describing the capability."
-capability:
+summary: "One sentence describing the artifact."
+artifact:
   id: "registered-name-or-stable-id"
-  type: "agent_tool"
-  surface: "agent"
-  invocation: "tool_call"
-  registration_api: "amp.registerTool"
+  type: "skill"
+  surface: "agent_context"
+  invocation: "skill_load"
   api_stability: "stable"
-plugin:
-  file: "plugins/example.ts"
+source:
+  kind: "skill"
+  file: "skills/example/SKILL.md"
   scope: "system"
   install_source: "local"
+  registration_api: null
   metadata_comments: []
 amp:
-  api_docs_source: "amp plugins show-docs"
-  agent_options_source: "amp plugins show-agent-options --json"
+  docs_sources: ["skills/example/SKILL.md"]
   last_verified: "YYYY-MM-DD"
 contract:
-  input_kind: "json_schema"
-  output_kind: "text"
+  input_kind: "natural_language"
+  output_kind: "instructions"
+  trigger: "description_match_or_explicit_load"
+  allowed_tools: []
   event: null
   command_id: null
   agent_mode_key: null
@@ -43,22 +45,24 @@ related: []
 tags: []
 ---
 
-# Capability Name
+# Artifact Name
 
 ## Summary
 
-Describe what the capability does, who should use it, and the smallest mental model needed to operate it correctly.
+Describe what the artifact does, who should use it, and the smallest mental model needed to operate it correctly.
 
 ## Invocation
 
-- Surface: `agent`
-- Registered with: `amp.registerTool`
-- Invocation: `tool_call`
+- Surface: `agent_context`
+- Source: `skills/example/SKILL.md`
+- Invocation: `skill_load`
 - ID: `registered-name-or-stable-id`
+
+For a plugin artifact, replace the skill values with its plugin surface, invocation, source file, and registration API.
 
 ## Contract
 
-Document inputs, defaults, outputs, return shape, event payload, command ID, or agent mode definition as applicable.
+Document inputs, trigger conditions, defaults, outputs, declared tools, return shape, event payload, command ID, or agent mode definition as applicable.
 
 ## Behavior
 
@@ -70,7 +74,7 @@ List reads, writes, spawned processes, network calls, thread changes, command re
 
 ## Examples
 
-Provide one to three realistic examples. Use JSON for tools, command-palette labels for commands, and trigger examples for event handlers.
+Provide one to three realistic examples. Use trigger phrases for skills, JSON for tools, command-palette labels for commands, and trigger examples for event handlers.
 
 ## Troubleshooting
 
@@ -78,4 +82,4 @@ List common failure modes, how they appear, and what to check first.
 
 ## Maintenance notes
 
-Document source-of-truth locations, known drift risks, and what to update when Amp or the plugin changes.
+Document source-of-truth locations, known drift risks, and what to update when Amp, the plugin, or the skill changes.
