@@ -1,6 +1,6 @@
 ---
 name: delegating-subagents
-description: "Chooses between Amp's built-in Task tool and spawn_subagent. Use whenever considering delegation, subagents, parallel agent work, background work, or splitting a coding task across agents."
+description: "Chooses between direct work, Amp's built-in Task tool, and spawn_subagent. Use before delegating or splitting independent work across agents."
 ---
 
 # Delegating Subagents
@@ -11,9 +11,9 @@ The source of truth for these rules is the [Spawn Subagent capability document](
 
 ## Decision
 
-1. Use built-in `Task` when the parent needs the result before it can continue. The worker returns one final summary inside the current turn.
-2. Use `spawn_subagent` when the task is independent and the parent should keep working. It creates an addressable child thread that reports back later through `send_to_thread`.
-3. Do the work directly when delegation overhead is greater than the task. Do not delegate exact reads, simple searches, or one localized edit.
+1. Use a direct or specialist tool when it already covers the job or delegation overhead is greater than the task. Do not delegate exact reads, simple searches, one localized edit, or work owned by `finder`, `librarian`, or `oracle`.
+2. Use built-in `Task` for ordinary bounded delegation when the parent needs the result in the current turn. The worker returns one final summary through the current tool call.
+3. Use `spawn_subagent` when the work needs durable asynchronous execution, visible child-thread history, or possible parent follow-up. It creates an addressable child thread that reports back later through `send_to_thread`.
 
 ## Constraints
 
@@ -25,8 +25,8 @@ The source of truth for these rules is the [Spawn Subagent capability document](
 
 ## Quick test
 
-Ask: **Can the parent make useful progress before this result arrives?**
+Ask in order:
 
-- No → `Task`
-- Yes → `spawn_subagent`
-- The task is tiny → neither
+1. Does a direct or specialist tool cover the job, or is the task too small to delegate? → use that tool or work directly.
+2. Does the work need durable asynchronous execution, visible child-thread history, or possible parent follow-up? → `spawn_subagent`.
+3. Is bounded delegation still worthwhile and its result needed in the current turn? → `Task`.

@@ -90,13 +90,13 @@ Both tools delegate work to an Amp subagent with a separate context window and t
 | Context | Starts fresh with the task brief supplied by the parent | Starts fresh, then uses `read_thread` to reconstruct parent intent |
 | Follow-up | The user and parent cannot guide it mid-task | The child can remain open for required parent input |
 | Reporting | Returns one final summary | Reports through `send_to_thread`, then archives itself when no follow-up is required |
-| Best fit | Work whose result is needed before the parent proceeds | Independent work that can run while the coordinator continues |
+| Best fit | Ordinary bounded delegation whose result is needed in the current turn | Work needing durable asynchronous execution, visible child-thread history, or possible parent follow-up |
 
-Prefer built-in `Task` for ordinary in-turn delegation because it has less coordination overhead. Prefer `spawn_subagent` for durable asynchronous delegation, visible child-thread history, or work that may require follow-up.
+Before delegating, use a direct or specialist tool when it already covers the job; for example, prefer exact reads, direct searches, `finder`, `librarian`, or `oracle` over a generic subagent. Otherwise, prefer built-in `Task` for ordinary in-turn delegation because it has less coordination overhead. Prefer `spawn_subagent` when the work needs durable asynchronous execution, visible child-thread history, or possible parent follow-up.
 
 ### Decision-guidance artifact
 
-The capability contract produces [`skills/delegating-subagents/SKILL.md`](../../../skills/delegating-subagents/SKILL.md) as its reusable decision-guidance artifact. The skill operationalizes this comparison whenever an agent considers delegation: use built-in `Task` for in-turn work, `spawn_subagent` for asynchronous child-thread work, or neither when direct execution is cheaper.
+The capability contract produces [`skills/delegating-subagents/SKILL.md`](../../../skills/delegating-subagents/SKILL.md) as its reusable decision-guidance artifact. The skill operationalizes this comparison whenever an agent considers delegation: use a direct or specialist tool when sufficient, built-in `Task` for ordinary in-turn work, or `spawn_subagent` for durable asynchronous child-thread work.
 
 `amp/AGENTS.md` requires the agent to load this skill before delegating so the documented choice is applied consistently. Keep the capability document as the source of truth: update this document first when the decision rules change, then update the skill and agent instruction to match.
 
