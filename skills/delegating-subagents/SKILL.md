@@ -30,3 +30,14 @@ Ask in order:
 1. Does a direct or specialist tool cover the job, or is the task too small to delegate? → use that tool or work directly.
 2. Does the work need durable asynchronous execution, visible child-thread history, or possible parent follow-up? → `spawn_subagent`.
 3. Is bounded delegation still worthwhile and its result needed in the current turn? → `Task`.
+
+## Stress cases
+
+- “Ask an agent” or “use a subagent” without an asynchronous requirement → built-in `Task`.
+- “Spawn a subagent”, “run this in parallel”, `/subagent`, or `|subagent` → `spawn_subagent`; the user explicitly selected the durable mechanism.
+- Two independent results needed now → parallel built-in `Task` calls.
+- Work continuing while the parent designs, or work that may need later parent input → `spawn_subagent`.
+- Two workers editing the same file or depending on each other's changes → do not parallelize.
+- Product direction is undecided → keep designing in the parent; do not delegate understanding.
+
+Explicit mechanism requests override the default decision order unless they would create unsafe or overlapping writes. Task difficulty alone never decides between built-in `Task` and `spawn_subagent`; lifecycle does.

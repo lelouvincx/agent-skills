@@ -29,6 +29,7 @@ and this project does not currently use versioned releases.
 
 ### Changed
 
+- Stress-test subagent delegation scenarios and require spawned agents to reconstruct parent intent through `read_thread`. [#83](https://github.com/lelouvincx/agent-skills/pull/83)
 - Update the RTK rewrite capability's verified stable version to `0.43.0`. [#82](https://github.com/lelouvincx/agent-skills/pull/82)
 - Migrate active Amp capability documentation and validation to the role-preserving `amp-artifact/v2` contract, including separate Logseq tool and command artifacts and the first skill artifact. [#81](https://github.com/lelouvincx/agent-skills/pull/81)
 - Expand Amp capability documentation into an artifact schema that supports both plugin capabilities and skills. [#79](https://github.com/lelouvincx/agent-skills/pull/79)
