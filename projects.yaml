@@ -156,6 +156,23 @@ projects:
       - demo 4
     description: Holistics Demo 4 data project.
 
+  testing4:
+    github: holistics/data-testing4
+    owner: holistics
+    dir: holistics/testing4
+    aliases:
+      - data testing4
+      - testing 4
+    description: Holistics Testing 4 data project.
+
+  duty-support:
+    github: lelouvincx/duty-support
+    owner: lelouvincx
+    dir: holistics/duty-support
+    aliases:
+      - duty support
+    description: Duty support repository.
+
   holistics-docs:
     github: holistics/docs
     owner: holistics
