@@ -178,4 +178,4 @@ Keep the headings identical for every artifact type. For example, a skill's `Inv
 
 ## Version compatibility
 
-`amp-plugin-capability/v1` is retained for existing plugin capability documents. New documents should use `amp-artifact/v2`. Migrate a v1 document by renaming `capability` to `artifact`, replacing `plugin` with `source`, replacing the two Amp source scalars with `amp.docs_sources`, and adding `contract.trigger` and `contract.allowed_tools`.
+[`amp-plugin-capability/v1`](./_schema-v1.md) is retained for existing plugin capability documents. New documents should use `amp-artifact/v2`. Migrate a v1 document by renaming `capability` to `artifact`, replacing `plugin` with `source`, replacing the two Amp source scalars with `amp.docs_sources`, and adding `contract.trigger` and `contract.allowed_tools`.
