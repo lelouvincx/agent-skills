@@ -1,29 +1,33 @@
 ---
-doc_schema: "amp-plugin-capability/v1"
+doc_schema: "amp-artifact/v2"
 title: "Spawn Subagent"
 slug: "spawn-subagent"
 status: "active"
 summary: "Launches a bounded independent Amp subagent thread, with companion skill guidance for choosing it over built-in Task."
-capability:
+artifact:
   id: "spawn_subagent"
   type: "agent_tool"
   surface: "agent"
   invocation: "tool_call"
-  registration_api: "amp.registerTool"
   api_stability: "stable"
-plugin:
+source:
+  kind: "plugin"
   file: "plugins/spawn-subagent.ts"
   scope: "system"
   install_source: "local"
+  registration_api: "amp.registerTool"
   metadata_comments:
     - "@i-know-the-amp-plugin-api-is-wip-and-very-experimental-right-now"
 amp:
-  api_docs_source: "amp plugins show-docs"
-  agent_options_source: "amp plugins show-agent-options --json"
+  docs_sources:
+    api_docs: "amp plugins show-docs"
+    agent_options: "amp plugins show-agent-options --json"
   last_verified: "2026-07-12"
 contract:
   input_kind: "json_schema"
   output_kind: "text"
+  trigger: "tool_call"
+  allowed_tools: []
   event: null
   command_id: null
   agent_mode_key: null
@@ -65,6 +69,7 @@ safety:
     - "Subagent can preserve the wrong intent if it relies only on recent or incidental parent-thread context."
     - "Subagent may modify files according to its built-in agent mode permissions."
 related:
+  - "delegating-subagents"
   - "send-to-thread"
 tags:
   - "subagent"

@@ -1,29 +1,33 @@
 ---
-doc_schema: "amp-plugin-capability/v1"
+doc_schema: "amp-artifact/v2"
 title: "Codex Usage Command"
 slug: "codex-usage-command"
 status: "active"
 summary: "Adds a command-palette action that shows current Codex 5-hour and weekly usage limits as an Amp notification."
-capability:
+artifact:
   id: "codex_usage_command"
   type: "command"
   surface: "command_palette"
   invocation: "command_palette"
-  registration_api: "amp.registerCommand"
   api_stability: "stable"
-plugin:
+source:
+  kind: "plugin"
   file: "plugins/codex-usage.ts"
   scope: "system"
   install_source: "local"
+  registration_api: "amp.registerCommand"
   metadata_comments:
     - "@i-know-the-amp-plugin-api-is-wip-and-very-experimental-right-now"
 amp:
-  api_docs_source: "amp plugins show-docs"
-  agent_options_source: "amp plugins show-agent-options --json"
+  docs_sources:
+    api_docs: "amp plugins show-docs"
+    agent_options: "amp plugins show-agent-options --json"
   last_verified: "2026-07-01"
 contract:
   input_kind: "none"
   output_kind: "ui_notification"
+  trigger: "command_palette"
+  allowed_tools: []
   event: null
   command_id: "codex_usage_command"
   agent_mode_key: null

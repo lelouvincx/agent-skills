@@ -1,29 +1,33 @@
 ---
-doc_schema: "amp-plugin-capability/v1"
+doc_schema: "amp-artifact/v2"
 title: "Deep Classic Agent Mode"
 slug: "deep-classic-agent-mode"
 status: "active"
 summary: "Restores Amp's deprecated Deep mode as a selectable GPT-5.5 agent mode."
-capability:
+artifact:
   id: "deep-classic"
   type: "agent_mode"
   surface: "mode_picker"
   invocation: "new_thread_mode"
-  registration_api: "amp.experimental.registerAgentMode"
   api_stability: "experimental"
-plugin:
+source:
+  kind: "plugin"
   file: "plugins/deep-classic.ts"
   scope: "system"
   install_source: "local"
+  registration_api: "amp.experimental.registerAgentMode"
   metadata_comments:
     - "@amp-agent-mode {\"key\":\"deep-classic\",\"label\":\"Deep (classic)\"}"
 amp:
-  api_docs_source: "amp plugins show-docs"
-  agent_options_source: "amp plugins show-agent-options --json"
+  docs_sources:
+    api_docs: "amp plugins show-docs"
+    agent_options: "amp plugins show-agent-options --json"
   last_verified: "2026-07-12"
 contract:
   input_kind: "thread_prompt"
   output_kind: "agent_thread"
+  trigger: "new_thread_mode"
+  allowed_tools: []
   event: null
   command_id: null
   agent_mode_key: "deep-classic"

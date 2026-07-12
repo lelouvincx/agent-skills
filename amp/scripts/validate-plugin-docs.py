@@ -1,103 +1,18 @@
 #!/usr/bin/env python3
-"""Validate Amp plugin capability documentation consistency."""
+"""Validate Amp artifact documentation consistency."""
 
 from __future__ import annotations
 
 import re
 import sys
+from datetime import date
 from pathlib import Path
+
+import yaml
 
 
 AMP_ROOT = Path(__file__).resolve().parents[1]
 DOCS_DIR = AMP_ROOT / "docs" / "tools"
-
-V1_REQUIRED_TOP_LEVEL = {
-    "doc_schema": "scalar",
-    "title": "scalar",
-    "slug": "scalar",
-    "status": "scalar",
-    "summary": "scalar",
-    "capability": "mapping",
-    "plugin": "mapping",
-    "amp": "mapping",
-    "contract": "mapping",
-    "runtime": "mapping",
-    "safety": "mapping",
-    "related": "list",
-    "tags": "list",
-}
-
-V1_REQUIRED_NESTED = {
-    "capability": {
-        "id": "scalar",
-        "type": "scalar",
-        "surface": "scalar",
-        "invocation": "scalar",
-        "registration_api": "scalar",
-        "api_stability": "scalar",
-    },
-    "plugin": {
-        "file": "scalar",
-        "scope": "scalar",
-        "install_source": "scalar",
-        "metadata_comments": "list",
-    },
-    "amp": {
-        "api_docs_source": "scalar",
-        "agent_options_source": "scalar",
-        "last_verified": "scalar",
-    },
-    "contract": {
-        "input_kind": "scalar",
-        "output_kind": "scalar",
-        "event": "nullable_scalar",
-        "command_id": "nullable_scalar",
-        "agent_mode_key": "nullable_scalar",
-    },
-    "runtime": {
-        "uses": "list",
-        "dependencies": "list",
-        "env": "list",
-        "reads": "list",
-        "writes": "list",
-        "network": "list",
-        "logs": "list",
-    },
-    "safety": {
-        "permission_level": "scalar",
-        "user_gate": "scalar",
-        "constraints": "list",
-        "risks": "list",
-    },
-}
-
-V1_ENUMS = {
-    "capability.type": {
-        "agent_tool",
-        "command",
-        "event_handler",
-        "agent_mode",
-        "status_item",
-        "helper_agent",
-    },
-    "capability.surface": {
-        "agent",
-        "command_palette",
-        "plugin_event_pipeline",
-        "mode_picker",
-        "status_bar",
-        "internal",
-    },
-    "capability.invocation": {
-        "tool_call",
-        "command_palette",
-        "plugin_event",
-        "new_thread_mode",
-        "status_update",
-        "internal_call",
-    },
-    "capability.api_stability": {"stable", "experimental", "mixed"},
-}
 
 V2_REQUIRED_TOP_LEVEL = {
     "doc_schema": "scalar",
@@ -132,7 +47,7 @@ V2_REQUIRED_NESTED = {
         "metadata_comments": "list",
     },
     "amp": {
-        "docs_sources": "list",
+        "docs_sources": "mapping",
         "last_verified": "scalar",
     },
     "contract": {
@@ -144,15 +59,43 @@ V2_REQUIRED_NESTED = {
         "command_id": "nullable_scalar",
         "agent_mode_key": "nullable_scalar",
     },
-    "runtime": V1_REQUIRED_NESTED["runtime"],
-    "safety": V1_REQUIRED_NESTED["safety"],
+    "runtime": {
+        "uses": "list",
+        "dependencies": "list",
+        "env": "list",
+        "reads": "list",
+        "writes": "list",
+        "network": "list",
+        "logs": "list",
+    },
+    "safety": {
+        "permission_level": "scalar",
+        "user_gate": "scalar",
+        "constraints": "list",
+        "risks": "list",
+    },
+}
+
+V2_OPTIONAL_NESTED = {
+    "contract": {
+        "required_inputs": "list",
+        "optional_inputs": "list",
+        "model": "scalar",
+    },
+}
+
+PLUGIN_INVARIANTS = {
+    "agent_tool": ("agent", "tool_call", "amp.registerTool", None),
+    "command": ("command_palette", "command_palette", "amp.registerCommand", "command_id"),
+    "event_handler": ("plugin_event_pipeline", "plugin_event", "amp.on", "event"),
+    "agent_mode": ("mode_picker", "new_thread_mode", "amp.experimental.registerAgentMode", "agent_mode_key"),
 }
 
 V2_ENUMS = {
-    "artifact.type": V1_ENUMS["capability.type"] | {"skill"},
-    "artifact.surface": V1_ENUMS["capability.surface"] | {"agent_context"},
-    "artifact.invocation": V1_ENUMS["capability.invocation"] | {"skill_load"},
-    "artifact.api_stability": V1_ENUMS["capability.api_stability"],
+    "artifact.type": {"skill", "agent_tool", "command", "event_handler", "agent_mode", "status_item", "helper_agent"},
+    "artifact.surface": {"agent_context", "agent", "command_palette", "plugin_event_pipeline", "mode_picker", "status_bar", "internal"},
+    "artifact.invocation": {"skill_load", "tool_call", "command_palette", "plugin_event", "new_thread_mode", "status_update", "internal_call"},
+    "artifact.api_stability": {"stable", "experimental", "mixed"},
     "source.kind": {"plugin", "skill"},
 }
 
@@ -180,64 +123,9 @@ def frontmatter(path: Path) -> str | None:
     return text[4:end]
 
 
-def parse_scalar(value: str) -> str | None | list[str]:
-    value = value.strip()
-    if value == "null":
-        return None
-    if value == "[]":
-        return []
-    if value.startswith("[") and value.endswith("]"):
-        return [item.strip().strip('"\'') for item in value[1:-1].split(",") if item.strip()]
-    return value.strip('"\'')
-
-
 def parse_frontmatter(fm: str) -> dict[str, object]:
-    data: dict[str, object] = {}
-    current_map: dict[str, object] | None = None
-    current_list: list[str] | None = None
-    pending_top_list_key: str | None = None
-
-    for line in fm.splitlines():
-        if not line.strip():
-            continue
-
-        top_level = re.match(r"^([^:]+):\s*(.*)$", line)
-        if top_level and not line.startswith(" "):
-            key = top_level.group(1)
-            raw_value = top_level.group(2)
-            current_list = None
-            pending_top_list_key = None
-            if raw_value == "":
-                current_map = {}
-                data[key] = current_map
-                pending_top_list_key = key
-            else:
-                current_map = None
-                value = parse_scalar(raw_value)
-                data[key] = value
-                if isinstance(value, list):
-                    current_list = value
-            continue
-
-        nested = re.match(r"^  ([^:]+):\s*(.*)$", line)
-        if nested and current_map is not None:
-            key = nested.group(1)
-            raw_value = nested.group(2)
-            value = [] if raw_value == "" else parse_scalar(raw_value)
-            current_map[key] = value
-            current_list = value if isinstance(value, list) else None
-            pending_top_list_key = None
-            continue
-
-        item = re.match(r'^  -\s*"?([^"\n]+?)"?\s*$', line)
-        if item and current_list is None and pending_top_list_key is not None:
-            current_map = None
-            current_list = []
-            data[pending_top_list_key] = current_list
-        if item and current_list is not None:
-            current_list.append(item.group(1).strip())
-
-    return data
+    data = yaml.safe_load(fm)
+    return data if isinstance(data, dict) else {}
 
 
 def validate_type(path: Path, field: str, value: object, expected: str, errors: list[str]) -> None:
@@ -263,11 +151,7 @@ def markdown_h2s(path: Path) -> list[str]:
 
 def validate_schema_contract(path: Path, data: dict[str, object], errors: list[str]) -> None:
     schema = data.get("doc_schema")
-    if schema == "amp-plugin-capability/v1":
-        required_top_level = V1_REQUIRED_TOP_LEVEL
-        required_nested = V1_REQUIRED_NESTED
-        enums = V1_ENUMS
-    elif schema == "amp-artifact/v2":
+    if schema == "amp-artifact/v2":
         required_top_level = V2_REQUIRED_TOP_LEVEL
         required_nested = V2_REQUIRED_NESTED
         enums = V2_ENUMS
@@ -285,12 +169,21 @@ def validate_schema_contract(path: Path, data: dict[str, object], errors: list[s
         value = data.get(section)
         if not isinstance(value, dict):
             continue
+        allowed_fields = set(fields) | set(V2_OPTIONAL_NESTED.get(section, {}))
+        for unknown in sorted(set(value) - allowed_fields):
+            errors.append(f"{path}: unknown frontmatter field {section}.{unknown}")
         for field, expected in fields.items():
             full_field = f"{section}.{field}"
             if field not in value:
                 errors.append(f"{path}: missing required frontmatter field {full_field}")
                 continue
             validate_type(path, full_field, value[field], expected, errors)
+        for field, expected in V2_OPTIONAL_NESTED.get(section, {}).items():
+            if field in value:
+                validate_type(path, f"{section}.{field}", value[field], expected, errors)
+
+    for unknown in sorted(set(data) - set(required_top_level)):
+        errors.append(f"{path}: unknown top-level frontmatter field {unknown}")
 
     for field, allowed in enums.items():
         section, key = field.split(".")
@@ -301,8 +194,20 @@ def validate_schema_contract(path: Path, data: dict[str, object], errors: list[s
 
     amp = data.get("amp")
     last_verified = amp.get("last_verified") if isinstance(amp, dict) else None
-    if isinstance(last_verified, str) and not re.match(r"^\d{4}-\d{2}-\d{2}$", last_verified):
+    try:
+        date.fromisoformat(last_verified) if isinstance(last_verified, str) else None
+    except ValueError:
+        last_verified = None
+    if not isinstance(last_verified, str) or not re.match(r"^\d{4}-\d{2}-\d{2}$", last_verified):
         errors.append(f"{path}: amp.last_verified must use YYYY-MM-DD")
+
+    docs_sources = amp.get("docs_sources") if isinstance(amp, dict) else None
+    if isinstance(docs_sources, dict):
+        if set(docs_sources) != {"api_docs", "agent_options"}:
+            errors.append(f"{path}: amp.docs_sources must contain exactly api_docs and agent_options")
+        for role, value in docs_sources.items():
+            if value is not None and not isinstance(value, str):
+                errors.append(f"{path}: amp.docs_sources.{role} must be nullable_scalar")
 
     if schema == "amp-artifact/v2":
         artifact = data.get("artifact")
@@ -318,44 +223,27 @@ def validate_schema_contract(path: Path, data: dict[str, object], errors: list[s
                     errors.append(f"{path}: skill artifacts must use source.kind 'skill' and a null registration_api")
             elif source_kind != "plugin" or not isinstance(registration_api, str) or not registration_api:
                 errors.append(f"{path}: plugin artifacts must use source.kind 'plugin' and a non-empty registration_api")
+            elif artifact_type in PLUGIN_INVARIANTS:
+                surface, invocation, api, discriminator = PLUGIN_INVARIANTS[artifact_type]
+                if (artifact.get("surface"), artifact.get("invocation"), registration_api) != (surface, invocation, api):
+                    errors.append(f"{path}: {artifact_type} must use surface {surface!r}, invocation {invocation!r}, and registration_api {api!r}")
+                contract = data.get("contract")
+                if isinstance(contract, dict):
+                    if contract.get("trigger") != invocation:
+                        errors.append(f"{path}: {artifact_type} requires contract.trigger {invocation!r}")
+                    for field in ("event", "command_id", "agent_mode_key"):
+                        value = contract.get(field)
+                        if field == discriminator:
+                            if not isinstance(value, str) or not value:
+                                errors.append(f"{path}: {artifact_type} requires non-empty contract.{field}")
+                        elif value is not None:
+                            errors.append(f"{path}: {artifact_type} requires contract.{field} to be null")
+            elif artifact_type != "skill":
+                errors.append(f"{path}: artifact.type {artifact_type!r} has no documented invariant")
 
     h2s = markdown_h2s(path)
     if h2s != REQUIRED_H2S:
         errors.append(f"{path}: H2 headings must be exactly {REQUIRED_H2S!r}; got {h2s!r}")
-
-
-def top_level_scalar(fm: str, key: str) -> str | None:
-    match = re.search(rf'^{re.escape(key)}:\s*"?([^"\n]+?)"?\s*$', fm, re.MULTILINE)
-    return match.group(1).strip() if match else None
-
-
-def top_level_list(fm: str, key: str) -> list[str]:
-    lines = fm.splitlines()
-
-    for index, line in enumerate(lines):
-        match = re.match(rf'^{re.escape(key)}:\s*(.*)$', line)
-        if not match:
-            continue
-
-        inline_value = match.group(1).strip()
-        if inline_value == "[]":
-            return []
-        if inline_value.startswith("[") and inline_value.endswith("]"):
-            return [item.strip().strip('"\'') for item in inline_value[1:-1].split(",") if item.strip()]
-
-        values: list[str] = []
-        for nested_line in lines[index + 1 :]:
-            if not nested_line.strip():
-                continue
-            item = re.match(r'^  -\s*"?([^"\n]+?)"?\s*$', nested_line)
-            if item:
-                values.append(item.group(1).strip())
-                continue
-            if not nested_line.startswith(" "):
-                break
-        return values
-
-    return []
 
 
 def markdown_links(path: Path) -> list[str]:
@@ -378,7 +266,7 @@ def main() -> int:
         data = parse_frontmatter(fm)
         validate_schema_contract(doc, data, errors)
 
-        slug = top_level_scalar(fm, "slug")
+        slug = data.get("slug")
         if not slug:
             errors.append(f"{doc}: missing slug")
             continue
@@ -394,7 +282,9 @@ def main() -> int:
         if fm is None:
             continue
 
-        for related_slug in top_level_list(fm, "related"):
+        data = parse_frontmatter(fm)
+        related = data.get("related", [])
+        for related_slug in related if isinstance(related, list) else []:
             if related_slug not in slug_to_doc:
                 errors.append(f"{doc}: related slug {related_slug!r} does not exist")
 
@@ -414,12 +304,12 @@ def main() -> int:
             errors.append(f"{doc}: slug {slug!r} is not linked from {readme}")
 
     if errors:
-        print("Amp plugin doc validation failed:")
+        print("Amp artifact doc validation failed:")
         for error in errors:
             print(f"- {error}")
         return 1
 
-    print(f"Validated {len(doc_to_slug)} Amp plugin capability docs.")
+    print(f"Validated {len(doc_to_slug)} Amp artifact docs.")
     return 0
 
 

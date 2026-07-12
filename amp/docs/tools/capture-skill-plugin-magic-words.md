@@ -1,29 +1,33 @@
 ---
-doc_schema: "amp-plugin-capability/v1"
+doc_schema: "amp-artifact/v2"
 title: "Capture Skill/Plugin Magic Words"
 slug: "capture-skill-plugin-magic-words"
 status: "active"
 summary: "Automatically records skill/plugin usage events when canonical capture, label, or report prefixes appear in incoming user messages."
-capability:
+artifact:
   id: "capture_skill_plugin_magic_words"
   type: "event_handler"
   surface: "plugin_event_pipeline"
   invocation: "plugin_event"
-  registration_api: "amp.on"
   api_stability: "mixed"
-plugin:
+source:
+  kind: "plugin"
   file: "plugins/skill-plugin-usage.ts"
   scope: "system"
   install_source: "local"
+  registration_api: "amp.on"
   metadata_comments:
     - "@i-know-the-amp-plugin-api-is-wip-and-very-experimental-right-now"
 amp:
-  api_docs_source: "amp plugins show-docs"
-  agent_options_source: "amp plugins show-agent-options --json"
+  docs_sources:
+    api_docs: "amp plugins show-docs"
+    agent_options: "amp plugins show-agent-options --json"
   last_verified: "2026-06-28"
 contract:
   input_kind: "plugin_event"
   output_kind: "append_only_jsonl"
+  trigger: "plugin_event"
+  allowed_tools: []
   event: "agent.start_and_tool.result"
   command_id: null
   agent_mode_key: null

@@ -8,6 +8,7 @@ on:
       - "amp/plugins/**"
       - "amp/scripts/validate-rfcs.py"
       - "amp/scripts/validate-plugin-docs.py"
+      - "amp/scripts/test_validate_plugin_docs.py"
       - ".github/workflows/ci.yml"
   push:
     branches:
@@ -18,6 +19,7 @@ on:
       - "amp/plugins/**"
       - "amp/scripts/validate-rfcs.py"
       - "amp/scripts/validate-plugin-docs.py"
+      - "amp/scripts/test_validate_plugin_docs.py"
       - ".github/workflows/ci.yml"
 
 jobs:
@@ -27,7 +29,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Validate Amp plugin docs
+      - name: Install Amp doc validator dependencies
+        run: python3 -m pip install PyYAML==6.0.3
+
+      - name: Test Amp artifact doc validator
+        run: python3 -m unittest amp/scripts/test_validate_plugin_docs.py
+
+      - name: Validate Amp artifact docs
         run: python3 amp/scripts/validate-plugin-docs.py
 
       - name: Validate Amp RFC docs

@@ -8,7 +8,9 @@ last_reviewed: "2026-07-12"
 
 # Amp artifact schema
 
-Use `doc_schema: "amp-artifact/v2"` for one document per Amp artifact. An artifact can be exposed by a plugin or loaded as a skill. Existing documents using `amp-plugin-capability/v1` remain valid and can migrate when otherwise edited.
+Use `doc_schema: "amp-artifact/v2"` for one document per Amp artifact. An artifact can be exposed by a plugin or loaded as a skill. All active artifact documents must use v2; v1 is historical only.
+
+The contract is closed by default: undocumented fields are invalid. The currently documented optional extension fields are `contract.required_inputs`, `contract.optional_inputs`, and `contract.model`. Add future extensions to this schema and the validator before using them.
 
 ## Frontmatter contract
 
@@ -54,11 +56,13 @@ Required Amp verification metadata:
 
 ```yaml
 amp:
-  docs_sources: []
+  docs_sources:
+    api_docs: "amp plugins show-docs"
+    agent_options: "amp plugins show-agent-options --json"
   last_verified: "2026-07-12"
 ```
 
-Use commands, manuals, or source files in `docs_sources`, for example `amp plugins show-docs` for a plugin or `skills/example/SKILL.md` for a local skill.
+`docs_sources` preserves the role of each provenance source. Use `null` when a role does not apply.
 
 Required contract metadata:
 
@@ -159,6 +163,17 @@ source:
 
 All other artifact types must use `source.kind: "plugin"` and a non-empty `source.registration_api`.
 
+Plugin artifacts currently have these exact invariants:
+
+| Type | Surface | Invocation | Registration API | Required discriminator |
+| --- | --- | --- | --- | --- |
+| `agent_tool` | `agent` | `tool_call` | `amp.registerTool` | none; all discriminator fields are `null` |
+| `command` | `command_palette` | `command_palette` | `amp.registerCommand` | non-empty `command_id`; `event` and `agent_mode_key` are `null` |
+| `event_handler` | `plugin_event_pipeline` | `plugin_event` | `amp.on` | non-empty `event`; `command_id` and `agent_mode_key` are `null` |
+| `agent_mode` | `mode_picker` | `new_thread_mode` | `amp.experimental.registerAgentMode` | non-empty `agent_mode_key`; `event` and `command_id` are `null` |
+
+`status_item` and `helper_agent` remain reserved type names, but active documents using them require explicit validator support once their exact invariants are documented.
+
 ## Required Markdown headings
 
 Each artifact doc must use this H2 order:
@@ -178,4 +193,4 @@ Keep the headings identical for every artifact type. For example, a skill's `Inv
 
 ## Version compatibility
 
-[`amp-plugin-capability/v1`](./_schema-v1.md) is retained for existing plugin capability documents. New documents should use `amp-artifact/v2`. Migrate a v1 document by renaming `capability` to `artifact`, replacing `plugin` with `source`, replacing the two Amp source scalars with `amp.docs_sources`, and adding `contract.trigger` and `contract.allowed_tools`.
+[`amp-plugin-capability/v1`](./_schema-v1.md) is retained as a historical reference and is not accepted for active documents. Migrate v1 by renaming `capability` to `artifact`; moving `capability.registration_api` to `source.registration_api`; replacing `plugin` with `source` and adding `source.kind`; replacing the two Amp source scalars with role-preserving `amp.docs_sources.api_docs` and `amp.docs_sources.agent_options`; and adding canonical `contract.trigger` plus `contract.allowed_tools`.

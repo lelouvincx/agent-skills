@@ -8,7 +8,7 @@ last_reviewed: "2026-07-12"
 
 # Amp plugin capability schema v1
 
-This is the frozen schema for existing documents using `doc_schema: "amp-plugin-capability/v1"`. It remains supported by the validator, but new artifact documents should use [`amp-artifact/v2`](./_schema.md).
+This is the frozen historical schema for documents that used `doc_schema: "amp-plugin-capability/v1"`. The active-doc validator now requires [`amp-artifact/v2`](./_schema.md).
 
 ## Frontmatter contract
 

@@ -1,29 +1,33 @@
 ---
-doc_schema: "amp-plugin-capability/v1"
+doc_schema: "amp-artifact/v2"
 title: "Label Skill/Plugin Usage"
 slug: "label-skill-plugin-usage"
 status: "active"
 summary: "Appends manual labels and superseding label corrections for existing skill/plugin usage events."
-capability:
+artifact:
   id: "label_skill_plugin_usage"
   type: "agent_tool"
   surface: "agent"
   invocation: "tool_call"
-  registration_api: "amp.registerTool"
   api_stability: "stable"
-plugin:
+source:
+  kind: "plugin"
   file: "plugins/skill-plugin-usage.ts"
   scope: "system"
   install_source: "local"
+  registration_api: "amp.registerTool"
   metadata_comments:
     - "@i-know-the-amp-plugin-api-is-wip-and-very-experimental-right-now"
 amp:
-  api_docs_source: "amp plugins show-docs"
-  agent_options_source: "amp plugins show-agent-options --json"
+  docs_sources:
+    api_docs: "amp plugins show-docs"
+    agent_options: "amp plugins show-agent-options --json"
   last_verified: "2026-06-28"
 contract:
   input_kind: "json_schema"
   output_kind: "text"
+  trigger: "tool_call"
+  allowed_tools: []
   event: null
   command_id: null
   agent_mode_key: null

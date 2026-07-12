@@ -1,29 +1,33 @@
 ---
-doc_schema: "amp-plugin-capability/v1"
+doc_schema: "amp-artifact/v2"
 title: "Track Event"
 slug: "track-event"
 status: "active"
 summary: "Adds the `track event` command-palette action for explicitly capturing the current task as a skill/plugin usage event with optional labels."
-capability:
+artifact:
   id: "track_event"
   type: "command"
   surface: "command_palette"
   invocation: "command_palette"
-  registration_api: "amp.registerCommand"
   api_stability: "stable"
-plugin:
+source:
+  kind: "plugin"
   file: "plugins/skill-plugin-usage.ts"
   scope: "system"
   install_source: "local"
+  registration_api: "amp.registerCommand"
   metadata_comments:
     - "@i-know-the-amp-plugin-api-is-wip-and-very-experimental-right-now"
 amp:
-  api_docs_source: "amp plugins show-docs"
-  agent_options_source: "amp plugins show-agent-options --json"
+  docs_sources:
+    api_docs: "amp plugins show-docs"
+    agent_options: "amp plugins show-agent-options --json"
   last_verified: "2026-06-28"
 contract:
   input_kind: "ui_prompt"
   output_kind: "ui_notification"
+  trigger: "command_palette"
+  allowed_tools: []
   event: null
   command_id: "track_event"
   agent_mode_key: null
