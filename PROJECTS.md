@@ -57,6 +57,8 @@ AGENTS_REGISTRY_ENV=vps project-resolve prefect --path
 | `dbt` | `holistics` | `~/Developer/holistics/data/dbt` | `holistics/dbt` |
 | `prefect` | `holistics` | `~/Developer/holistics/data/prefect` | `holistics/prefect` |
 | `demo4` | `holistics` | `~/Developer/holistics/demo4` | `holistics/data-demo4` |
+| `testing4` | `holistics` | `~/Developer/holistics/testing4` | `holistics/data-testing4` |
+| `duty-support` | `lelouvincx` | `~/Developer/holistics/duty-support` | `lelouvincx/duty-support` |
 | `holistics-docs` | `holistics` | `~/Developer/holistics/docs` | `holistics/docs` |
 | `holistics-skills` | `holistics` | `~/Developer/holistics/skills` | `holistics/skills` |
 | `internal-skills` | `holistics` | `~/Developer/holistics/internal-skills` | `holistics/internal-skills` |
