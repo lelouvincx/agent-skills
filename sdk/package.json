@@ -1,0 +1,8 @@
+{
+  "name": "amp-sdk-tools",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@ampcode/sdk": "latest"
+  }
+}
