@@ -127,7 +127,7 @@ Optional inputs:
 
 | Field             | Type                                                       | Default  | Notes                                                                                                                                                             |
 | ----------------- | ---------------------------------------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `mode`            | `low \| medium \| high \| ultra` | `medium` | Built-in Amp agent mode for the subagent. |
+| `mode`            | `low \| medium \| high` | `medium` | Built-in Amp agent mode for the subagent. |
 
 Output is a short text confirmation: `Started <mode> subagent in <threadID>. Do not poll or wait for it.`
 
@@ -205,7 +205,7 @@ This point-in-time understanding is an inherent part of asynchronous delegation,
 ## Troubleshooting
 
 - `instructions are required`: pass a non-empty task brief.
-- `mode must be one of...`: use only `low`, `medium`, `high`, or `ultra`.
+- `mode must be one of...`: use only `low`, `medium`, or `high`.
 - Initial message append failed: use the child thread ID included in the error to inspect or archive the empty thread manually.
 - Subagent does not report back: inspect the child thread ID from the return value and check whether `send_to_thread` is available.
 - Subagent reports back but remains visible: check whether `archive_current_thread` is available to the subagent, then archive the child thread manually if needed.

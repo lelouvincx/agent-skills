@@ -7,7 +7,7 @@
 import type { BuiltinAgentMode, PluginAPI } from '@ampcode/plugin'
 
 const DEFAULT_MODE = 'medium' as BuiltinAgentMode
-const BUILTIN_MODES = new Set(['low', 'medium', 'high', 'ultra'])
+const BUILTIN_MODES = new Set(['low', 'medium', 'high'])
 
 export default function (amp: PluginAPI) {
 	amp.registerTool({
@@ -31,7 +31,7 @@ export default function (amp: PluginAPI) {
 				},
 				mode: {
 					type: 'string',
-					enum: ['low', 'medium', 'high', 'ultra'],
+					enum: ['low', 'medium', 'high'],
 					description: 'Optional built-in Amp agent mode for the subagent. Defaults to medium.',
 				},
 			},
@@ -108,7 +108,7 @@ ${instructions}
 function normalizeMode(raw: unknown): BuiltinAgentMode {
 	const mode = String(raw || DEFAULT_MODE).trim()
 	if (!BUILTIN_MODES.has(mode)) {
-		throw new Error('mode must be one of: low, medium, high, ultra')
+		throw new Error('mode must be one of: low, medium, high')
 	}
 	return mode as BuiltinAgentMode
 }
