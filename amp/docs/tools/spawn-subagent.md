@@ -48,6 +48,7 @@ runtime:
   env: []
   reads:
     - "current thread id"
+    - "plugin process working directory as the parent thread default"
     - "parent Amp thread through spawned subagent for intent reconstruction"
   writes:
     - "new child Amp thread"
@@ -128,9 +129,10 @@ Required inputs:
 
 Optional inputs:
 
-| Field             | Type                                                       | Default  | Notes                                                                                                                                                             |
-| ----------------- | ---------------------------------------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `mode`            | `low \| medium \| high` | `medium` | Built-in Amp agent mode for the subagent. |
+| Field  | Type                       | Default             | Notes                                                                                                       |
+| ------ | -------------------------- | ------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `mode` | `low \| medium \| high` | `medium`            | Built-in Amp agent mode for the subagent.                                                                   |
+| `cwd`  | `string`                   | Parent thread's cwd | Working directory the subagent should use. The caller may choose a more appropriate directory for the task. |
 
 `ultra` is intentionally unsupported because its Fable 5 usage can consume disproportionate credits in spawned subagents.
 
@@ -138,7 +140,7 @@ Output is a short text confirmation: `Started <mode> subagent in <threadID>. Do 
 
 ## Behavior
 
-The tool validates `instructions`, normalizes the built-in mode, obtains a built-in agent with `amp.getBuiltinAgent`, creates a child thread with the current thread as `parentThreadID`, and appends a structured subagent prompt. If the initial append fails after thread creation, the error includes the child thread ID so the orphaned thread can be inspected or archived manually.
+The tool validates `instructions`, normalizes the built-in mode and `cwd`, obtains a built-in agent with `amp.getBuiltinAgent`, creates a child thread with the current thread as `parentThreadID`, and appends a structured subagent prompt. The caller should choose the directory that owns the bounded task when it differs from the parent thread's working directory. When omitted, `cwd` defaults to the plugin process working directory, which is the parent thread's workspace working directory. The child is instructed to use the selected directory for file and shell operations. If the initial append fails after thread creation, the error includes the child thread ID so the orphaned thread can be inspected or archived manually.
 
 The prompt treats `read_thread` as the required source of truth for parent context. It does not fall back to static prompt reconstruction or whatever partial parent context is otherwise visible. If `read_thread` is unavailable or fails, the subagent must report that it is blocked rather than execute the bounded task from incomplete context.
 
@@ -191,6 +193,15 @@ Spawn a faster subagent:
 }
 ```
 
+Spawn a subagent in another project directory:
+
+```json
+{
+  "cwd": "/path/to/project",
+  "instructions": "Inspect the authentication flow in this project and report the relevant files. Do not edit files."
+}
+```
+
 ### Scenario stress test
 
 | Scenario | Expected behavior |
@@ -214,6 +225,7 @@ This point-in-time understanding is an inherent part of asynchronous delegation,
 
 - `instructions are required`: pass a non-empty task brief.
 - `mode must be one of...`: use only `low`, `medium`, or `high`.
+- `cwd does not exist` or `cwd is not a directory`: pass an existing directory accessible to the parent Amp process.
 - Initial message append failed: use the child thread ID included in the error to inspect or archive the empty thread manually.
 - Subagent does not report back: inspect the child thread ID from the return value and check whether `send_to_thread` is available.
 - Subagent reports back but remains visible: check whether `archive_current_thread` is available to the subagent, then archive the child thread manually if needed.
