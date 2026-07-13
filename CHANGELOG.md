@@ -32,7 +32,7 @@ and this project does not currently use versioned releases.
 
 ### Changed
 
-- Let `spawn_subagent` choose the working directory for a bounded task, defaulting to the parent thread's working directory.
+- Let `spawn_subagent` choose the working directory for a bounded task, defaulting to the parent thread's working directory. [#96](https://github.com/lelouvincx/agent-skills/pull/96)
 - Run Logseq logging workers in fixed `high` mode without recent-message seeds, require `read_thread` for parent context, block Oracle escalation, and fail fast when a high-mode worker cannot start. [#94](https://github.com/lelouvincx/agent-skills/pull/94)
 - Reserve Oracle escalation for the parent coordinator when using `spawn_subagent`. [#91](https://github.com/lelouvincx/agent-skills/pull/91)
 - Update the maintained Matt Pocock skills for upstream 1.1.0 by renaming `to-prd` to `to-spec`, cleaning retired generated artifacts, and validating remote frontmatter while preserving personal overlays. [#90](https://github.com/lelouvincx/agent-skills/pull/90)
