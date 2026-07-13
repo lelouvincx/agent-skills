@@ -129,6 +129,8 @@ Optional inputs:
 | ----------------- | ---------------------------------------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `mode`            | `low \| medium \| high` | `medium` | Built-in Amp agent mode for the subagent. |
 
+`ultra` is intentionally unsupported because its Fable 5 usage can consume disproportionate credits in spawned subagents.
+
 Output is a short text confirmation: `Started <mode> subagent in <threadID>. Do not poll or wait for it.`
 
 ## Behavior
