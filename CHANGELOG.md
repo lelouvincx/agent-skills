@@ -71,7 +71,7 @@ and this project does not currently use versioned releases.
 
 ### Fixed
 
-- Prevent `spawn_subagent` from launching `ultra` mode subagents.
+- Prevent `spawn_subagent` from launching `ultra` mode subagents. [#89](https://github.com/lelouvincx/agent-skills/pull/89)
 - Harden `spawn_subagent` lifecycle instructions, report formatting, parent-context reconstruction, and orphan-thread diagnostics. [#84](https://github.com/lelouvincx/agent-skills/pull/84)
 - Fix the `deepseek-v4-pro` Amp plugin prompt literal so the agent mode loads again. [#75](https://github.com/lelouvincx/agent-skills/pull/75)
 - Fix project resolver guidance to use the PATH-level `project-resolve` command from other project directories. [#70](https://github.com/lelouvincx/agent-skills/pull/70)
