@@ -11,25 +11,55 @@ import type {
 	PluginCommandContext,
 	ThreadAssistantMessage,
 	ThreadID,
-	ThreadMessage,
+	ThreadState,
 } from '@ampcode/plugin'
 
 const LOGSEQ_REPO = process.env.AMP_LOGSEQ_GRAPH_DIR ?? '/Users/lelouvincx/Developer/second-brain-logseq'
-const WORKER_MODE = 'medium' as BuiltinAgentMode
+const WORKER_MODE = 'high' as BuiltinAgentMode
+const WORKER_STARTUP_TIMEOUT_MS = 15_000
 const WORKER_TIMEOUT_MS = 10 * 60 * 1000
 const WORKER_WAIT_RETRY_DELAY_MS = 1_000
-const PARENT_RECENT_MESSAGE_SEED_LIMIT = 20
-const MAX_PARENT_EXCERPT_CHARS = 20_000
 const MAX_RESULT_CHARS = 500
 const MAX_NOTIFICATION_CHARS = 500
+const LOGSEQ_WORKER_PROMPT_PREFIX = '[logseq-manual-log]'
 
 type LogContext = Pick<PluginCommandContext, 'thread' | '$'>
 type WorkerThread = {
+	state: {
+		get(): Promise<ThreadState>
+		subscribe(onNext: (state: ThreadState) => void): { unsubscribe(): void }
+	}
 	waitForResponse(options: { timeoutMs: number }): Promise<ThreadAssistantMessage>
 }
 
 export default function (amp: PluginAPI) {
+	const workerThreadIDs = new Set<string>()
+
 	amp.logger.log(`[logseq-manual-log] plugin loaded → ${LOGSEQ_REPO}`)
+
+	amp.on('tool.call', async (event) => {
+		if (event.tool !== 'oracle') {
+			return { action: 'allow' }
+		}
+
+		let isLogseqWorker = workerThreadIDs.has(event.thread.id)
+		if (!isLogseqWorker) {
+			const [initialMessage] = await amp.threads.get(event.thread.id).messages({
+				full: true,
+				from: 'start',
+				limit: 1,
+			})
+			isLogseqWorker = initialMessage?.role === 'user'
+				&& initialMessage.content.some((block) => block.type === 'text' && block.text.startsWith(LOGSEQ_WORKER_PROMPT_PREFIX))
+		}
+
+		return isLogseqWorker
+			? {
+				action: 'reject-and-continue',
+				message: 'Oracle is unavailable to Logseq logging workers. Use read_thread and the Logseq canonical pages to complete the logging task.',
+			}
+			: { action: 'allow' }
+	})
 
 	amp.registerCommand(
 		'logseq-log-current-task',
@@ -57,7 +87,7 @@ export default function (amp: PluginAPI) {
 				return
 			}
 
-			const result = await logCurrentTask(amp, ctx, hint.trim(), MAX_NOTIFICATION_CHARS)
+			const result = await logCurrentTask(amp, ctx, hint.trim(), MAX_NOTIFICATION_CHARS, workerThreadIDs)
 			await ctx.ui.notify(result)
 		},
 	)
@@ -84,31 +114,41 @@ export default function (amp: PluginAPI) {
 				throw new Error('Open an Amp thread before running logseq_log_current_task.')
 			}
 
-			return logCurrentTask(amp, ctx, String(input.hint || '').trim(), MAX_RESULT_CHARS)
+			return logCurrentTask(amp, ctx, String(input.hint || '').trim(), MAX_RESULT_CHARS, workerThreadIDs)
 		},
 	})
 }
 
-async function logCurrentTask(amp: PluginAPI, ctx: LogContext, hint: string, maxResultChars: number): Promise<string> {
+async function logCurrentTask(
+	amp: PluginAPI,
+	ctx: LogContext,
+	hint: string,
+	maxResultChars: number,
+	workerThreadIDs: Set<string>,
+): Promise<string> {
 	if (!ctx.thread) {
 		throw new Error('Open an Amp thread before running Logseq: Log current task.')
 	}
 
 	const parentThreadID = ctx.thread.id
-	const parentExcerpt = await parentThreadExcerpt(ctx.thread)
 	const workerAgent = amp.getBuiltinAgent(WORKER_MODE)
 	const workerThread = await workerAgent.createThread({
 		parentThreadID,
 		show: false,
 	})
+	workerThreadIDs.add(workerThread.id)
+	const startupGuard = watchWorkerStartup(workerThread)
 
 	try {
-		await workerThread.appendUserMessage({
-			type: 'user-message',
-			content: buildPrompt(parentThreadID, workerThread.id, hint, parentExcerpt),
-		})
+		await Promise.race([
+			workerThread.appendUserMessage({
+				type: 'user-message',
+				content: buildPrompt(parentThreadID, workerThread.id, hint),
+			}),
+			startupGuard.promise,
+		])
 
-		const response = await waitForWorkerResponse(workerThread)
+		const response = await waitForWorkerResponse(workerThread, startupGuard)
 		const summary = extractAssistantText(response) || 'Logseq worker finished.'
 		const newTitle = extractThreadTitle(summary)
 		if (!newTitle) {
@@ -130,17 +170,25 @@ async function logCurrentTask(amp: PluginAPI, ctx: LogContext, hint: string, max
 		return `Logseq worker ${workerThread.id} finished, renamed this thread to ${newTitle}, and was archived.\n${truncate(summary, maxResultChars)}`
 	} catch (error) {
 		return `Logseq worker ${workerThread.id} failed or timed out; leaving it unarchived for inspection.\n${errorMessage(error)}`
+	} finally {
+		startupGuard.cancel()
 	}
 }
 
-async function waitForWorkerResponse(workerThread: WorkerThread): Promise<ThreadAssistantMessage> {
+async function waitForWorkerResponse(
+	workerThread: WorkerThread,
+	startupGuard: ReturnType<typeof watchWorkerStartup>,
+): Promise<ThreadAssistantMessage> {
 	const deadline = Date.now() + WORKER_TIMEOUT_MS
 	let lastError: unknown
 
 	while (Date.now() < deadline) {
 		const remainingMs = deadline - Date.now()
 		try {
-			return await workerThread.waitForResponse({ timeoutMs: remainingMs })
+			return await Promise.race([
+				workerThread.waitForResponse({ timeoutMs: remainingMs }),
+				startupGuard.promise,
+			])
 		} catch (error) {
 			lastError = error
 			if (!isThreadMessagesTimeout(error)) {
@@ -153,6 +201,47 @@ async function waitForWorkerResponse(workerThread: WorkerThread): Promise<Thread
 	throw lastError instanceof Error ? lastError : new Error('Logseq worker timed out')
 }
 
+function watchWorkerStartup(workerThread: WorkerThread): { promise: Promise<never>; cancel(): void } {
+	let active = true
+	let subscription: { unsubscribe(): void } | undefined
+	let timeout: ReturnType<typeof setTimeout> | undefined
+	let rejectStartup: (error: Error) => void = () => {}
+
+	const cancel = () => {
+		if (!active) return
+		active = false
+		if (timeout) clearTimeout(timeout)
+		subscription?.unsubscribe()
+	}
+	const checkState = (state: ThreadState) => {
+		if (!active) return
+		if (state === 'error') {
+			cancel()
+			rejectStartup(new Error('Logseq high-mode worker entered an error state before starting'))
+		} else if (state === 'running' || state === 'awaiting-approval') {
+			cancel()
+		}
+	}
+	const promise = new Promise<never>((_, reject) => {
+		rejectStartup = reject
+		subscription = workerThread.state.subscribe(checkState)
+		if (!active) {
+			subscription.unsubscribe()
+		} else {
+			timeout = setTimeout(() => {
+				cancel()
+				reject(new Error(`Logseq high-mode worker did not start within ${WORKER_STARTUP_TIMEOUT_MS / 1000} seconds`))
+			}, WORKER_STARTUP_TIMEOUT_MS)
+		}
+		void workerThread.state.get().then(checkState, (error) => {
+			cancel()
+			reject(error)
+		})
+	})
+
+	return { promise, cancel }
+}
+
 function isThreadMessagesTimeout(error: unknown): boolean {
 	return errorMessage(error).includes('Plugin thread.messages timed out')
 }
@@ -161,9 +250,9 @@ function sleep(ms: number): Promise<void> {
 	return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
-function buildPrompt(parentThreadID: string, workerThreadID: string, hint: string, parentExcerpt: string): string {
+function buildPrompt(parentThreadID: string, workerThreadID: string, hint: string): string {
 	const today = localDateParts()
-	return `[logseq-manual-log]
+	return `${LOGSEQ_WORKER_PROMPT_PREFIX}
 
 You are a Logseq logging worker spawned from parent Amp thread ${parentThreadID}. This command was manually triggered by the user; do not set up automatic logging.
 
@@ -175,24 +264,18 @@ Context:
 - Logseq repo: ${LOGSEQ_REPO}
 - Today's journal file: ${LOGSEQ_REPO}/journals/${today.journalFile}
 
-Recent parent-thread seed for quick link/outcome extraction only; do not use this seed as the source of truth for original intent:
-<<<recent-parent-thread-seed
-${parentExcerpt || '(not available — use read_thread on the parent thread if available)'}
-recent-parent-thread-seed
-
 Rules:
-1. First perform a private intent-reconstruction step. Use read_thread on ${parentThreadID} when available, or otherwise inspect the parent thread as fully as available. Infer and keep distinct: (a) the original user intent, (b) any later user redirect, (c) the latest coherent requested outcome, and (d) the durable result to log. Do not write anything yet.
+1. First perform a private intent-reconstruction step. You must use read_thread on ${parentThreadID}. Do not fall back to partial parent context. If read_thread is unavailable or fails, stop without editing Logseq and report the blocker. Infer and keep distinct: (a) the original user intent, (b) any later user redirect, (c) the latest coherent requested outcome, and (d) the durable result to log. Do not write anything yet.
 2. Log the durable task/outcome represented by that reconstructed intent. Do not let incidental recent-message context replace the original task intent. If the thread contains unrelated later chatter, ignore it unless the user explicitly redirected the task.
 3. Before choosing or writing a Logseq block, read \`${LOGSEQ_REPO}/pages/Canonical Pages.md\`, then read the corresponding canonical project/rule pages named there, especially \`pages/Projects.md\`, \`pages/Backlog.md\`, and any relevant rule page. Use that canonical map as the source of truth for project taxonomy, active backlog matches, priority conventions, and placement.
-4. If reconstructed intent, recent seed, and canonical map conflict, prefer reconstructed user intent plus canonical project mapping; use the recent seed only for final outcome details and reference links.
-5. All task logs must be represented in \`pages/Backlog.md\` first. Check for an existing backlog entry referencing the parent thread via \`input:: [Ampcode](${parentThreadID})\`, a numbered variant such as \`[1-Ampcode](${parentThreadID})\`, or \`${parentThreadID}\`; update it instead of creating a duplicate.
-6. If the user hint or reconstructed parent-thread intent clearly maps to an active task in \`pages/Backlog.md\`, update that backlog task/block. Otherwise create one concise backlog task block in the canonical backlog placement for its project/priority/state.
-7. After the backlog task is updated or created, add or update a short reference in today's journal pointing back to that backlog task:
+4. All task logs must be represented in \`pages/Backlog.md\` first. Check for an existing backlog entry referencing the parent thread via \`input:: [Ampcode](${parentThreadID})\`, a numbered variant such as \`[1-Ampcode](${parentThreadID})\`, or \`${parentThreadID}\`; update it instead of creating a duplicate.
+5. If the user hint or reconstructed parent-thread intent clearly maps to an active task in \`pages/Backlog.md\`, update that backlog task/block. Otherwise create one concise backlog task block in the canonical backlog placement for its project/priority/state.
+6. After the backlog task is updated or created, add or update a short reference in today's journal pointing back to that backlog task:
    - under \`### Done\` when the work is complete
    - under \`### Tasks\` when follow-up remains
    - under \`### Notes\` when this is informational only
    Create the section only if needed and missing. Keep the journal entry as a pointer to the backlog task, not a duplicate task with copied properties/source links.
-8. Use Logseq markdown conventions from this graph:
+7. Use Logseq markdown conventions from this graph:
    - lowercase properties with \`::\`
    - \`project:: [[...]]\` must be coherent with the canonical project map in \`pages/Projects.md\`; default to \`[[Personal]]\` only for personal/tooling tasks that do not match a more specific canonical project such as \`[[Logseq]]\`, \`[[Internal]]\`, \`[[Docs]]\`, or \`[[Presales]]\`.
    - \`priority:: #P...\` when inferable from backlog/rules; default to \`#P3\` only for low-priority personal/tooling tasks
@@ -203,8 +286,9 @@ Rules:
    - Dedupe equivalent links and skip incidental documentation/search-result links unless they were actual task inputs or important deliverables.
    - \`completed:: [[${today.isoDate}]]\` only for DONE backlog items
    - preserve surrounding indentation style, usually one tab for properties under a block
-9. Keep the backlog entry short: one task block plus few useful child notes, and one brief journal reference. Do not paste the transcript or your private intent-reconstruction notes.
-10. Determine the parent Amp thread title from the Logseq backlog task/block you wrote or updated, using exactly this pattern: \`[Project] task title\`. Use the Logseq \`project:: [[...]]\` value without brackets for \`Project\`; use the backlog task/block title text without TODO/DONE markers or properties for \`task title\`.
+8. Keep the backlog entry short: one task block plus few useful child notes, and one brief journal reference. Do not paste the transcript or your private intent-reconstruction notes.
+9. Determine the parent Amp thread title from the Logseq backlog task/block you wrote or updated, using exactly this pattern: \`[Project] task title\`. Use the Logseq \`project:: [[...]]\` value without brackets for \`Project\`; use the backlog task/block title text without TODO/DONE markers or properties for \`task title\`.
+10. Do not invoke Oracle. The plugin blocks Oracle calls from this worker.
 11. Do not commit, push, run weekly report automation, or modify unrelated blocks.
 12. Do not send messages to the parent thread. Return your result only as this worker thread's final answer.
 
@@ -214,36 +298,6 @@ After editing, reply with exactly two plain-text lines, without bullets or code 
 Logged to <backlog file/block> and <journal file/block> — <summary>.
 Thread title: [Project] task title
 `
-}
-
-async function parentThreadExcerpt(thread: PluginCommandContext['thread']): Promise<string> {
-	if (!thread) return ''
-	try {
-		const messages = await thread.messages({ from: 'end', limit: PARENT_RECENT_MESSAGE_SEED_LIMIT })
-		return truncate(formatThreadMessages(messages), MAX_PARENT_EXCERPT_CHARS)
-	} catch {
-		return ''
-	}
-}
-
-function formatThreadMessages(messages: ThreadMessage[]): string {
-	return messages
-		.map((message, index) => {
-			const parts = message.content
-				.map((block) => {
-					if (block.type === 'text') return block.text.trim()
-					if (block.type === 'tool_use') return `[tool_use: ${block.name}]`
-					if (block.type === 'tool_result') return `[tool_result: ${block.status}]`
-					return ''
-				})
-				.filter(Boolean)
-				.join('\n')
-				.trim()
-
-			return parts ? `## ${index + 1}. ${message.role}\n${truncate(parts, 4_000)}` : ''
-		})
-		.filter(Boolean)
-		.join('\n\n')
 }
 
 function extractAssistantText(message: ThreadAssistantMessage): string {
