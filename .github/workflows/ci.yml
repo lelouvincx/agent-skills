@@ -40,6 +40,7 @@ jobs:
             amp:
               - "amp/docs/**"
               - "amp/plugins/**"
+              - "amp/scripts/test-claude-design-subagent.ts"
               - "amp/scripts/validate-plugin-docs.py"
               - "amp/scripts/validate-rfcs.py"
               - "amp/scripts/test_validate_plugin_docs.py"
@@ -65,6 +66,7 @@ jobs:
               - ".github/workflows/ci.yml"
             plugins:
               - "amp/plugins/**"
+              - "amp/scripts/test-claude-design-subagent.ts"
               - "scripts/check-plugin-builds"
               - ".pre-commit-config.yaml"
               - ".github/workflows/ci.yml"

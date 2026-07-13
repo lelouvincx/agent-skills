@@ -321,12 +321,33 @@ export default function (amp: PluginAPI) {
 			const sessionId = parsed.ok ? extractClaudeSessionId(parsed.value) : undefined
 			const audit = writeDesignAuditLog({ threadID: ctx.thread.id, input, args, result, output, sessionId, startedAt, finishedAt })
 
-			if (result.timedOut) return failureJson(`Claude Design proxy timed out after ${input.timeoutMinutes} minute(s).`)
+			if (result.timedOut) {
+				return JSON.stringify({
+					ok: false,
+					error: `Claude Design proxy timed out after ${input.timeoutMinutes} minute(s).`,
+					sessionId,
+					auditLogPath: audit.auditPath,
+					rawTranscriptPath: audit.rawPath,
+				}, null, 2)
+			}
 			if (result.exitCode !== 0) {
-				return JSON.stringify({ ok: false, error: `Claude Code exited with code ${result.exitCode}.`, stderr: truncate(result.stderr, 4_000), auditLogPath: audit.auditPath }, null, 2)
+				return JSON.stringify({
+					ok: false,
+					error: `Claude Code exited with code ${result.exitCode}.`,
+					stderr: truncate(result.stderr, 4_000),
+					sessionId,
+					auditLogPath: audit.auditPath,
+					rawTranscriptPath: audit.rawPath,
+				}, null, 2)
 			}
 			if (!parsed.ok) {
-				return JSON.stringify({ ok: false, error: `Could not parse Claude CLI JSON: ${parsed.error}`, stdout: truncate(result.stdout, 4_000), auditLogPath: audit.auditPath }, null, 2)
+				return JSON.stringify({
+					ok: false,
+					error: `Could not parse Claude CLI JSON: ${parsed.error}`,
+					stdout: truncate(result.stdout, 4_000),
+					auditLogPath: audit.auditPath,
+					rawTranscriptPath: audit.rawPath,
+				}, null, 2)
 			}
 
 			return JSON.stringify({
