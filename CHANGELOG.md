@@ -31,6 +31,7 @@ and this project does not currently use versioned releases.
 
 ### Changed
 
+- Delegate side questions introduced with `btw` or triggered with `|btw` without displacing the parent task. [#88](https://github.com/lelouvincx/agent-skills/pull/88)
 - Scope agent guidance to the directories where it applies and shorten the root `AGENTS.md`. [#86](https://github.com/lelouvincx/agent-skills/pull/86)
 - Stress-test subagent delegation scenarios and require spawned agents to reconstruct parent intent through `read_thread`. [#83](https://github.com/lelouvincx/agent-skills/pull/83)
 - Update the RTK rewrite capability's verified stable version to `0.43.0`. [#82](https://github.com/lelouvincx/agent-skills/pull/82)
