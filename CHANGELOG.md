@@ -74,7 +74,7 @@ and this project does not currently use versioned releases.
 
 ### Fixed
 
-- Preserve Claude Design audit and opt-in raw transcript paths when the Claude Code proxy times out or fails, add deterministic regression coverage, and document the verified supervised design and response-mediated source handoff workflow.
+- Preserve Claude Design audit and opt-in raw transcript paths when the Claude Code proxy times out or fails, add deterministic regression coverage, and document the verified supervised design and response-mediated source handoff workflow. [#93](https://github.com/lelouvincx/agent-skills/pull/93)
 - Prevent `spawn_subagent` from launching `ultra` mode subagents. [#89](https://github.com/lelouvincx/agent-skills/pull/89)
 - Harden `spawn_subagent` lifecycle instructions, report formatting, parent-context reconstruction, and orphan-thread diagnostics. [#84](https://github.com/lelouvincx/agent-skills/pull/84)
 - Fix the `deepseek-v4-pro` Amp plugin prompt literal so the agent mode loads again. [#75](https://github.com/lelouvincx/agent-skills/pull/75)
