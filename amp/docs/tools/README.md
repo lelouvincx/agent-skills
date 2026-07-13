@@ -31,6 +31,7 @@ All active documents use `amp-artifact/v2`, which supports skills and plugin cap
 ### Agent-callable tools
 
 - [Claude Code Subagent](./claude-code-subagent.md)
+- [Claude Design Subagent](./claude-design-subagent.md)
 - [Label Skill/Plugin Usage](./label-skill-plugin-usage.md)
 - [Logseq: Log Current Task](./logseq-log-current-task.md)
 - [Pi Code Subagent](./pi-code-subagent.md)

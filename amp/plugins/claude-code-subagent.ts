@@ -29,6 +29,15 @@ interface ToolInput {
 	includeRawTranscript: boolean
 }
 
+interface DesignToolInput {
+	prompt: string
+	sessionId?: string
+	model: Model
+	timeoutMinutes: number
+	workingDirectory: string
+	includeRawTranscript: boolean
+}
+
 interface ClaudeRunResult {
 	exitCode: number | null
 	stdout: string
@@ -55,6 +64,9 @@ const SUBAGENT_ENV_FILE = process.env.AMP_CLAUDE_CODE_SUBAGENT_ENV_FILE
 
 const BUILTIN_ALLOWED_TOOLS = ['Read', 'Grep', 'Glob', 'LS']
 const BUILTIN_DENIED_TOOLS = ['Bash', 'Edit', 'Write', 'MultiEdit', 'NotebookEdit']
+const DESIGN_ALLOWED_TOOLS = ['Read', 'Grep', 'Glob', 'ToolSearch', 'DesignSync']
+const DESIGN_DENIED_TOOLS = ['Bash', 'Edit', 'Write', 'NotebookEdit']
+const DESIGN_MCP_TOOLS = 'mcp__claude-design__*'
 const SAFE_ENV_KEYS = ['HOME', 'PATH', 'SHELL', 'USER', 'TMPDIR', 'LANG', 'LC_ALL', 'TERM', 'XDG_CONFIG_HOME', 'XDG_CACHE_HOME']
 const SAFE_ENV_PREFIXES = ['AMP_', 'HERDR_']
 const SECRET_ENV_NAME_RE = /(TOKEN|KEY|SECRET|PASSWORD|CREDENTIAL|AUTH|COOKIE|BEARER)/i
@@ -255,6 +267,128 @@ export default function (amp: PluginAPI) {
 			}, null, 2)
 		},
 	})
+
+	amp.registerTool({
+		name: 'claude_design_subagent',
+		description: [
+			'Use Claude Code as a narrow authenticated proxy for Claude Design.',
+			'Call this tool ONLY when the user explicitly asks to use Claude Design.',
+			'It may create or modify cloud-hosted Claude Design projects, but it cannot run Bash or edit local files.',
+			'Pass the returned sessionId to continue the same design conversation after the user reviews the canvas.',
+			'Requires Claude Code 2.1.181+, Claude subscription login, and prior /design consent.',
+		].join(' '),
+		inputSchema: {
+			type: 'object',
+			properties: {
+				prompt: {
+					type: 'string',
+					description: 'Design task or feedback for Claude Code to execute through Claude Design.',
+				},
+				sessionId: {
+					type: 'string',
+					description: 'Optional Claude Code session ID returned by an earlier call. Use it to continue iterative work on the same design.',
+				},
+				model: {
+					type: 'string',
+					enum: ['opus', 'sonnet'],
+					description: 'Claude Code orchestration model. Defaults to opus; use sonnet for faster or lighter turns.',
+				},
+				timeoutMinutes: {
+					type: 'number',
+					description: 'Timeout in minutes. Defaults to 10; capped at 30.',
+				},
+				workingDirectory: {
+					type: 'string',
+					description: 'Repository whose local design-system files Claude may read. Defaults to the plugin process cwd.',
+				},
+				includeRawTranscript: {
+					type: 'boolean',
+					description: 'If true, store raw Claude CLI stdout/stderr in addition to the redacted audit log.',
+				},
+			},
+			required: ['prompt'],
+		},
+		async execute(rawInput, ctx) {
+			const input = normalizeDesignInput(rawInput)
+			if ('error' in input) return failureJson(input.error)
+
+			const args = buildDesignCommand(input)
+			const startedAt = new Date()
+			const result = await runClaude(args, buildDesignPrompt(input), resolve(input.workingDirectory), input.timeoutMinutes * 60_000, undefined, false)
+			const finishedAt = new Date()
+			const parsed = parseJson(result.stdout)
+			const output = parsed.ok ? extractResultCandidate(parsed.value) : undefined
+			const sessionId = parsed.ok ? extractClaudeSessionId(parsed.value) : undefined
+			const audit = writeDesignAuditLog({ threadID: ctx.thread.id, input, args, result, output, sessionId, startedAt, finishedAt })
+
+			if (result.timedOut) return failureJson(`Claude Design proxy timed out after ${input.timeoutMinutes} minute(s).`)
+			if (result.exitCode !== 0) {
+				return JSON.stringify({ ok: false, error: `Claude Code exited with code ${result.exitCode}.`, stderr: truncate(result.stderr, 4_000), auditLogPath: audit.auditPath }, null, 2)
+			}
+			if (!parsed.ok) {
+				return JSON.stringify({ ok: false, error: `Could not parse Claude CLI JSON: ${parsed.error}`, stdout: truncate(result.stdout, 4_000), auditLogPath: audit.auditPath }, null, 2)
+			}
+
+			return JSON.stringify({
+				ok: true,
+				model: input.model,
+				result: output,
+				sessionId,
+				auditLogPath: audit.auditPath,
+				rawTranscriptPath: audit.rawPath,
+			}, null, 2)
+		},
+	})
+}
+
+function normalizeDesignInput(raw: Record<string, unknown>): DesignToolInput | { error: string } {
+	if (typeof raw.prompt !== 'string' || raw.prompt.trim().length === 0) {
+		return { error: 'prompt is required and must be a non-empty string.' }
+	}
+	const workingDirectory = typeof raw.workingDirectory === 'string' && raw.workingDirectory.trim()
+		? expandHome(raw.workingDirectory.trim())
+		: process.cwd()
+	if (!existsSync(workingDirectory)) return { error: `workingDirectory does not exist: ${workingDirectory}` }
+
+	const sessionId = typeof raw.sessionId === 'string' && raw.sessionId.trim() ? raw.sessionId.trim() : undefined
+	if (sessionId && !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(sessionId)) {
+		return { error: 'sessionId must be a valid UUID returned by Claude Code.' }
+	}
+
+	return {
+		prompt: raw.prompt.trim(),
+		sessionId,
+		model: raw.model === 'sonnet' ? 'sonnet' : DEFAULT_MODEL,
+		timeoutMinutes: clampTimeout(raw.timeoutMinutes),
+		workingDirectory,
+		includeRawTranscript: raw.includeRawTranscript === true || process.env.AMP_CLAUDE_CODE_SUBAGENT_DEBUG === '1',
+	}
+}
+
+function buildDesignCommand(input: DesignToolInput): string[] {
+	const args = [
+		'-p',
+		'--model', input.model,
+		'--output-format', 'json',
+		'--permission-mode', 'dontAsk',
+		'--tools', DESIGN_ALLOWED_TOOLS.join(','),
+		'--allowedTools', [...DESIGN_ALLOWED_TOOLS, DESIGN_MCP_TOOLS].join(','),
+		'--disallowedTools', DESIGN_DENIED_TOOLS.join(','),
+	]
+	if (input.sessionId) args.push('--resume', input.sessionId)
+	return args
+}
+
+function buildDesignPrompt(input: DesignToolInput): string {
+	return [
+		'You are Claude Code acting as a narrow proxy between Amp and Claude Design.',
+		'Use ToolSearch and Claude Design tools to complete the requested design task.',
+		'You may read local files and use DesignSync when needed, but do not run Bash or modify local files.',
+		'Return a concise summary of what changed, plus every relevant Claude Design project URL and ID.',
+		'',
+		'Design task from Amp:',
+		input.prompt,
+	].join('\n')
 }
 
 function normalizeInput(raw: Record<string, unknown>): ToolInput | { error: string } {
@@ -414,13 +548,13 @@ function schemaForMode(mode: Mode): Record<string, unknown> {
 	}
 }
 
-function runClaude(args: string[], prompt: string, cwd: string, timeoutMs: number, githubProfile?: string): Promise<ClaudeRunResult> {
+function runClaude(args: string[], prompt: string, cwd: string, timeoutMs: number, githubProfile?: string, useConfiguredEnvFile = true): Promise<ClaudeRunResult> {
 	return new Promise((resolveRun) => {
 		const env = sanitizedSubagentEnv(githubProfile ? { AMP_GITHUB_PROFILE: githubProfile } : undefined)
 		// Several Claude CLI options used above are variadic (`--mcp-config`,
 		// `--add-dir`, `--allowedTools`). Terminate option parsing explicitly so
 		// the task prompt is never consumed as another option value.
-		const command = withOptionalOpRun('claude', [...args, '--', prompt], SUBAGENT_ENV_FILE)
+		const command = withOptionalOpRun('claude', [...args, '--', prompt], useConfiguredEnvFile ? SUBAGENT_ENV_FILE : undefined)
 		const child = spawn(command.bin, command.args, {
 			cwd,
 			env,
@@ -477,6 +611,21 @@ function extractResultCandidate(value: unknown): unknown {
 	}
 	if (value && typeof value === 'object' && 'result' in value) return (value as { result: unknown }).result
 	return value
+}
+
+function extractClaudeSessionId(value: unknown): string | undefined {
+	if (Array.isArray(value)) {
+		for (let i = value.length - 1; i >= 0; i--) {
+			const item = value[i]
+			if (item && typeof item === 'object' && typeof (item as { session_id?: unknown }).session_id === 'string') {
+				return (item as { session_id: string }).session_id
+			}
+		}
+	}
+	if (value && typeof value === 'object' && typeof (value as { session_id?: unknown }).session_id === 'string') {
+		return (value as { session_id: string }).session_id
+	}
+	return undefined
 }
 
 function validateModePayload(payload: unknown, mode: Mode): string | null {
@@ -666,6 +815,51 @@ function writeAuditLog(details: {
 	}
 
 	writePrivateFile(auditPath, JSON.stringify(audit, null, 2))
+	if (rawPath) {
+		writePrivateFile(rawPath, JSON.stringify({
+			warning: 'Raw Claude CLI output may contain sensitive context.',
+			stdout: details.result.stdout,
+			stderr: details.result.stderr,
+		}, null, 2))
+	}
+	return { auditPath, rawPath }
+}
+
+function writeDesignAuditLog(details: {
+	threadID: string
+	input: DesignToolInput
+	args: string[]
+	result: ClaudeRunResult
+	output: unknown
+	sessionId?: string
+	startedAt: Date
+	finishedAt: Date
+}): { auditPath: string; rawPath?: string } {
+	mkdirSync(AUDIT_DIR, { recursive: true })
+	const stamp = details.startedAt.toISOString().replace(/[:.]/g, '-')
+	const base = `${stamp}-design-${details.threadID}`.replace(/[^a-zA-Z0-9_.-]/g, '_')
+	const auditPath = join(AUDIT_DIR, `${base}.json`)
+	const rawPath = details.input.includeRawTranscript ? join(AUDIT_DIR, `${base}.raw.json`) : undefined
+
+	writePrivateFile(auditPath, JSON.stringify({
+		threadID: details.threadID,
+		mode: 'design',
+		model: details.input.model,
+		cwd: resolve(details.input.workingDirectory),
+		sessionId: details.sessionId,
+		timeoutMinutes: details.input.timeoutMinutes,
+		startedAt: details.startedAt.toISOString(),
+		finishedAt: details.finishedAt.toISOString(),
+		durationMs: details.finishedAt.getTime() - details.startedAt.getTime(),
+		exitCode: details.result.exitCode,
+		timedOut: details.result.timedOut,
+		args: details.args,
+		prompt: redact(details.input.prompt),
+		result: redactObject(details.output),
+		stdout: redact(truncate(details.result.stdout, 30_000)),
+		stderr: redact(truncate(details.result.stderr, 10_000)),
+	}, null, 2))
+
 	if (rawPath) {
 		writePrivateFile(rawPath, JSON.stringify({
 			warning: 'Raw Claude CLI output may contain sensitive context.',
