@@ -11,10 +11,12 @@ import type {
 	PluginCommandContext,
 	ThreadAssistantMessage,
 	ThreadID,
+	ThreadState,
 } from '@ampcode/plugin'
 
 const LOGSEQ_REPO = process.env.AMP_LOGSEQ_GRAPH_DIR ?? '/Users/lelouvincx/Developer/second-brain-logseq'
 const WORKER_MODE = 'high' as BuiltinAgentMode
+const WORKER_STARTUP_TIMEOUT_MS = 15_000
 const WORKER_TIMEOUT_MS = 10 * 60 * 1000
 const WORKER_WAIT_RETRY_DELAY_MS = 1_000
 const MAX_RESULT_CHARS = 500
@@ -23,6 +25,10 @@ const LOGSEQ_WORKER_PROMPT_PREFIX = '[logseq-manual-log]'
 
 type LogContext = Pick<PluginCommandContext, 'thread' | '$'>
 type WorkerThread = {
+	state: {
+		get(): Promise<ThreadState>
+		subscribe(onNext: (state: ThreadState) => void): { unsubscribe(): void }
+	}
 	waitForResponse(options: { timeoutMs: number }): Promise<ThreadAssistantMessage>
 }
 
@@ -131,14 +137,18 @@ async function logCurrentTask(
 		show: false,
 	})
 	workerThreadIDs.add(workerThread.id)
+	const startupGuard = watchWorkerStartup(workerThread)
 
 	try {
-		await workerThread.appendUserMessage({
-			type: 'user-message',
-			content: buildPrompt(parentThreadID, workerThread.id, hint),
-		})
+		await Promise.race([
+			workerThread.appendUserMessage({
+				type: 'user-message',
+				content: buildPrompt(parentThreadID, workerThread.id, hint),
+			}),
+			startupGuard.promise,
+		])
 
-		const response = await waitForWorkerResponse(workerThread)
+		const response = await waitForWorkerResponse(workerThread, startupGuard)
 		const summary = extractAssistantText(response) || 'Logseq worker finished.'
 		const newTitle = extractThreadTitle(summary)
 		if (!newTitle) {
@@ -160,17 +170,25 @@ async function logCurrentTask(
 		return `Logseq worker ${workerThread.id} finished, renamed this thread to ${newTitle}, and was archived.\n${truncate(summary, maxResultChars)}`
 	} catch (error) {
 		return `Logseq worker ${workerThread.id} failed or timed out; leaving it unarchived for inspection.\n${errorMessage(error)}`
+	} finally {
+		startupGuard.cancel()
 	}
 }
 
-async function waitForWorkerResponse(workerThread: WorkerThread): Promise<ThreadAssistantMessage> {
+async function waitForWorkerResponse(
+	workerThread: WorkerThread,
+	startupGuard: ReturnType<typeof watchWorkerStartup>,
+): Promise<ThreadAssistantMessage> {
 	const deadline = Date.now() + WORKER_TIMEOUT_MS
 	let lastError: unknown
 
 	while (Date.now() < deadline) {
 		const remainingMs = deadline - Date.now()
 		try {
-			return await workerThread.waitForResponse({ timeoutMs: remainingMs })
+			return await Promise.race([
+				workerThread.waitForResponse({ timeoutMs: remainingMs }),
+				startupGuard.promise,
+			])
 		} catch (error) {
 			lastError = error
 			if (!isThreadMessagesTimeout(error)) {
@@ -181,6 +199,47 @@ async function waitForWorkerResponse(workerThread: WorkerThread): Promise<Thread
 	}
 
 	throw lastError instanceof Error ? lastError : new Error('Logseq worker timed out')
+}
+
+function watchWorkerStartup(workerThread: WorkerThread): { promise: Promise<never>; cancel(): void } {
+	let active = true
+	let subscription: { unsubscribe(): void } | undefined
+	let timeout: ReturnType<typeof setTimeout> | undefined
+	let rejectStartup: (error: Error) => void = () => {}
+
+	const cancel = () => {
+		if (!active) return
+		active = false
+		if (timeout) clearTimeout(timeout)
+		subscription?.unsubscribe()
+	}
+	const checkState = (state: ThreadState) => {
+		if (!active) return
+		if (state === 'error') {
+			cancel()
+			rejectStartup(new Error('Logseq high-mode worker entered an error state before starting'))
+		} else if (state === 'running' || state === 'awaiting-approval') {
+			cancel()
+		}
+	}
+	const promise = new Promise<never>((_, reject) => {
+		rejectStartup = reject
+		subscription = workerThread.state.subscribe(checkState)
+		if (!active) {
+			subscription.unsubscribe()
+		} else {
+			timeout = setTimeout(() => {
+				cancel()
+				reject(new Error(`Logseq high-mode worker did not start within ${WORKER_STARTUP_TIMEOUT_MS / 1000} seconds`))
+			}, WORKER_STARTUP_TIMEOUT_MS)
+		}
+		void workerThread.state.get().then(checkState, (error) => {
+			cancel()
+			reject(error)
+		})
+	})
+
+	return { promise, cancel }
 }
 
 function isThreadMessagesTimeout(error: unknown): boolean {

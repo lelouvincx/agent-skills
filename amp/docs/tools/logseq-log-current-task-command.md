@@ -92,7 +92,7 @@ The command requires an active thread and accepts no JSON input. It opens `Log c
 
 ## Behavior
 
-The command checks for an active thread, prompts for an optional hint, and calls the plugin's shared logging flow. That flow starts a hidden built-in `high` worker without seeding recent parent messages. The worker must reconstruct parent context with `read_thread`; if that fails, it stops without editing Logseq. Oracle calls from the worker are rejected. After a successful Logseq update, the flow derives a `[Project] task title`, renames the parent thread, and archives the worker.
+The command checks for an active thread, prompts for an optional hint, and calls the plugin's shared logging flow. That flow starts a hidden built-in `high` worker without seeding recent parent messages. If the worker cannot leave its initial idle state within 15 seconds, including when `high` mode cannot start because the account lacks credits, the flow fails instead of waiting for the full worker timeout. The worker must reconstruct parent context with `read_thread`; if that fails, it stops without editing Logseq. Oracle calls from the worker are rejected. After a successful Logseq update, the flow derives a `[Project] task title`, renames the parent thread, and archives the worker.
 
 ## Permissions and side effects
 
@@ -110,4 +110,4 @@ Choose `logseq: Log current task` from the command palette, optionally enter `up
 
 ## Maintenance notes
 
-Update this document when the command ID, palette prompt, notifications, worker mode, context reconstruction, Oracle guard, or shared Logseq flow changes. Keep the related agent-tool document scoped to `amp.registerTool`.
+Update this document when the command ID, palette prompt, notifications, worker mode, startup timeout, context reconstruction, Oracle guard, or shared Logseq flow changes. Keep the related agent-tool document scoped to `amp.registerTool`.
