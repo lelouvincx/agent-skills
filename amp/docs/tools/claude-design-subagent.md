@@ -131,7 +131,16 @@ Design-system attachment remains qualified: the ID was requested during creation
 
 Read-only source handoff is verified: a fresh proxy session can reopen a known project and return exact file content in its response. The proxy cannot export to the local filesystem because it intentionally has no `Write` or `Bash` tool, and Claude Design write tools target cloud projects. Amp must materialize returned source locally in a separate authorized step. This was verified for a single self-contained HTML deliverable; sufficiency for multi-file or design-system-bound projects remains qualified.
 
-### Supervised workflow
+### Supervised user-Amp workflow
+
+| Stage | User | Amp |
+| --- | --- | --- |
+| Brief | Provides the goal, users, required screens or states, constraints, and acceptance criteria. | Narrows local context and confirms whether the target is a new or existing project. |
+| Identity | Confirms the intended project and design system. | Records the exact project name, ID, URL, design-system name and ID, Claude Code session ID, and audit path. |
+| Cloud write | Approves the bounded mutation when required. | States the intended mutation before writing and prevents broad, destructive, or multi-project changes without fresh confirmation. |
+| Review | Inspects the visible canvas and gives concrete delta feedback. | Reads back the same project ID after every mutation and reports verified files or markers. |
+| Approval | Accepts a direction and names any exceptions. | Records acceptance criteria, decisions, unresolved feedback, and revision context in the handoff packet. |
+| Implementation | Authorizes the local implementation scope. | Requests exact source through the proxy response, then writes and validates it locally with normal Amp tools. |
 
 1. The user explicitly opts into Claude Design and names the intended new or existing cloud project.
 2. Amp limits `workingDirectory` and local context to the files needed for the design task.
@@ -144,9 +153,15 @@ Read-only source handoff is verified: a fresh proxy session can reopen a known p
 9. Approval records the project ID or URL, design-system ID, current revision or time, acceptance criteria, unresolved exceptions, and relevant decisions.
 10. For implementation handoff, Amp asks the proxy to read and return exact project source, then writes that source locally with normal Amp tools in a separately authorized step. Do not ask the proxy to export to a local path.
 
+The normal feedback loop is: Amp applies one bounded cloud delta, reads it back, the user reviews the canvas, and Amp sends only the next requested delta while explicitly passing the prior `sessionId` and project identity. If the user edits the canvas directly or leaves comments, they summarize those changes to Amp until automatic canvas and comment ingestion are verified.
+
 For a new Amp thread, pass a handoff packet containing the project ID or URL, design-system ID, approval state, current revision or time, key decisions, unresolved feedback, expected files or markers, and the prior Claude Code `sessionId` when conversational continuity is required. A project URL recovers durable canvas identity but does not recover the prior Claude Code conversation.
 
 If a mutating call times out or returns an ambiguous result, preserve the audit path and session ID, inspect the target project before retrying, and apply only the missing delta. Mutation idempotency is not guaranteed.
+
+Recommended kickoff prompt:
+
+> Use Claude Design to create a new `<project name>` project using `<exact design-system name>`. Read `<relevant local paths>` for context. Create only one project and return its stable ID and URL. Before writing, summarize the intended cloud mutation. After writing, read back the project files and ask me to review the canvas. Preserve the returned Claude Code session ID for iteration.
 
 ## Permissions and side effects
 
