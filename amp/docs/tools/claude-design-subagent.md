@@ -87,7 +87,7 @@ tags:
 
 ## Summary
 
-`claude_design_subagent` lets Amp create, inspect, and refine Claude Design projects by running Claude Code as a narrow authenticated proxy. It exists because Amp cannot currently connect directly to Claude Design's Streamable HTTP and Claude-account authorization flow.
+`claude_design_subagent` lets Amp create, inspect, and refine Claude Design cloud projects through Claude Code's authenticated first-party integration. It is a narrow proxy: Claude may read selected local context, but it cannot run shell commands or write local files.
 
 ## Invocation
 
@@ -95,7 +95,10 @@ tags:
 - Registered with: `amp.registerTool`
 - Tool name: `claude_design_subagent`
 - Plugin file: `plugins/claude-code-subagent.ts`
-- Trigger rule: call only when the user explicitly asks to use Claude Design
+
+Call only after the user explicitly asks to use Claude Design. Use it for a named new or existing Claude Design project: cloud creation, inspection, bounded refinement, or exact source read-back.
+
+Use normal Amp tools instead when the user wants only local implementation, has not opted into a cloud write, or expects the proxy itself to write or export local files. Treat direct canvas/comment synchronization and `DesignSync` as experimental, not as reasons to invoke the tool automatically.
 
 ## Contract
 
@@ -115,21 +118,21 @@ Optional inputs:
 | `workingDirectory` | `string` | plugin process cwd | Repository whose design system or local files Claude may read. |
 | `includeRawTranscript` | `boolean` | `false` | Stores raw Claude CLI output for debugging. |
 
-Success output is JSON containing `ok`, `result`, `sessionId`, model metadata, and the audit path. Pass the returned `sessionId` to a later call to continue the same design conversation.
+Success output is JSON containing `ok`, `result`, `sessionId`, model metadata, and `auditLogPath`. A call is complete when Amp has recorded the audit path and session ID, and—for project work—validated the returned project ID or URL against the intended project.
 
 ## Behavior
 
-The tool runs `claude -p` with Claude Code's normal user configuration so its first-party Claude Design integration and account consent remain available. It enables only local read tools, `ToolSearch`, `DesignSync`, and the `mcp__claude-design__*` namespace. Claude Code discovers deferred Design tools through `ToolSearch`, performs the requested operation, and returns a concise result that includes project URLs or IDs when available.
+The tool runs `claude -p` with Claude Code's normal user configuration so its first-party Claude Design integration and account consent remain available. It allows only local read tools, `ToolSearch`, `DesignSync`, and `mcp__claude-design__*`; it denies `Bash`, `Edit`, `Write`, and `NotebookEdit`. Claude Code discovers deferred Design tools through `ToolSearch` and returns project IDs, URLs, or source in its response when requested.
 
-The wrapper intentionally sanitizes the child environment. In particular, ambient `ANTHROPIC_API_KEY` and similar secret-looking variables are not inherited because API-key authentication disables claude.ai connectors, including Claude Design. Claude Code uses the user's existing Claude subscription login instead.
+The child receives a sanitized environment. Ambient `ANTHROPIC_API_KEY` and similar secret-looking variables are not inherited because API-key authentication disables claude.ai connectors, including Claude Design. Authentication uses the user's existing Claude subscription login.
 
 ### Verification status
 
-As of 2026-07-13, local registration, command construction, session validation, permission boundaries, environment sanitization, audit behavior, authentication, and read-only project and design-system discovery are verified. A disposable-project test also verified one-project creation with an explicitly requested design-system ID, stable ID and URL recovery, one project-scoped file edit and read-back, continuation with an explicitly passed Claude Code session ID, and fresh-session recovery from a complete handoff packet.
+As of 2026-07-13, the cloud lifecycle is verified: project and design-system discovery; one-project creation with a requested design-system ID; stable ID and URL recovery; one project-scoped edit and read-back; continuation with an explicitly passed Claude Code session ID; and fresh-session recovery from a complete handoff packet. Registration, command construction, session validation, permission boundaries, environment sanitization, audit behavior, and authentication are also verified.
 
 Design-system attachment remains qualified: the ID was requested during creation and reflected in the project-bound design prompt, but Claude Design exposes no independent project field for reading the attachment back. Direct canvas-edit synchronization and inline-comment ingestion remain inconclusive: Helium's approval-only automation target was isolated behind a Cloudflare challenge, so no UI mutation was attempted. `DesignSync` remains experimental.
 
-Read-only source handoff is verified: a fresh proxy session can reopen a known project and return exact file content in its response. The proxy cannot export to the local filesystem because it intentionally has no `Write` or `Bash` tool, and Claude Design write tools target cloud projects. Amp must materialize returned source locally in a separate authorized step. This was verified for a single self-contained HTML deliverable; sufficiency for multi-file or design-system-bound projects remains qualified.
+Response-mediated source handoff is verified: a fresh proxy session can reopen a known project and return exact file content. Amp then materializes that response with normal local tools in a separately authorized step. This was verified for one self-contained HTML deliverable; sufficiency for multi-file or design-system-bound projects remains qualified.
 
 ### Supervised user-Amp workflow
 
@@ -147,39 +150,24 @@ Read-only source handoff is verified: a fresh proxy session can reopen a known p
                              ╰──────────────╯    via response   ╰───────────────╯
 ```
 
-| Stage | User | Amp |
+| Stage | User | Amp completion criterion |
 | --- | --- | --- |
-| Brief | Provides the goal, users, required screens or states, constraints, and acceptance criteria. | Narrows local context and confirms whether the target is a new or existing project. |
-| Identity | Confirms the intended project and design system. | Records the exact project name, ID, URL, design-system name and ID, Claude Code session ID, and audit path. |
-| Cloud write | Approves the bounded mutation when required. | States the intended mutation before writing and prevents broad, destructive, or multi-project changes without fresh confirmation. |
-| Review | Inspects the visible canvas and gives concrete delta feedback. | Reads back the same project ID after every mutation and reports verified files or markers. |
-| Approval | Accepts a direction and names any exceptions. | Records acceptance criteria, decisions, unresolved feedback, and revision context in the handoff packet. |
-| Implementation | Authorizes the local implementation scope. | Requests exact source through the proxy response, then writes and validates it locally with normal Amp tools. |
+| Brief | Provides the goal, users, screens or states, constraints, and acceptance criteria; explicitly opts into Claude Design. | Confirms new versus existing project and limits `workingDirectory` and local reads to relevant paths. |
+| Identity | Confirms the intended project and design system. | Records exact project name, ID or URL, design-system name and ID, Claude Code session ID, and audit path. Do not rely only on default design-system status. |
+| Cloud write | Approves the stated mutation. | Applies one bounded delta. Broad, destructive, shared-project, or multi-project work gets fresh confirmation. |
+| Review | Inspects the canvas and reports concrete deltas, including any direct canvas edits or comments. | Reads back the same project ID and reports verified files or markers. A prose success response alone does not verify cloud state. |
+| Approval | Accepts a direction and names exceptions. | Records project identity, design-system ID, revision or time, criteria, decisions, and unresolved feedback in the handoff packet. |
+| Implementation | Authorizes the local implementation scope. | Requests exact source in the proxy response, writes it with normal Amp tools, and validates the local result. |
 
-1. The user explicitly opts into Claude Design and names the intended new or existing cloud project.
-2. Amp limits `workingDirectory` and local context to the files needed for the design task.
-3. Amp resolves and records the exact design-system name and ID instead of relying only on default status.
-4. Before the first mutation, Amp summarizes the intended cloud write. Broad, destructive, shared-project, or multi-project changes require fresh confirmation.
-5. Amp invokes this tool and records the returned result, Claude Code `sessionId`, audit path, and validated project ID and URL when available.
-6. After each mutation, Amp reads back the same project ID and asks the user to confirm the visible canvas. A successful prose response alone is not proof of cloud state.
-7. For iteration, Amp explicitly passes the prior `sessionId`, project ID or URL, and a concise decision summary. The plugin stores no Amp-thread-to-Claude-session mapping.
-8. Direct canvas edits and comments must be summarized by the user until automatic synchronization and comment ingestion are verified. Amp tells Claude to reopen the current project before applying another delta.
-9. Approval records the project ID or URL, design-system ID, current revision or time, acceptance criteria, unresolved exceptions, and relevant decisions.
-10. For implementation handoff, Amp asks the proxy to read and return exact project source, then writes that source locally with normal Amp tools in a separately authorized step. Do not ask the proxy to export to a local path.
+For each iteration, pass the prior `sessionId`, project ID or URL, and a concise decision summary. The plugin stores no Amp-thread-to-Claude-session mapping. Tell Claude to reopen the identified project before applying the next delta. Until synchronization is verified, the user must summarize direct canvas edits and comments.
 
-The normal feedback loop is: Amp applies one bounded cloud delta, reads it back, the user reviews the canvas, and Amp sends only the next requested delta while explicitly passing the prior `sessionId` and project identity. If the user edits the canvas directly or leaves comments, they summarize those changes to Amp until automatic canvas and comment ingestion are verified.
+For a new Amp thread or fresh Claude session, provide a handoff packet with project ID or URL, design-system ID, approval state, revision or time, key decisions, unresolved feedback, expected files or markers, and the prior `sessionId` only when conversational continuity is required. The project URL recovers canvas identity; only the session ID resumes the prior Claude Code conversation.
 
-For a new Amp thread, pass a handoff packet containing the project ID or URL, design-system ID, approval state, current revision or time, key decisions, unresolved feedback, expected files or markers, and the prior Claude Code `sessionId` when conversational continuity is required. A project URL recovers durable canvas identity but does not recover the prior Claude Code conversation.
-
-If a mutating call times out or returns an ambiguous result, preserve the audit path and session ID, inspect the target project before retrying, and apply only the missing delta. Mutation idempotency is not guaranteed.
-
-Recommended kickoff prompt:
-
-> Use Claude Design to create a new `<project name>` project using `<exact design-system name>`. Read `<relevant local paths>` for context. Create only one project and return its stable ID and URL. Before writing, summarize the intended cloud mutation. After writing, read back the project files and ask me to review the canvas. Preserve the returned Claude Code session ID for iteration.
+If a mutating call times out or is ambiguous, preserve its audit path and session ID, inspect the target project, then apply only the missing delta. Mutation idempotency is not guaranteed.
 
 ## Permissions and side effects
 
-Claude may read the selected working directory and create or modify Claude Design cloud projects. It cannot run shell commands or edit local files. `DesignSync` may read local design-system files and sync their representation to Claude Design.
+Claude may read the selected working directory and create or modify Claude Design cloud projects. `includeRawTranscript: true` stores sensitive raw stdout and stderr; use it only for necessary debugging. `DesignSync` may read local design-system files and sync their representation to Claude Design, but remains experimental.
 
 Setup is a one-time local prerequisite:
 
@@ -193,21 +181,30 @@ Claude Code 2.1.181 or newer is required. Run the consent command without an amb
 
 ## Examples
 
-Create a project:
+Create one identified project and establish the review loop:
 
 ```json
 {
-  "prompt": "Create three responsive dashboard directions using this repository's design system. Return the project URL and summarize each direction.",
+  "prompt": "Use Claude Design to create exactly one project named <project name> with design-system ID <ID>. Read only <paths> for context. Before writing, summarize the cloud mutation. Return the stable project ID and URL, then read back the project files for review.",
   "workingDirectory": "/path/to/project"
 }
 ```
 
-Continue after visual review:
+Apply one delta after visual review:
 
 ```json
 {
-  "prompt": "Continue the second direction. Tighten the information density and improve keyboard focus states.",
+  "prompt": "Reopen project <ID or URL>. The approved direction is <decision>. Apply only this delta: tighten information density and improve keyboard focus states. Read back the changed files or markers.",
   "sessionId": "<session ID returned by the first call>",
+  "workingDirectory": "/path/to/project"
+}
+```
+
+Recover source in a fresh session for an authorized local handoff:
+
+```json
+{
+  "prompt": "Open project <ID or URL>. Current approval: <state>; decisions: <summary>; unresolved feedback: <items>. Return the exact complete content of <file> in the response. Do not attempt a local export.",
   "workingDirectory": "/path/to/project"
 }
 ```
@@ -218,7 +215,8 @@ Continue after visual review:
 - Claude Design is disconnected: remove ambient API-key authentication and run `/design consent` using the Claude subscription login.
 - Design tool denied in `dontAsk` mode: confirm the wrapper passes `ToolSearch,mcp__claude-design__*` through `--allowedTools`.
 - Enterprise account: ask an administrator to enable Claude Design.
-- Wrong design context: omit `sessionId` to start a fresh Claude Code session.
+- Wrong design context: stop the mutation, omit `sessionId` to start fresh, and provide the complete handoff packet with the intended project ID or URL.
+- Timeout or ambiguous mutation: use the audit path and session ID to inspect the project before retrying; request only the missing delta.
 
 ## Maintenance notes
 
