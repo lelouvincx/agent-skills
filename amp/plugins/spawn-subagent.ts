@@ -5,6 +5,8 @@
 // once no follow-up is needed.
 
 import type { BuiltinAgentMode, PluginAPI } from '@ampcode/plugin'
+import { resolve } from 'node:path'
+import { statSync } from 'node:fs'
 
 const DEFAULT_MODE = 'medium' as BuiltinAgentMode
 const BUILTIN_MODES = new Set(['low', 'medium', 'high'])
@@ -46,6 +48,7 @@ export default function (amp: PluginAPI) {
 			'Use this when the current thread is acting as the design/coordinator thread and wants a subagent to execute one clear slice while the main thread keeps iterating on the broader design.',
 			'Give the subagent concrete scope, constraints, expected output, and validation instructions. Do not wait for the subagent.',
 			'The subagent is instructed to privately reconstruct parent-thread intent before executing so incidental recent context does not replace the original task intent.',
+			"Choose cwd when another directory is more appropriate for the bounded task; it defaults to the parent thread's cwd.",
 			'The subagent is instructed to report back to this thread with a structured summary via send_to_thread, decide whether parent follow-up is required, then archive itself with archive_current_thread once no required follow-up remains.',
 			"Defaults to Amp's built-in medium mode.",
 		].join(' '),
@@ -61,6 +64,10 @@ export default function (amp: PluginAPI) {
 					enum: ['low', 'medium', 'high'],
 					description: 'Optional built-in Amp agent mode for the subagent. Defaults to medium.',
 				},
+				cwd: {
+					type: 'string',
+					description: "Working directory the subagent should use. Defaults to the parent thread's cwd.",
+				},
 			},
 			required: ['instructions'],
 		},
@@ -71,6 +78,7 @@ export default function (amp: PluginAPI) {
 				throw new Error('instructions are required')
 			}
 			const mode = normalizeMode(input.mode)
+			const cwd = normalizeCwd(input.cwd)
 
 			const subagent = amp.getBuiltinAgent(mode)
 			const thread = await subagent.createThread({ parentThreadID: ctx.thread.id })
@@ -78,6 +86,8 @@ export default function (amp: PluginAPI) {
 			const message = `${SUBAGENT_PROMPT_PREFIX}${ctx.thread.id}.
 
 The parent thread is the design/coordinator thread and owns the broader architectural intent. Your job is to execute only the bounded task below, preserve the stated constraints, and avoid speculative abstractions or unrelated cleanup.
+
+Use ${JSON.stringify(cwd)} as your working directory for file reads, searches, shell commands, edits, and validation. Do not assume the task belongs in another directory unless the reconstructed parent intent explicitly redirects you.
 
 Before executing, first perform a private intent-reconstruction step. You must use read_thread on ${ctx.thread.id}. Do not fall back to inspecting any partial parent context available to you. If read_thread is unavailable or fails, report that you are blocked and do not execute the bounded task. Infer and keep distinct: (a) the original user intent, (b) any later user redirect, (c) the latest coherent requested outcome, and (d) how this bounded subagent task supports that outcome. Do not write anything yet.
 
@@ -141,4 +151,18 @@ function normalizeMode(raw: unknown): BuiltinAgentMode {
 		throw new Error('mode must be one of: low, medium, high')
 	}
 	return mode as BuiltinAgentMode
+}
+
+function normalizeCwd(raw: unknown): string {
+	const cwd = resolve(String(raw || process.cwd()).trim() || process.cwd())
+	let isDirectory = false
+	try {
+		isDirectory = statSync(cwd).isDirectory()
+	} catch {
+		throw new Error(`cwd does not exist: ${cwd}`)
+	}
+	if (!isDirectory) {
+		throw new Error(`cwd is not a directory: ${cwd}`)
+	}
+	return cwd
 }
