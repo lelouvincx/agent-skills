@@ -11,14 +11,16 @@ import type {
 	PluginCommandContext,
 	ThreadAssistantMessage,
 	ThreadID,
+	ThreadMessage,
 	ThreadState,
 } from '@ampcode/plugin'
 
 const LOGSEQ_REPO = process.env.AMP_LOGSEQ_GRAPH_DIR ?? '/Users/lelouvincx/Developer/second-brain-logseq'
 const WORKER_MODE = 'high' as BuiltinAgentMode
 const WORKER_STARTUP_TIMEOUT_MS = 15_000
-const WORKER_TIMEOUT_MS = 10 * 60 * 1000
+const WORKER_TIMEOUT_MS = 5 * 60 * 1000
 const WORKER_WAIT_RETRY_DELAY_MS = 1_000
+const WORKER_COMPLETION_GRACE_MS = 15_000
 const MAX_RESULT_CHARS = 500
 const MAX_NOTIFICATION_CHARS = 500
 const LOGSEQ_WORKER_PROMPT_PREFIX = '[logseq-manual-log]'
@@ -30,6 +32,7 @@ type WorkerThread = {
 		subscribe(onNext: (state: ThreadState) => void): { unsubscribe(): void }
 	}
 	waitForResponse(options: { timeoutMs: number }): Promise<ThreadAssistantMessage>
+	messages(options: { from: 'end'; limit: number; roles: ['assistant'] }): Promise<ThreadMessage[]>
 }
 
 export default function (amp: PluginAPI) {
@@ -175,7 +178,7 @@ async function logCurrentTask(
 	}
 }
 
-async function waitForWorkerResponse(
+export async function waitForWorkerResponse(
 	workerThread: WorkerThread,
 	startupGuard: ReturnType<typeof watchWorkerStartup>,
 ): Promise<ThreadAssistantMessage> {
@@ -191,14 +194,45 @@ async function waitForWorkerResponse(
 			])
 		} catch (error) {
 			lastError = error
+			if (isWorkerResponseTimeout(error)) {
+				break
+			}
 			if (!isThreadMessagesTimeout(error)) {
 				throw error
 			}
+			const completedResponse = await getCompletedWorkerResponse(workerThread)
+			if (completedResponse) return completedResponse
 			await sleep(Math.min(WORKER_WAIT_RETRY_DELAY_MS, Math.max(0, deadline - Date.now())))
 		}
 	}
 
-	throw lastError instanceof Error ? lastError : new Error('Logseq worker timed out')
+	const completedResponse = await getCompletedWorkerResponse(workerThread)
+	if (completedResponse) return completedResponse
+
+	try {
+		return await Promise.race([
+			workerThread.waitForResponse({ timeoutMs: WORKER_COMPLETION_GRACE_MS }),
+			startupGuard.promise,
+		])
+	} catch (error) {
+		if (!isThreadMessagesTimeout(error) && !isWorkerResponseTimeout(error)) {
+			throw error
+		}
+		const settledResponse = await getCompletedWorkerResponse(workerThread)
+		if (settledResponse) return settledResponse
+		throw lastError instanceof Error ? lastError : error
+	}
+}
+
+async function getCompletedWorkerResponse(workerThread: WorkerThread): Promise<ThreadAssistantMessage | null> {
+	if (await workerThread.state.get() !== 'idle') return null
+	try {
+		const [message] = await workerThread.messages({ from: 'end', limit: 1, roles: ['assistant'] })
+		return message?.role === 'assistant' ? message : null
+	} catch (error) {
+		if (isThreadMessagesTimeout(error)) return null
+		throw error
+	}
 }
 
 function watchWorkerStartup(workerThread: WorkerThread): { promise: Promise<never>; cancel(): void } {
@@ -244,6 +278,10 @@ function watchWorkerStartup(workerThread: WorkerThread): { promise: Promise<neve
 
 function isThreadMessagesTimeout(error: unknown): boolean {
 	return errorMessage(error).includes('Plugin thread.messages timed out')
+}
+
+function isWorkerResponseTimeout(error: unknown): boolean {
+	return errorMessage(error).includes('Timed out waiting for agent response')
 }
 
 function sleep(ms: number): Promise<void> {
