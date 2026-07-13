@@ -22,7 +22,7 @@ amp:
   docs_sources:
     api_docs: "amp plugins show-docs"
     agent_options: "amp plugins show-agent-options --json"
-  last_verified: "2026-07-09"
+  last_verified: "2026-07-13"
 contract:
   input_kind: "ui_prompt"
   output_kind: "ui_notification"
@@ -42,14 +42,14 @@ runtime:
   env:
     - "AMP_LOGSEQ_GRAPH_DIR"
   reads:
-    - "current Amp thread messages"
+    - "parent Amp thread through spawned worker via read_thread"
     - "Logseq graph through spawned worker"
   writes:
     - "Logseq graph through spawned worker"
     - "parent Amp thread title"
     - "worker thread archive state"
   network:
-    - "Amp built-in medium agent runtime"
+    - "Amp built-in high agent runtime"
   logs:
     - "plugin load log"
 safety:
@@ -58,6 +58,7 @@ safety:
   constraints:
     - "Requires an active Amp thread."
     - "Does not run automatically from lifecycle events."
+    - "Worker must reconstruct parent context with read_thread and is blocked from invoking Oracle."
   risks:
     - "Worker can edit the configured Logseq graph."
     - "Malformed worker responses can leave the parent thread title unchanged."
@@ -91,7 +92,7 @@ The command requires an active thread and accepts no JSON input. It opens `Log c
 
 ## Behavior
 
-The command checks for an active thread, prompts for an optional hint, and calls the plugin's shared logging flow. That flow starts a hidden built-in `medium` worker to update Logseq, derives a `[Project] task title`, renames the parent thread, and archives the worker after success.
+The command checks for an active thread, prompts for an optional hint, and calls the plugin's shared logging flow. That flow starts a hidden built-in `high` worker without seeding recent parent messages. The worker must reconstruct parent context with `read_thread`; if that fails, it stops without editing Logseq. Oracle calls from the worker are rejected. After a successful Logseq update, the flow derives a `[Project] task title`, renames the parent thread, and archives the worker.
 
 ## Permissions and side effects
 
@@ -109,4 +110,4 @@ Choose `logseq: Log current task` from the command palette, optionally enter `up
 
 ## Maintenance notes
 
-Update this document when the command ID, palette prompt, notifications, or shared Logseq flow changes. Keep the related agent-tool document scoped to `amp.registerTool`.
+Update this document when the command ID, palette prompt, notifications, worker mode, context reconstruction, Oracle guard, or shared Logseq flow changes. Keep the related agent-tool document scoped to `amp.registerTool`.

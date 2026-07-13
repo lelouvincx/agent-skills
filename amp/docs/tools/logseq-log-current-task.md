@@ -22,7 +22,7 @@ amp:
   docs_sources:
     api_docs: "amp plugins show-docs"
     agent_options: "amp plugins show-agent-options --json"
-  last_verified: "2026-07-09"
+  last_verified: "2026-07-13"
 contract:
   input_kind: "json_schema"
   output_kind: "text"
@@ -36,7 +36,7 @@ contract:
 runtime:
   uses:
     - "amp.registerTool"
-    - "ctx.thread.messages"
+    - "amp.on tool.call"
     - "amp.getBuiltinAgent"
     - "Agent.createThread"
     - "PluginThread.appendUserMessage"
@@ -49,7 +49,7 @@ runtime:
   env:
     - "AMP_LOGSEQ_GRAPH_DIR"
   reads:
-    - "current Amp thread recent messages as a seed; parent thread through spawned worker for intent reconstruction"
+    - "parent Amp thread through spawned worker via read_thread"
     - "Logseq graph through spawned worker"
   writes:
     - "Logseq graph through spawned worker"
@@ -57,7 +57,7 @@ runtime:
     - "parent Amp thread title"
     - "worker thread archive state"
   network:
-    - "Amp built-in medium agent runtime"
+    - "Amp built-in high agent runtime"
   logs:
     - "plugin load log"
 safety:
@@ -66,6 +66,8 @@ safety:
   constraints:
     - "Does not run automatically from lifecycle events."
     - "Requires an active Amp thread."
+    - "Worker must use read_thread successfully before editing Logseq."
+    - "Oracle calls from the worker are rejected."
     - "Worker is instructed not to commit, push, run weekly automation, or modify unrelated Logseq blocks."
   risks:
     - "Worker can edit the configured Logseq graph."
@@ -109,19 +111,17 @@ Runtime defaults:
 | Setting                     | Value                                                                       |
 | --------------------------- | --------------------------------------------------------------------------- |
 | Logseq repo                 | `AMP_LOGSEQ_GRAPH_DIR` or `/Users/lelouvincx/Developer/second-brain-logseq` |
-| Worker mode                 | `medium`                                                                    |
+| Worker mode                 | `high`                                                                      |
 | Worker timeout              | 10 minutes                                                                  |
 | Worker wait retry delay     | 1 second for transient `Plugin thread.messages timed out` errors            |
-| Parent recent-message seed  | 20 messages                                                                 |
-| Parent excerpt limit        | 20000 characters                                                            |
 | Result excerpt limit        | 500 characters                                                              |
 | Parent thread title pattern | `[Project] task title`                                                      |
 
 ## Behavior
 
-The agent tool checks for an active thread and uses the optional `hint` input. Its logging flow reads up to 20 recent messages only as a seed for link/outcome extraction, spawns a hidden built-in `medium` worker thread, and sends it a Logseq-specific prompt. While waiting for the worker, transient `Plugin thread.messages timed out` errors are retried until the worker timeout expires. The prompt places the optional hint near the end, after the worker rules and immediately before the required final-response format. The worker has an explicit private intent-reconstruction step: read the parent Amp thread, infer the original user intent, the latest coherent requested outcome, and the durable result to log, then proceed from that reconstructed intent. The worker is asked to log task entries in `pages/Backlog.md` first: update a matching backlog block when possible, otherwise create one concise backlog task block. Today's journal should then contain only a short reference back to that backlog task, under `Done`, `Tasks`, or `Notes` according to the task state.
+The agent tool checks for an active thread and uses the optional `hint` input. Its logging flow spawns a hidden built-in `high` worker thread without seeding recent parent messages and sends it a Logseq-specific prompt. The worker must first use `read_thread` on the parent thread; if the tool is unavailable or fails, the worker must stop without editing Logseq and report the blocker. Oracle calls from Logseq workers are rejected by a `tool.call` guard. While waiting for the worker, transient `Plugin thread.messages timed out` errors are retried until the worker timeout expires. The prompt places the optional hint near the end, after the worker rules and immediately before the required final-response format. After reconstructing the original user intent, latest coherent requested outcome, and durable result, the worker logs task entries in `pages/Backlog.md` first: update a matching backlog block when possible, otherwise create one concise backlog task block. Today's journal should then contain only a short reference back to that backlog task, under `Done`, `Tasks`, or `Notes` according to the task state.
 
-Before choosing or writing a block, the worker must treat the Logseq graph's canonical map as the source of truth: read `pages/Canonical Pages.md`, then read the corresponding canonical project/rule pages named there, especially `pages/Projects.md`, `pages/Backlog.md`, and relevant rule pages. The backlog task's `project:: [[...]]`, priority, title, and placement must be coherent with that canonical project taxonomy and any matching active backlog task. If the recent-message seed, reconstructed intent, and canonical pages disagree, the worker should prefer the reconstructed original thread intent and canonical project mapping over incidental recent-message context.
+Before choosing or writing a block, the worker must treat the Logseq graph's canonical map as the source of truth: read `pages/Canonical Pages.md`, then read the corresponding canonical project/rule pages named there, especially `pages/Projects.md`, `pages/Backlog.md`, and relevant rule pages. The backlog task's `project:: [[...]]`, priority, title, and placement must be coherent with that canonical project taxonomy and any matching active backlog task. If reconstructed intent and canonical pages disagree, the worker should preserve the reconstructed user intent while applying the canonical project mapping.
 
 When writing the backlog task block, the worker stores reference links in the `input::` property. It includes the parent Amp thread plus useful source or deliverable links found in the user hint or parent thread, such as Slack, Notion, Linear, GitHub PR/issue, ReadAI, customer docs, design docs, or related Amp threads. With multiple links, it uses numbered labels such as `input:: [1-Ampcode](T-...) [2-PR](https://...) [3-Slack](https://...)`, dedupes equivalent links, and skips incidental links that are not meaningful task references. The journal reference should stay brief and point to the backlog task instead of duplicating the task properties or source links.
 
@@ -157,4 +157,4 @@ Log the current thread with an optional hint:
 
 ## Maintenance notes
 
-Update this doc when the agent tool schema, worker prompt, Backlog-first task logging behavior, journal-reference behavior, Logseq conventions, `input::` reference-link behavior, parent thread rename behavior, default graph path, worker mode, worker wait retry behavior, timeout, or archive behavior changes. This capability is an agent-callable tool; it intentionally has no `agent.start` hook or `agent.end` hook.
+Update this doc when the agent tool schema, worker prompt, Backlog-first task logging behavior, journal-reference behavior, Logseq conventions, `input::` reference-link behavior, parent thread rename behavior, default graph path, worker mode, mandatory `read_thread` behavior, Oracle guard, worker wait retry behavior, timeout, or archive behavior changes. This capability is an agent-callable tool; it intentionally has no `agent.start` hook or `agent.end` hook.
