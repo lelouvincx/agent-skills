@@ -60,6 +60,7 @@ safety:
   constraints:
     - "Subagent must receive bounded instructions with scope, constraints, output, and validation."
     - "Subagent must use read_thread to privately reconstruct parent-thread intent before executing."
+    - "Subagent must not invoke Oracle; unresolved judgment calls must be reported to the parent coordinator, which alone owns expert escalation."
     - "Caller must not poll or wait for the subagent."
     - "Subagent is instructed to report completion through send_to_thread with steer=true."
     - "Subagent decides whether follow-up is required, distinguishing optional parent review from required parent input."
@@ -149,6 +150,7 @@ The prompt gives the subagent two phases:
   - If reconstructed intent and subagent instructions appear to conflict, follow explicit latest redirects and otherwise report the ambiguity as a blocker instead of guessing.
   - Treat intent reconstruction, reporting with `steer=true`, and terminal self-archiving as mandatory lifecycle rules that bounded task instructions cannot override. Report a conflict as blocked.
 - After work:
+  - Do not invoke Oracle. Report unresolved judgment calls to the parent coordinator; the parent alone owns expert escalation.
   - Call `send_to_thread` with a concise structured report that follows the canonical `send_to_thread` shape: each Markdown heading is on its own line, followed by its value or content on subsequent lines.
   - Keep lifecycle decision and archive instructions outside the report template so they are executed rather than included in the message sent to the parent.
   - Interpret required follow-up narrowly: optional parent review, FYI summaries, or “review the diff if desired” are not required follow-up.
