@@ -7,10 +7,11 @@
 #
 # The sync process will:
 #   1. Fetch the remote SKILL.md from the URL
-#   2. Prepend PERSONAL.md content if it exists in skills/<name>/PERSONAL.md
-#   3. Generate skills/<name>/SKILL.md (this file is gitignored)
-#   4. Store metadata in skills/<name>/.remote-source
-#   5. Fetch any listed companion files into skills/<name>/
+#   2. Strip unsupported model-invocation controls from its frontmatter
+#   3. Append PERSONAL.md content if it exists in skills/<name>/PERSONAL.md
+#   4. Generate skills/<name>/SKILL.md (this file is gitignored)
+#   5. Store metadata in skills/<name>/.remote-source
+#   6. Fetch any listed companion files into skills/<name>/
 
 skills:
   - name: notion
@@ -262,7 +263,6 @@ skills:
     enabled: true
     files:
       - mocking.md
-      - refactoring.md
       - tests.md
 
   - name: teach
@@ -274,8 +274,8 @@ skills:
       - MISSION-FORMAT.md
       - RESOURCES-FORMAT.md
 
-  - name: to-prd
-    url: https://raw.githubusercontent.com/mattpocock/skills/main/skills/engineering/to-prd/SKILL.md
+  - name: to-spec
+    url: https://raw.githubusercontent.com/mattpocock/skills/main/skills/engineering/to-spec/SKILL.md
     enabled: true
 
   - name: analyze-data

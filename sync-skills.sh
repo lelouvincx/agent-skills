@@ -38,7 +38,7 @@ parse_yaml() {
 		# Skip comments and empty lines
 		[[ "$line" =~ ^[[:space:]]*# ]] && continue
 		[[ -z "${line// }" ]] && continue
-		
+
 		# Parse skill entries
 		if [[ "$line" =~ ^[[:space:]]*-[[:space:]]*name:[[:space:]]*(.+)$ ]]; then
 			_flush_skill
@@ -65,6 +65,32 @@ parse_yaml() {
 	_flush_skill
 }
 
+sync_companion_files() {
+	local skill_dir="$1"
+	local url="$2"
+	local files="$3"
+	local missing_only="$4"
+	local base_url="${url%/*}"
+	local file_path file_url file_dest file_dir
+	local -a file_list
+
+	[[ -z "$files" ]] && return 0
+	IFS=',' read -ra file_list <<< "$files"
+	for file_path in "${file_list[@]}"; do
+		file_dest="$skill_dir/$file_path"
+		[[ "$missing_only" == true && -f "$file_dest" ]] && continue
+		file_url="$base_url/$file_path"
+		file_dir="$(dirname "$file_dest")"
+		mkdir -p "$file_dir"
+		echo -n "  ↳ $file_path: "
+		if curl -fsSL "$file_url" -o "$file_dest" 2>/dev/null; then
+			echo "✓"
+		else
+			echo "✗ failed"
+		fi
+	done
+}
+
 # --- Remote Skills Sync ---
 
 sync_remote_skills() {
@@ -72,33 +98,58 @@ sync_remote_skills() {
 		echo "No remote-skills.yaml found, skipping remote sync"
 		return 0
 	}
-	
+
+	# One-time cleanup for retired upstream artifacts.
+	rm -rf "$SKILLS_DIR/to-prd"
+	rm -f "$SKILLS_DIR/tdd/refactoring.md"
+
 	echo "Syncing remote skills..."
 	echo ""
-	
+
 	while IFS='|' read -r name url enabled files; do
 		[[ "$enabled" != "true" ]] && {
 			echo "⊘ $name: disabled, skipping"
 			continue
 		}
-		
+
 		local skill_dir="$SKILLS_DIR/$name"
 		local skill_file="$skill_dir/SKILL.md"
 		local personal_file="$skill_dir/PERSONAL.md"
 		local remote_source="$skill_dir/.remote-source"
 		local tmp_file="$skill_dir/.remote-tmp"
-		
+
 		mkdir -p "$skill_dir"
-		
+
 		echo -n "→ $name: fetching remote... "
-		
+
 		# Fetch remote content
 		if ! curl -fsSL "$url" -o "$tmp_file" 2>/dev/null; then
 			echo "✗ failed to fetch"
 			rm -f "$tmp_file"
 			continue
 		fi
-		
+
+		# Normalize frontmatter and remove controls unsupported by Amp.
+		if [[ "$(head -n 1 "$tmp_file")" == "---" ]]; then
+			if ! awk '
+				NR == 1 { in_frontmatter = 1; print; next }
+				in_frontmatter && $0 == "---" { in_frontmatter = 0; closed = 1; print; next }
+				in_frontmatter && /^disable-model-invocation:[[:space:]]*/ { next }
+				{ print }
+				END { if (!closed) exit 1 }
+			' "$tmp_file" > "${tmp_file}.amp"; then
+				echo "✗ invalid frontmatter"
+				rm -f "$tmp_file" "${tmp_file}.amp"
+				continue
+			fi
+		else
+			{
+				printf '%s\n' '---' '---' ''
+				cat "$tmp_file"
+			} > "${tmp_file}.amp"
+		fi
+		mv "${tmp_file}.amp" "$tmp_file"
+
 		# Calculate hash of remote content
 		local new_hash
 		if command -v sha256sum &>/dev/null; then
@@ -106,13 +157,13 @@ sync_remote_skills() {
 		else
 			new_hash=$(shasum -a 256 "$tmp_file" | awk '{print $1}')
 		fi
-		
+
 		# Check if content changed
 		local old_hash=""
 		if [ -f "$remote_source" ]; then
 			old_hash=$(grep "^REMOTE_HASH=" "$remote_source" | cut -d'=' -f2)
 		fi
-		
+
 		local personal_changed=false
 		if [ -f "$personal_file" ] && [ -f "$skill_file" ] && [ "$personal_file" -nt "$skill_file" ]; then
 			personal_changed=true
@@ -121,98 +172,41 @@ sync_remote_skills() {
 		if [ "$new_hash" = "$old_hash" ] && [ -f "$skill_file" ] && [ "$personal_changed" = false ]; then
 			echo "✓ up-to-date"
 			rm -f "$tmp_file"
+			sync_companion_files "$skill_dir" "$url" "$files" true
 			continue
 		fi
-		
+
 		echo -n "downloaded, "
-		
-		# Build final SKILL.md: frontmatter + remote body + PERSONAL.md (if exists)
+
+		# Build final SKILL.md: normalized remote base + PERSONAL.md (if exists)
 		if [ -f "$personal_file" ]; then
-			# Extract frontmatter and body from remote file
-			local in_frontmatter=false
-			local frontmatter_done=false
-			local frontmatter_lines=()
-			local body_lines=()
-
-			while IFS= read -r fmline; do
-				if [ "$frontmatter_done" = true ]; then
-					body_lines+=("$fmline")
-				elif [ "$in_frontmatter" = false ] && [[ "$fmline" == "---" ]]; then
-					in_frontmatter=true
-					frontmatter_lines+=("$fmline")
-				elif [ "$in_frontmatter" = true ] && [[ "$fmline" == "---" ]]; then
-					frontmatter_lines+=("$fmline")
-					frontmatter_done=true
-				elif [ "$in_frontmatter" = true ]; then
-					frontmatter_lines+=("$fmline")
-				else
-					# No frontmatter in file
-					body_lines+=("$fmline")
-				fi
-			done < "$tmp_file"
-
 			{
-				# Write frontmatter first (if any)
-				for fmline in "${frontmatter_lines[@]+"${frontmatter_lines[@]}"}"; do
-					echo "$fmline"
-				done
-				# Write remote body
-				for fmline in "${body_lines[@]+"${body_lines[@]}"}"; do
-					echo "$fmline"
-				done
-				echo ""
+				cat "$tmp_file"
+				printf '\n'
 				cat "$personal_file"
 			} > "$skill_file"
-			# Ensure frontmatter delimiters
-			if ! head -1 "$skill_file" | grep -q '^---$'; then
-				{ echo "---"; echo "---"; echo ""; cat "$skill_file"; } > "${skill_file}.tmp"
-				mv "${skill_file}.tmp" "$skill_file"
-			fi
 		else
 			cp "$tmp_file" "$skill_file"
-			# Ensure frontmatter delimiters
-			if ! head -1 "$skill_file" | grep -q '^---$'; then
-				{ echo "---"; echo "---"; echo ""; cat "$skill_file"; } > "${skill_file}.tmp"
-				mv "${skill_file}.tmp" "$skill_file"
-			fi
 		fi
-		
+
 		# Update metadata
 		cat > "$remote_source" <<-EOF
 		SOURCE_URL=$url
 		LAST_SYNC=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 		REMOTE_HASH=$new_hash
 		EOF
-		
+
 		rm -f "$tmp_file"
-		
+
 		if [ -f "$personal_file" ]; then
 			echo "✓ merged with PERSONAL.md"
 		else
 			echo "✓ generated"
 		fi
-		
-		# Fetch companion files
-		if [[ -n "$files" ]]; then
-			local base_url="${url%/*}"
-			IFS=',' read -ra file_list <<< "$files"
-			for file_path in "${file_list[@]}"; do
-				local file_url="$base_url/$file_path"
-				local file_dest="$skill_dir/$file_path"
-				local file_dir
-				file_dir="$(dirname "$file_dest")"
-				mkdir -p "$file_dir"
-				echo -n "  ↳ $file_path: "
-				if curl -fsSL "$file_url" -o "$file_dest" 2>/dev/null; then
-					echo "✓"
-				else
-					echo "✗ failed"
-				fi
-			done
-		fi
-		
+		sync_companion_files "$skill_dir" "$url" "$files" false
+
 	done < <(parse_yaml "$REMOTE_SKILLS_CONFIG")
-	
+
 	echo ""
 }
 

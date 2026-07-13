@@ -66,7 +66,6 @@ skills/prototype/UI.md
 skills/tdd/SKILL.md
 skills/tdd/.remote-source
 skills/tdd/mocking.md
-skills/tdd/refactoring.md
 skills/tdd/tests.md
 
 skills/teach/SKILL.md
@@ -76,8 +75,8 @@ skills/teach/LEARNING-RECORD-FORMAT.md
 skills/teach/MISSION-FORMAT.md
 skills/teach/RESOURCES-FORMAT.md
 
-skills/to-prd/SKILL.md
-skills/to-prd/.remote-source
+skills/to-spec/SKILL.md
+skills/to-spec/.remote-source
 
 skills/analyze-data/SKILL.md
 skills/analyze-data/.remote-source
