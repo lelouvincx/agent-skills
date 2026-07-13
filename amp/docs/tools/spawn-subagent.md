@@ -36,6 +36,8 @@ contract:
 runtime:
   uses:
     - "amp.getBuiltinAgent"
+    - "amp.on"
+    - "amp.threads.get"
     - "Agent.createThread"
     - "PluginThread.appendUserMessage"
     - "ctx.thread.id"
@@ -60,7 +62,7 @@ safety:
   constraints:
     - "Subagent must receive bounded instructions with scope, constraints, output, and validation."
     - "Subagent must use read_thread to privately reconstruct parent-thread intent before executing."
-    - "Subagent must not invoke Oracle; unresolved judgment calls must be reported to the parent coordinator, which alone owns expert escalation."
+    - "Oracle tool calls from spawned subagent threads are rejected; unresolved judgment calls must be reported to the parent coordinator, which alone owns expert escalation."
     - "Caller must not poll or wait for the subagent."
     - "Subagent is instructed to report completion through send_to_thread with steer=true."
     - "Subagent decides whether follow-up is required, distinguishing optional parent review from required parent input."
@@ -139,6 +141,8 @@ Output is a short text confirmation: `Started <mode> subagent in <threadID>. Do 
 The tool validates `instructions`, normalizes the built-in mode, obtains a built-in agent with `amp.getBuiltinAgent`, creates a child thread with the current thread as `parentThreadID`, and appends a structured subagent prompt. If the initial append fails after thread creation, the error includes the child thread ID so the orphaned thread can be inspected or archived manually.
 
 The prompt treats `read_thread` as the required source of truth for parent context. It does not fall back to static prompt reconstruction or whatever partial parent context is otherwise visible. If `read_thread` is unavailable or fails, the subagent must report that it is blocked rather than execute the bounded task from incomplete context.
+
+The plugin also registers a `tool.call` guard that rejects Oracle calls from threads created by `spawn_subagent`. It tracks newly created child thread IDs in memory and recognizes earlier spawned threads from their generated initial message after a plugin restart. The rejection instructs the child to report the unresolved judgment call to its parent coordinator instead.
 
 The prompt gives the subagent two phases:
 
