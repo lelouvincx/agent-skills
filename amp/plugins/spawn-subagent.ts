@@ -8,8 +8,35 @@ import type { BuiltinAgentMode, PluginAPI } from '@ampcode/plugin'
 
 const DEFAULT_MODE = 'medium' as BuiltinAgentMode
 const BUILTIN_MODES = new Set(['low', 'medium', 'high'])
+const SUBAGENT_PROMPT_PREFIX = 'You are a subagent thread spawned by parent thread '
 
 export default function (amp: PluginAPI) {
+	const spawnedThreadIDs = new Set<string>()
+
+	amp.on('tool.call', async (event) => {
+		if (event.tool !== 'oracle') {
+			return { action: 'allow' }
+		}
+
+		let isSpawnedThread = spawnedThreadIDs.has(event.thread.id)
+		if (!isSpawnedThread) {
+			const [initialMessage] = await amp.threads.get(event.thread.id).messages({
+				full: true,
+				from: 'start',
+				limit: 1,
+			})
+			isSpawnedThread = initialMessage?.role === 'user'
+				&& initialMessage.content.some((block) => block.type === 'text' && block.text.startsWith(SUBAGENT_PROMPT_PREFIX))
+		}
+
+		return isSpawnedThread
+			? {
+				action: 'reject-and-continue',
+				message: 'Oracle escalation is reserved for the parent coordinator. Report the unresolved judgment call to the parent through send_to_thread.',
+			}
+			: { action: 'allow' }
+	})
+
 	amp.registerTool({
 		name: 'spawn_subagent',
 		description: [
@@ -47,13 +74,16 @@ export default function (amp: PluginAPI) {
 
 			const subagent = amp.getBuiltinAgent(mode)
 			const thread = await subagent.createThread({ parentThreadID: ctx.thread.id })
-			const message = `You are a subagent thread spawned by parent thread ${ctx.thread.id}.
+			spawnedThreadIDs.add(thread.id)
+			const message = `${SUBAGENT_PROMPT_PREFIX}${ctx.thread.id}.
 
 The parent thread is the design/coordinator thread and owns the broader architectural intent. Your job is to execute only the bounded task below, preserve the stated constraints, and avoid speculative abstractions or unrelated cleanup.
 
 Before executing, first perform a private intent-reconstruction step. You must use read_thread on ${ctx.thread.id}. Do not fall back to inspecting any partial parent context available to you. If read_thread is unavailable or fails, report that you are blocked and do not execute the bounded task. Infer and keep distinct: (a) the original user intent, (b) any later user redirect, (c) the latest coherent requested outcome, and (d) how this bounded subagent task supports that outcome. Do not write anything yet.
 
 Execute the bounded task represented by the subagent instructions in that reconstructed parent-thread context. Do not let incidental recent-message context replace the original task intent. If the reconstructed intent and subagent instructions appear to conflict, follow explicit latest redirects; otherwise report the ambiguity as blocked instead of guessing.
+
+Do not invoke Oracle. Report unresolved judgment calls to the parent coordinator; the parent alone owns expert escalation.
 
 When complete or blocked, call the send_to_thread tool with:
 - threadID: ${ctx.thread.id}

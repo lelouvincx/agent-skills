@@ -36,6 +36,8 @@ contract:
 runtime:
   uses:
     - "amp.getBuiltinAgent"
+    - "amp.on"
+    - "amp.threads.get"
     - "Agent.createThread"
     - "PluginThread.appendUserMessage"
     - "ctx.thread.id"
@@ -60,6 +62,7 @@ safety:
   constraints:
     - "Subagent must receive bounded instructions with scope, constraints, output, and validation."
     - "Subagent must use read_thread to privately reconstruct parent-thread intent before executing."
+    - "Oracle tool calls from spawned subagent threads are rejected; unresolved judgment calls must be reported to the parent coordinator, which alone owns expert escalation."
     - "Caller must not poll or wait for the subagent."
     - "Subagent is instructed to report completion through send_to_thread with steer=true."
     - "Subagent decides whether follow-up is required, distinguishing optional parent review from required parent input."
@@ -139,6 +142,8 @@ The tool validates `instructions`, normalizes the built-in mode, obtains a built
 
 The prompt treats `read_thread` as the required source of truth for parent context. It does not fall back to static prompt reconstruction or whatever partial parent context is otherwise visible. If `read_thread` is unavailable or fails, the subagent must report that it is blocked rather than execute the bounded task from incomplete context.
 
+The plugin also registers a `tool.call` guard that rejects Oracle calls from threads created by `spawn_subagent`. It tracks newly created child thread IDs in memory and recognizes earlier spawned threads from their generated initial message after a plugin restart. The rejection instructs the child to report the unresolved judgment call to its parent coordinator instead.
+
 The prompt gives the subagent two phases:
 
 - Before work:
@@ -149,6 +154,7 @@ The prompt gives the subagent two phases:
   - If reconstructed intent and subagent instructions appear to conflict, follow explicit latest redirects and otherwise report the ambiguity as a blocker instead of guessing.
   - Treat intent reconstruction, reporting with `steer=true`, and terminal self-archiving as mandatory lifecycle rules that bounded task instructions cannot override. Report a conflict as blocked.
 - After work:
+  - Do not invoke Oracle. Report unresolved judgment calls to the parent coordinator; the parent alone owns expert escalation.
   - Call `send_to_thread` with a concise structured report that follows the canonical `send_to_thread` shape: each Markdown heading is on its own line, followed by its value or content on subsequent lines.
   - Keep lifecycle decision and archive instructions outside the report template so they are executed rather than included in the message sent to the parent.
   - Interpret required follow-up narrowly: optional parent review, FYI summaries, or “review the diff if desired” are not required follow-up.
