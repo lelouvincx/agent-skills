@@ -133,6 +133,20 @@ Read-only source handoff is verified: a fresh proxy session can reopen a known p
 
 ### Supervised user-Amp workflow
 
+```text
+╭─────────────╮    brief     ╭──────────────╮    narrow proxy    ╭───────────────╮
+│    User     │─────────────▶│     Amp      │───────────────────▶│  Claude Code  │
+│ reviews UI  │◀─────────────│ coordinates  │◀───────────────────│ authenticated │
+╰──────┬──────╯   project URL╰──────┬───────╯  session + audit  ╰───────┬───────╯
+       │                            │                                  │
+       │ visual feedback            │ read-back                        │ Design MCP
+       │                            │                                  ▼
+       │                     ╭──────▼───────╮                  ╭───────────────╮
+       ╰────────────────────▶│ Local source │                  │ Claude Design │
+             approval        │ implementation│◀── exact source ┤ cloud project │
+                             ╰──────────────╯    via response   ╰───────────────╯
+```
+
 | Stage | User | Amp |
 | --- | --- | --- |
 | Brief | Provides the goal, users, required screens or states, constraints, and acceptance criteria. | Narrows local context and confirms whether the target is a new or existing project. |
