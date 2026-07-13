@@ -88,7 +88,7 @@ repos:
         language: system
         pass_filenames: false
         stages: [pre-push]
-        files: ^(?:amp/plugins/.*\.ts$|scripts/check-plugin-builds$|\.pre-commit-config\.yaml$)
+        files: ^(?:amp/plugins/.*\.ts$|amp/scripts/test-claude-design-subagent\.ts$|scripts/check-plugin-builds$|\.pre-commit-config\.yaml$)
 
       - id: validate-sdk
         name: Validate SDK dependencies
