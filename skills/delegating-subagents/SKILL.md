@@ -1,6 +1,6 @@
 ---
 name: delegating-subagents
-description: "Chooses between direct work, Amp's built-in Task tool, and spawn_subagent. Use before delegating or splitting independent work across agents."
+description: "Chooses between direct work, Amp's built-in Task tool, and spawn_subagent. Use before delegating, splitting independent work across agents, or handling a side question marked 'btw', '/btw', or '|btw'."
 ---
 
 # Delegating Subagents
@@ -10,6 +10,8 @@ Choose the delegation mechanism from what the parent needs next.
 The source of truth for these rules is the [Delegating Subagents artifact document](../../amp/docs/tools/delegating-subagents.md). Keep it aligned with the related [Spawn Subagent capability document](../../amp/docs/tools/spawn-subagent.md).
 
 ## Decision
+
+When the user frames a question as an aside with `btw`, `/btw`, or `|btw`, delegate that question so it does not displace the parent's current task. Remove the trigger from the delegated brief. This is a request to delegate, not a request for a specific mechanism: use built-in `Task` by default when the answer is needed now, or `spawn_subagent` when it should run asynchronously or may need later follow-up.
 
 1. Use a direct or specialist tool when it already covers the job or delegation overhead is greater than the task. Do not delegate exact reads, simple searches, one localized edit, or work owned by `finder`, `librarian`, or `oracle`.
 2. Use built-in `Task` for ordinary bounded delegation when the parent needs the result in the current turn. The worker returns one final summary through the current tool call.
@@ -33,6 +35,8 @@ Ask in order:
 
 ## Stress cases
 
+- “Btw, why does this test use a fake clock?”, `/btw why does this test use a fake clock?`, or `|btw why does this test use a fake clock?` → delegate with built-in `Task` by default, after removing the trigger.
+- A `btw` aside that can report later or may need parent follow-up → `spawn_subagent`.
 - “Ask an agent” or “use a subagent” without an asynchronous requirement → built-in `Task`.
 - “Spawn a subagent”, “run this in parallel”, `/subagent`, or `|subagent` → `spawn_subagent`; the user explicitly selected the durable mechanism.
 - Two independent results needed now → parallel built-in `Task` calls.

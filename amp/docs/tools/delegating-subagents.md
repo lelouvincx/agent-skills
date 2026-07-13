@@ -3,7 +3,7 @@ doc_schema: "amp-artifact/v2"
 title: "Delegating Subagents"
 slug: "delegating-subagents"
 status: "active"
-summary: "Guides agents to choose direct work, built-in Task, or spawn_subagent based on delegation lifecycle and coordination needs."
+summary: "Guides agents to delegate side questions and choose built-in Task or spawn_subagent based on lifecycle and coordination needs."
 artifact:
   id: "delegating-subagents"
   type: "skill"
@@ -48,6 +48,7 @@ safety:
   user_gate: "description match, explicit skill load, or repository instruction before delegation"
   constraints:
     - "Prefer direct or specialist tools when delegation overhead exceeds the task."
+    - "Treat questions framed as an aside with 'btw', '/btw', or '|btw' as delegation requests so the parent can preserve its current task."
     - "Use built-in Task for bounded work whose result is needed in the current turn."
     - "Use spawn_subagent only for durable asynchronous work, visible child-thread history, or possible parent follow-up."
     - "The parent remains responsible for synthesis, integration, and final verification."
@@ -90,7 +91,7 @@ The skill declares no tool allowlist.
 
 ## Behavior
 
-The skill first tests whether delegation is worthwhile. If so, it distinguishes in-turn work from durable asynchronous work, then applies constraints for bounded briefs, independent parallel work, parent-owned integration, and final verification.
+The skill first tests whether delegation is worthwhile. A question framed as an aside with `btw`, `/btw`, or `|btw` always makes delegation worthwhile because the parent should preserve its current task. The skill delegates the question after removing the trigger, using built-in `Task` by default when the answer is needed now or `spawn_subagent` when the aside should run asynchronously or may need later follow-up. It then applies constraints for bounded briefs, independent parallel work, parent-owned integration, and final verification.
 
 ## Permissions and side effects
 
@@ -115,6 +116,8 @@ Loading the skill only adds instructions to agent context. The skill itself does
 | Implement an independent slice while the parent continues shaping the design | `spawn_subagent` | The work benefits from a durable child thread and asynchronous reporting. |
 | Investigate a slice that may require a later product or architecture decision from the parent | `spawn_subagent` | The child can remain open for required follow-up. |
 | "Ask an agent to check this" with no asynchronous or durable-thread requirement | Built-in `Task` | Generic requests for an agent do not imply `spawn_subagent`. |
+| “Btw, why does this test use a fake clock?”, `/btw why does this test use a fake clock?`, or `\|btw why does this test use a fake clock?` | Built-in `Task` by default | The aside must not displace the parent's current task; delegate the question after removing the trigger. |
+| A `btw` aside that can report later or may need parent follow-up | `spawn_subagent` | The aside is delegated, and its lifecycle benefits from a durable child thread. |
 | "Spawn a subagent", "run this in parallel", `/subagent`, or `\|subagent` | `spawn_subagent` | The user explicitly selected the durable asynchronous mechanism. Bound the brief before invoking it. |
 | Two workers would edit the same file or depend on each other's uncommitted changes | Do not parallelize | Overlapping writes are not independent; use one worker or work directly. |
 | The parent has not decided what should be built | Keep designing in the parent | Do not delegate understanding or ask a worker to choose the product direction. |
@@ -125,6 +128,7 @@ An explicit mechanism request wins over the default decision order, unless it wo
 The stress-test invariants are:
 
 - lifecycle decides between built-in `Task` and `spawn_subagent`, not task difficulty alone
+- `btw`, `/btw`, and `|btw` mark a side question for delegation; they do not select a delegation mechanism
 - generic “agent” wording selects built-in `Task`; explicit spawn or parallel-thread wording selects `spawn_subagent`
 - parallelism requires independent work and non-overlapping writes
 - the parent always owns decisions, synthesis, integration, and final verification
