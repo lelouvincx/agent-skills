@@ -32,7 +32,7 @@ and this project does not currently use versioned releases.
 
 ### Changed
 
-- Require agent-browser tasks to use visible system Chrome with a persistent local profile, CDP connection checks, and user-assisted login.
+- Require agent-browser tasks to use visible system Chrome with a persistent local profile, CDP connection checks, and user-assisted login. [#97](https://github.com/lelouvincx/agent-skills/pull/97)
 - Let `spawn_subagent` choose the working directory for a bounded task, defaulting to the parent thread's working directory. [#96](https://github.com/lelouvincx/agent-skills/pull/96)
 - Run Logseq logging workers in fixed `high` mode without recent-message seeds, require `read_thread` for parent context, block Oracle escalation, and fail fast when a high-mode worker cannot start. [#94](https://github.com/lelouvincx/agent-skills/pull/94)
 - Reserve Oracle escalation for the parent coordinator when using `spawn_subagent`. [#91](https://github.com/lelouvincx/agent-skills/pull/91)
