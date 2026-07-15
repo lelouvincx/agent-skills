@@ -159,7 +159,7 @@ Scenario expectations:
 | --- | --- |
 | No successful spawns exist in the parent transcript | `list` returns that no subagents were found. |
 | A child is running and has not reported | Show `running` and `not reported`. |
-| A child sent a terminal report | Show the parsed report status and summary; do not claim verified archive state. |
+| A child sent a terminal report | `list` shows the parsed report status only. `status` shows the parsed report status and summary. Neither action claims verified archive state. |
 | A discovered child is inaccessible | Keep it in `list` as unavailable; make direct `status` or `cancel` return the access error. |
 | `status` or `cancel` targets another thread | Reject it as not spawned by the current parent. |
 | `cancel` targets an active child | Request cancellation without requesting archive or deletion. |

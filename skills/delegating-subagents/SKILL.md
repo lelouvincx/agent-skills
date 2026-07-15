@@ -7,7 +7,8 @@ description: "Chooses between direct work, Amp's built-in Task tool, and spawn_s
 
 Choose the delegation mechanism from what the parent needs next.
 
-The source of truth for these rules is the [Delegating Subagents artifact document](../../amp/docs/tools/delegating-subagents.md). Keep it aligned with the related [Spawn Subagent](../../amp/docs/tools/spawn-subagent.md) and [Subagent Control](../../amp/docs/tools/subagent-control.md) capability documents.
+The [Delegating Subagents artifact document](../../amp/docs/tools/delegating-subagents.md) is the source of truth for these rules.
+Keep the skill aligned with the related [Spawn Subagent](../../amp/docs/tools/spawn-subagent.md) and [Subagent Control](../../amp/docs/tools/subagent-control.md) capability documents.
 
 ## Decision
 
@@ -42,7 +43,8 @@ Ask in order:
 - A `btw` aside that can report later or may need parent follow-up → `spawn_subagent`.
 - “Ask an agent” or “use a subagent” without an asynchronous requirement → built-in `Task`.
 - “Spawn a subagent”, “run this in parallel”, `/subagent`, or `|subagent` → `spawn_subagent`; the user explicitly selected the durable mechanism.
-- “Which subagents are running?” or “Check that subagent” → `subagent_control` with `list` or `status`; return a point-in-time view without waiting.
+- “Which subagents are running?” → `subagent_control` with `list`; return point-in-time child states and report statuses without waiting.
+- “Check that subagent” → `subagent_control` with `status`; return that child's point-in-time state, report status, and report summary without waiting.
 - “Stop that subagent” → `subagent_control` with `cancel`; stop its active turn without archiving or deleting its thread.
 - Two independent results needed now → parallel built-in `Task` calls.
 - Work continuing while the parent designs, or work that may need later parent input → `spawn_subagent`.

@@ -110,7 +110,7 @@ The capability contract produces [`skills/delegating-subagents/SKILL.md`](../../
 
 `amp/AGENTS.md` requires the agent to load this skill before delegating so the documented choice is applied consistently.
 
-The related `subagent_control` tool can list, inspect, or cancel children spawned by the current parent when the user requests intervention or diagnosis. It does not change the normal lifecycle: the caller should not poll or wait for spawned children.
+The related `subagent_control` tool can list child states and report statuses, inspect one child's status and report summary, or cancel children spawned by the current parent when the user requests intervention or diagnosis. It does not change the normal lifecycle: the caller should not poll or wait for spawned children.
 
 ## Invocation
 

@@ -126,7 +126,8 @@ Loading the skill only adds instructions to agent context. The skill itself does
 | “Btw, why does this test use a fake clock?” or `\|btw why does this test use a fake clock?` | Built-in `Task` by default | The aside must not displace the parent's current task; delegate the question after removing the trigger. |
 | A `btw` aside that can report later or may need parent follow-up | `spawn_subagent` | The aside is delegated, and its lifecycle benefits from a durable child thread. |
 | "Spawn a subagent", "run this in parallel", `/subagent`, or `\|subagent` | `spawn_subagent` | The user explicitly selected the durable asynchronous mechanism. Bound the brief before invoking it. |
-| "Which subagents are running?" or "Check that subagent" | `subagent_control` with `list` or `status` | The user explicitly requested inspection; return a point-in-time view without waiting. |
+| "Which subagents are running?" | `subagent_control` with `list` | Return a point-in-time view of child states and report statuses without waiting. |
+| "Check that subagent" | `subagent_control` with `status` | Return that child's point-in-time state, report status, and report summary without waiting. |
 | "Stop that subagent" | `subagent_control` with `cancel` | Stop the owned child's active turn without archiving or deleting its thread. |
 | Two workers would edit the same file or depend on each other's uncommitted changes | Do not parallelize | Overlapping writes are not independent; use one worker or work directly. |
 | The parent has not decided what should be built | Keep designing in the parent | Do not delegate understanding or ask a worker to choose the product direction. |
