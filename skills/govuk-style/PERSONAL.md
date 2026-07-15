@@ -1,6 +1,7 @@
 ## Additional plain English rule
 
 - Use articles sparingly, especially "the". Remove "the" when the sentence stays natural and clear without it.
+- Avoid em dashes. Use a comma, colon, full stop or brackets instead.
 
 ## Chinh's presales
 
