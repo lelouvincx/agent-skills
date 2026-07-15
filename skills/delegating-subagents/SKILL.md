@@ -7,13 +7,15 @@ description: "Chooses between direct work, Amp's built-in Task tool, and spawn_s
 
 Choose the delegation mechanism from what the parent needs next.
 
-The source of truth for these rules is the [Delegating Subagents artifact document](../../amp/docs/tools/delegating-subagents.md). Keep it aligned with the related [Spawn Subagent capability document](../../amp/docs/tools/spawn-subagent.md).
+The source of truth for these rules is the [Delegating Subagents artifact document](../../amp/docs/tools/delegating-subagents.md). Keep it aligned with the related [Spawn Subagent](../../amp/docs/tools/spawn-subagent.md) and [Subagent Control](../../amp/docs/tools/subagent-control.md) capability documents.
 
 ## Decision
 
 1. Use a direct or specialist tool when it already covers the job or delegation overhead is greater than the task. Do not delegate exact reads, simple searches, one localized edit, or work owned by `finder`, `librarian`, or `oracle`.
 2. Use built-in `Task` for ordinary bounded delegation when the parent needs the result in the current turn. The worker returns one final summary through the current tool call.
 3. Use `spawn_subagent` when the work needs durable asynchronous execution, visible child-thread history, or possible parent follow-up. It creates an addressable child thread that reports back later through `send_to_thread`.
+
+After spawning, use `subagent_control` only when the user asks to list or inspect children, when a child needs diagnosis, or when an active child turn must be cancelled. Normal completion arrives through `send_to_thread`; do not poll status while waiting.
 
 Additionally, when the user introduces a side question with `btw` or triggers `|btw`, delegate that question so it does not displace the parent's current task. Remove the trigger from the delegated brief. This is a request to delegate, not a request for a specific mechanism: use built-in `Task` by default when the answer is needed now, or `spawn_subagent` when it should run asynchronously or may need later follow-up.
 
@@ -22,6 +24,7 @@ Additionally, when the user introduces a side question with `btw` or triggers `|
 - Delegate only a bounded task with scope, constraints, expected output, and validation.
 - Treat Task workers as isolated: include the context they need because they start without the parent conversation.
 - Do not wait for or poll `spawn_subagent`; continue useful parent work.
+- Use `subagent_control` for explicit inspection, diagnosis, or cancellation, not routine completion checks.
 - Use parallel subagents only for independent work. Avoid concurrent edits to overlapping files.
 - The parent owns synthesis, integration, and final verification.
 
@@ -39,6 +42,8 @@ Ask in order:
 - A `btw` aside that can report later or may need parent follow-up → `spawn_subagent`.
 - “Ask an agent” or “use a subagent” without an asynchronous requirement → built-in `Task`.
 - “Spawn a subagent”, “run this in parallel”, `/subagent`, or `|subagent` → `spawn_subagent`; the user explicitly selected the durable mechanism.
+- “Which subagents are running?” or “Check that subagent” → `subagent_control` with `list` or `status`; return a point-in-time view without waiting.
+- “Stop that subagent” → `subagent_control` with `cancel`; stop its active turn without archiving or deleting its thread.
 - Two independent results needed now → parallel built-in `Task` calls.
 - Work continuing while the parent designs, or work that may need later parent input → `spawn_subagent`.
 - Two workers editing the same file or depending on each other's changes → do not parallelize.

@@ -35,8 +35,10 @@ runtime:
     - "direct and specialist tools"
     - "built-in Task"
     - "spawn_subagent"
+    - "subagent_control"
   dependencies:
     - "spawn-subagent capability contract"
+    - "subagent-control capability contract"
   env: []
   reads:
     - "current task scope and coordination requirements"
@@ -51,6 +53,7 @@ safety:
     - "Treat side questions introduced with 'btw' or triggered with '|btw' as delegation requests so the parent can preserve its current task."
     - "Use built-in Task for bounded work whose result is needed in the current turn."
     - "Use spawn_subagent only for durable asynchronous work, visible child-thread history, or possible parent follow-up."
+    - "Use subagent_control only for explicit inspection, diagnosis, or cancellation; do not poll spawned children for completion."
     - "The parent remains responsible for synthesis, integration, and final verification."
   risks:
     - "Choosing asynchronous delegation for ordinary in-turn work adds unnecessary coordination overhead."
@@ -87,6 +90,8 @@ The skill receives the current task and its coordination requirements through co
 2. Use built-in `Task` when bounded delegated work must return during the current turn.
 3. Use `spawn_subagent` when work needs durable asynchronous execution, visible child-thread history, or possible parent follow-up.
 
+After spawning, use `subagent_control` only when the user asks to list or inspect children, when a child needs diagnosis, or when an active child turn must be cancelled. Normal completion still arrives through `send_to_thread`; do not poll status while waiting.
+
 The skill declares no tool allowlist.
 
 ## Behavior
@@ -121,6 +126,8 @@ Loading the skill only adds instructions to agent context. The skill itself does
 | “Btw, why does this test use a fake clock?” or `\|btw why does this test use a fake clock?` | Built-in `Task` by default | The aside must not displace the parent's current task; delegate the question after removing the trigger. |
 | A `btw` aside that can report later or may need parent follow-up | `spawn_subagent` | The aside is delegated, and its lifecycle benefits from a durable child thread. |
 | "Spawn a subagent", "run this in parallel", `/subagent`, or `\|subagent` | `spawn_subagent` | The user explicitly selected the durable asynchronous mechanism. Bound the brief before invoking it. |
+| "Which subagents are running?" or "Check that subagent" | `subagent_control` with `list` or `status` | The user explicitly requested inspection; return a point-in-time view without waiting. |
+| "Stop that subagent" | `subagent_control` with `cancel` | Stop the owned child's active turn without archiving or deleting its thread. |
 | Two workers would edit the same file or depend on each other's uncommitted changes | Do not parallelize | Overlapping writes are not independent; use one worker or work directly. |
 | The parent has not decided what should be built | Keep designing in the parent | Do not delegate understanding or ask a worker to choose the product direction. |
 | The result is neither needed now nor useful as durable follow-up | Do not delegate | There is no useful coordination outcome. |
@@ -139,8 +146,9 @@ The stress-test invariants are:
 
 - Skill unavailable: confirm `skills/delegating-subagents/SKILL.md` exists and run `./sync-skills.sh`.
 - Wrong delegation mechanism selected: compare whether the result is needed in the current turn or requires a durable child thread.
+- Spawned child needs inspection or cancellation: use `subagent_control`; do not repeatedly query it for completion.
 - Parallel edits conflict: delegate only independent slices with non-overlapping write targets.
 
 ## Maintenance notes
 
-This document is the source of truth for the skill artifact. Keep it aligned with `skills/delegating-subagents/SKILL.md`, the related `spawn-subagent` capability document, and repository instructions that require loading the skill before delegation.
+This document is the source of truth for the skill artifact. Keep it aligned with `skills/delegating-subagents/SKILL.md`, the related `spawn-subagent` and `subagent-control` capability documents, and repository instructions that require loading the skill before delegation.
