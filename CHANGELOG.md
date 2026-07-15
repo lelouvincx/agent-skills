@@ -32,6 +32,7 @@ and this project does not currently use versioned releases.
 
 ### Changed
 
+- Update the Amp SDK workspace to use the latest bundled Amp CLI and platform packages. [#102](https://github.com/lelouvincx/agent-skills/pull/102)
 - Remove the blanket "every browser task" wording from the local agent-browser workflow. [#100](https://github.com/lelouvincx/agent-skills/pull/100)
 - Guide GOV.UK-style writing to use articles sparingly, especially "the", and avoid em dashes. [#99](https://github.com/lelouvincx/agent-skills/pull/99)
 - Require agent-browser tasks to use visible system Chrome with a persistent local profile, CDP connection checks, and user-assisted login. [#97](https://github.com/lelouvincx/agent-skills/pull/97)
