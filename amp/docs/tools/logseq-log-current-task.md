@@ -145,7 +145,9 @@ After mutation, the worker re-reads both files and returns exactly one unfenced 
 
 `backlogVerified` means the worker found a Backlog task linked to the parent thread. `journalVerified` means it confirmed that the journal pointer targets that same task. The coordinator rejects extra keys, prose, fences, invalid types, multiline or malformed titles, `journalVerified` without `backlogVerified`, any verified Backlog without a title, both writes verified with an error, or neither write verified without an error. Malformed output is `unverified`, never complete or terminal failure.
 
-Complete Logseq state triggers parent rename and worker archive as independent stages. Archive is attempted even if rename fails, and either downstream failure preserves `Logseq: complete`. A partial, malformed, or verified failed worker result retains the same worker for a later constrained reconciliation turn. That turn must inspect existing parent-linked state before mutation, repair only the missing state, and return the same JSON schema. A fully complete, renamed, and archived operation is removed from memory.
+Complete Logseq state triggers parent rename and worker archive as independent stages. Archive is attempted even if rename fails, and either downstream failure preserves `Logseq: complete`. A partial, malformed, or verified failed worker result retains the same worker for a later constrained reconciliation turn. That turn must inspect existing parent-linked state before mutation, repair only the missing state, and return the same JSON schema. A malformed repair response does not erase Logseq state that an earlier valid result already verified. A fully complete, renamed, and archived operation is removed from memory.
+
+A typed worker error with no fresh response ends ownership of that failed worker so a later invocation can start a replacement. Transport errors with uncertain worker creation or message acceptance remain pending instead.
 
 When an `agent.start` message explicitly asks to log the current task to Logseq, the plugin appends hidden routing guidance requiring this tool. During that turn, recognized parent-agent file mutations under the configured graph are rejected and must be split from unrelated file changes. Logseq workers are exempt. Path checks use Amp's file-mutation helpers and normalized containment. Unrecognized mutation forms fail open; the hook does not start logging automatically or intercept unrelated paths.
 
@@ -176,6 +178,7 @@ Log the current thread with an optional hint:
 - `Logseq: partial` or `unverified`: invoke the same capability again to make the existing worker verify and repair missing state.
 - `Rename: failed`: invoke the same capability again to retry rename without another Logseq write.
 - `Archive: failed`: invoke the same capability again to retry cleanup without another Logseq write.
+- `Worker: failed`: invoke the capability again to start a replacement for the terminal worker.
 - Wrong Logseq graph: set `AMP_LOGSEQ_GRAPH_DIR` before starting Amp.
 
 ## Maintenance notes
