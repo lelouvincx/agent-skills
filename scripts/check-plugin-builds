@@ -33,6 +33,7 @@ trap 'rm -rf "$out_dir"' EXIT
 		--external=@ampcode/plugin \
 		--outdir="$out_dir"
 	bun amp/scripts/test-claude-design-subagent.ts
+	bun test amp/scripts/spawn-subagent.test.ts
 )
 
 echo "Amp plugin build check passed (${#plugins[@]} plugins)"
