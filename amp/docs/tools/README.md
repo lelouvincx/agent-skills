@@ -36,6 +36,7 @@ All active documents use `amp-artifact/v2`, which supports skills and plugin cap
 - [Logseq: Log Current Task](./logseq-log-current-task.md)
 - [Pi Code Subagent](./pi-code-subagent.md)
 - [Spawn Subagent](./spawn-subagent.md)
+- [Subagent Control](./subagent-control.md)
 - [Send to Thread](./send-to-thread.md)
 
 ### Agent modes

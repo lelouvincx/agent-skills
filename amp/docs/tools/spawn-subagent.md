@@ -75,6 +75,7 @@ safety:
 related:
   - "delegating-subagents"
   - "send-to-thread"
+  - "subagent-control"
 tags:
   - "subagent"
   - "thread"
@@ -108,6 +109,8 @@ Before delegating, use a direct or specialist tool when it already covers the jo
 The capability contract produces [`skills/delegating-subagents/SKILL.md`](../../../skills/delegating-subagents/SKILL.md) as its reusable decision-guidance artifact. The skill operationalizes this comparison whenever an agent considers delegation: use a direct or specialist tool when sufficient, built-in `Task` for ordinary in-turn work, or `spawn_subagent` for durable asynchronous child-thread work.
 
 `amp/AGENTS.md` requires the agent to load this skill before delegating so the documented choice is applied consistently.
+
+The related `subagent_control` tool can list, inspect, or cancel children spawned by the current parent when the user requests intervention or diagnosis. It does not change the normal lifecycle: the caller should not poll or wait for spawned children.
 
 ## Invocation
 
@@ -238,4 +241,5 @@ This point-in-time understanding is an inherent part of asynchronous delegation,
 - Update this doc when self-archive behavior changes.
 - Update this doc when the relationship with `send_to_thread` changes.
 - Re-check the comparison with built-in `Task` when Amp changes its documented subagent lifecycle.
+- Re-check `subagent_control` transcript discovery when the spawn result format changes.
 - Keep examples bounded; this tool is for parallel slices, not broad delegation.
