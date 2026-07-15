@@ -9,6 +9,7 @@ and this project does not currently use versioned releases.
 
 ### Added
 
+- Add parent-scoped list, status, and cancel controls for spawned Amp subagents. [#101](https://github.com/lelouvincx/agent-skills/pull/101)
 - Add a narrowly scoped Claude Design subagent that proxies authenticated design work through Claude Code. [#92](https://github.com/lelouvincx/agent-skills/pull/92)
 - Add RFC-0008 and implement layered pre-commit, pre-push, and authoritative GitHub Actions validation. [#87](https://github.com/lelouvincx/agent-skills/pull/87)
 - Add `testing4` and `duty-support` to the shared project registry and document zoxide-based registry maintenance. [#85](https://github.com/lelouvincx/agent-skills/pull/85)
@@ -33,6 +34,9 @@ and this project does not currently use versioned releases.
 ### Changed
 
 - Start the draft implementation handoff for P0 Logseq logging lifecycle, reconciliation, and partial-failure reliability. [#98](https://github.com/lelouvincx/agent-skills/pull/98)
+- Update the Amp SDK workspace to use the latest bundled Amp CLI and platform packages. [#102](https://github.com/lelouvincx/agent-skills/pull/102)
+- Remove the blanket "every browser task" wording from the local agent-browser workflow. [#100](https://github.com/lelouvincx/agent-skills/pull/100)
+- Guide GOV.UK-style writing to use articles sparingly, especially "the", and avoid em dashes. [#99](https://github.com/lelouvincx/agent-skills/pull/99)
 - Require agent-browser tasks to use visible system Chrome with a persistent local profile, CDP connection checks, and user-assisted login. [#97](https://github.com/lelouvincx/agent-skills/pull/97)
 - Let `spawn_subagent` choose the working directory for a bounded task, defaulting to the parent thread's working directory. [#96](https://github.com/lelouvincx/agent-skills/pull/96)
 - Run Logseq logging workers in fixed `high` mode without recent-message seeds, require `read_thread` for parent context, block Oracle escalation, and fail fast when a high-mode worker cannot start. [#94](https://github.com/lelouvincx/agent-skills/pull/94)
@@ -89,3 +93,5 @@ and this project does not currently use versioned releases.
 - Fix transient Logseq worker wait failures by retrying `thread.messages` timeouts until the worker timeout expires. [#51](https://github.com/lelouvincx/agent-skills/pull/51)
 
 ### Security
+
+- Isolate Claude subagents from repository-controlled settings, preserve Claude Design session identity across ambiguous failures, and stop oversized child output. [#103](https://github.com/lelouvincx/agent-skills/pull/103)

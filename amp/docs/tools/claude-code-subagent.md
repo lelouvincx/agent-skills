@@ -22,7 +22,7 @@ amp:
   docs_sources:
     api_docs: "amp plugins show-docs"
     agent_options: "amp plugins show-agent-options --json"
-  last_verified: "2026-06-24"
+  last_verified: "2026-07-15"
 contract:
   input_kind: "json_schema"
   output_kind: "json_text"
@@ -70,6 +70,8 @@ safety:
     - "Allows only Read, Grep, Glob, and LS by default."
     - "Denies Bash, Edit, Write, MultiEdit, and NotebookEdit."
     - "MCP is explicit-only; allowedMcpTools requires mcpConfigPath."
+    - "User, project, and local Claude Code setting sources are disabled so ambient hooks, plugins, skills, and permission rules cannot change the read-only child."
+    - "Strict MCP isolation is always enabled; only an explicitly supplied read-only MCP configuration can add MCP servers."
     - "The spawned Claude process receives a sanitized environment; secret-looking ambient variables are not inherited. If Claude needs API/OAuth credentials, provide a 1Password-backed env file via AMP_CLAUDE_CODE_SUBAGENT_ENV_FILE."
     - "Amp remains responsible for applying patches and verification."
   risks:
@@ -126,9 +128,9 @@ Output is a JSON string with `ok`, mode/model metadata, the parsed structured re
 
 ## Behavior
 
-The tool normalizes inputs, validates filesystem paths, builds a strict JSON schema for the selected mode, then runs `claude -p` with JSON output, `dontAsk` permissions, an allowed read-only tool list, and explicit disallowed write/shell tools. If MCP is configured, it adds `--strict-mcp-config` and merges default read-only MCP tools with caller-specified `allowedMcpTools`.
+The tool normalizes inputs, validates filesystem paths, builds a strict JSON schema for the selected mode, then runs `claude -p` with JSON output, `dontAsk` permissions, an allowed read-only tool list, explicit disallowed write/shell tools, no filesystem setting sources, and strict MCP isolation. If MCP is configured, it merges default read-only MCP tools with caller-specified `allowedMcpTools`; otherwise no MCP configuration is loaded.
 
-Claude receives a prompt that says Amp is the executor and Claude must provide structured advice only. The plugin parses Claude CLI JSON, validates the mode-specific payload, extracts token usage where possible, writes redacted audit logs, and returns a compact JSON envelope to Amp.
+Claude receives a prompt that says Amp is the executor and Claude must provide structured advice only. The plugin parses Claude CLI JSON, validates the mode-specific payload, extracts token usage where possible, writes redacted audit logs, and returns a compact JSON envelope to Amp. The child is terminated and the call fails explicitly if combined stdout and stderr exceed 5 MiB.
 
 ## Permissions and side effects
 
@@ -178,6 +180,7 @@ Use explicit read-only external context:
 - `Claude auth missing`: either use Claude Code keychain auth or set `AMP_CLAUDE_CODE_SUBAGENT_ENV_FILE` to a 1Password-backed env file. Do not export plaintext provider keys into Amp's environment.
 - `Claude Code exited with code ...`: inspect the returned `stderr` and audit log path.
 - `returned invalid JSON`: Claude did not satisfy the schema; retry with a narrower brief and less noisy context.
+- `output exceeded the 5 MiB limit`: narrow the task or reduce the context; partial output is not treated as valid JSON.
 - Timeout: raise `timeoutMinutes` up to `30` or shrink the task.
 
 ## Maintenance notes

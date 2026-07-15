@@ -1,7 +1,5 @@
 ## Local Chrome workflow
 
-For every browser task:
-
 1. Launch the installed system Google Chrome in visible, headed mode with CDP enabled and the persistent profile at `~/.local/state/agent-browser/profiles/local`.
 2. Connect agent-browser to Chrome over CDP and bring the Chrome window to the foreground.
 3. Verify the current URL and page title before continuing with the task.
