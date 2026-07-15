@@ -22,7 +22,7 @@ amp:
   docs_sources:
     api_docs: "amp plugins show-docs"
     agent_options: "amp plugins show-agent-options --json"
-  last_verified: "2026-07-13"
+  last_verified: "2026-07-15"
 contract:
   input_kind: "ui_prompt"
   output_kind: "ui_notification"
@@ -88,11 +88,11 @@ tags:
 
 ## Contract
 
-The command requires an active thread and accepts no JSON input. It opens `Log current task to Logseq`, where the optional message can provide a target, note, or source link. Submitting `Log to Logseq` produces a UI success or error notification.
+The command requires an active thread and accepts no JSON input. It opens `Log current task to Logseq`, where the optional message can provide a target, note, or source link. Submitting `Log to Logseq` produces a UI notification with separate worker, Logseq, parent-rename, and worker-archive statuses.
 
 ## Behavior
 
-The command checks for an active thread, prompts for an optional hint, and calls the plugin's shared logging flow. That flow starts a hidden built-in `high` worker without seeding recent parent messages. If the worker cannot leave its initial idle state within 15 seconds, including when `high` mode cannot start because the account lacks credits, the flow fails instead of waiting for the full worker timeout. The worker must reconstruct parent context with `read_thread`; if that fails, it stops without editing Logseq. Oracle calls from the worker are rejected. After a successful Logseq update, the flow derives a `[Project] task title`, renames the parent thread, and archives the worker.
+The command checks for an active thread, prompts for an optional hint, and calls the same in-memory operation coordinator as the agent tool. The first invocation starts one hidden built-in `high` worker for the parent thread. Concurrent or later invocations reconcile that operation instead of starting another worker. Ambiguous startup, message delivery, state, or response outcomes are reported as pending while the existing worker retains ownership. The worker must reconstruct parent context with `read_thread`, update Backlog before the journal, re-read both files, and return the strict JSON result documented by the related agent tool. A partial or malformed result is reconciled through the same worker. After worker-attested completion, parent rename and worker archive run as separate stages, so either downstream failure preserves Logseq success.
 
 ## Permissions and side effects
 
@@ -105,9 +105,9 @@ Choose `logseq: Log current task` from the command palette, optionally enter `up
 ## Troubleshooting
 
 - Open an Amp thread before invoking the command.
-- If the worker fails, inspect the worker thread linked from the notification.
+- If the notification says pending, partial, unverified, rename failed, or archive failed, run the command again to reconcile only unfinished work.
 - Set `AMP_LOGSEQ_GRAPH_DIR` before starting Amp to use a different graph.
 
 ## Maintenance notes
 
-Update this document when the command ID, palette prompt, notifications, worker mode, startup timeout, context reconstruction, Oracle guard, or shared Logseq flow changes. Keep the related agent-tool document scoped to `amp.registerTool`.
+Update this document when the command ID, palette prompt, notifications, worker mode, startup timeout, context reconstruction, Oracle guard, or shared operation flow changes. Keep detailed routing and worker-result rules in the related agent-tool document.

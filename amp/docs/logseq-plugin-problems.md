@@ -54,6 +54,8 @@ The observed thread showed:
 
 ## P0: correctness and data integrity
 
+The P0 implementation guarantee is deliberately process-scoped: one coordinator-owned active or pending worker per parent thread for one plugin load. Completion is worker-attested and requires post-write read-back of the parent-linked Backlog task and the journal pointer to that same task. The coordinator validates the exact machine result but does not independently parse Logseq semantics. Plugin reloads, objective verification, and durable task identity remain outside this phase.
+
 ### Explicit Logseq requests can bypass the capability
 
 The registered tool description asks the model to use the tool when the user requests Logseq logging, but it does not enforce routing. A direct generic file edit can silently replace the intended workflow.
@@ -81,7 +83,7 @@ created
 → archive-complete | archive-failed
 ```
 
-If the Amp plugin API offers no durable store, an in-memory lifecycle is acceptable initially, but restart limitations must be stated honestly.
+The Amp plugin API offers no dedicated operation store or child-thread enumeration, so P0 uses an in-memory lifecycle and documents that plugin reload can lose pending-operation ownership.
 
 ### Concurrent calls and retries can create duplicate writers
 
@@ -221,5 +223,9 @@ P0 implementation should demonstrate at minimum:
 - malformed worker output is rejected without misreporting a write
 - partial Backlog/journal state is reported and can be reconciled
 - timeout compatibility fallback is isolated and tested
+- every create, append, result-consumption, rename, and archive transition is serialized
+- ambiguous worker creation or message delivery remains pending without launching duplicate work
+- only a fresh assistant message can satisfy the current worker turn
+- routing protection is turn-scoped, worker-exempt, path-contained, and fail-open for unknown mutations
 
 Later phases should add coverage for task-ID output and encoding, canonical customer-aware titles and labels, timezone behavior, graph resolution, and worker registry cleanup.
