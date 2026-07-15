@@ -92,3 +92,5 @@ and this project does not currently use versioned releases.
 - Fix transient Logseq worker wait failures by retrying `thread.messages` timeouts until the worker timeout expires. [#51](https://github.com/lelouvincx/agent-skills/pull/51)
 
 ### Security
+
+- Isolate Claude subagents from repository-controlled settings, preserve Claude Design session identity across ambiguous failures, and stop oversized child output.
