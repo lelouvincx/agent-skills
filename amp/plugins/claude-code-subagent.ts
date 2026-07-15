@@ -6,6 +6,7 @@
 // responsible for applying/adapting changes and verification.
 
 import { spawn } from 'node:child_process'
+import { randomUUID } from 'node:crypto'
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
@@ -43,6 +44,7 @@ interface ClaudeRunResult {
 	stdout: string
 	stderr: string
 	timedOut: boolean
+	outputLimitExceeded: boolean
 }
 
 interface TokenUsage {
@@ -55,6 +57,7 @@ interface TokenUsage {
 
 const DEFAULT_TIMEOUT_MINUTES = 10
 const MAX_TIMEOUT_MINUTES = 30
+const MAX_CLAUDE_OUTPUT_BYTES = 5 * 1024 * 1024
 const DEFAULT_MODEL: Model = 'opus'
 const DEFAULT_MCP_CONFIG_PATH = join(homedir(), '.config', 'amp', 'claude-code-readonly-mcp.json')
 const DEFAULT_GITHUB_PROFILE_CONFIG_PATH = join(homedir(), '.config', 'amp', 'github-profiles.json')
@@ -156,7 +159,7 @@ export default function (amp: PluginAPI) {
 				},
 				mcpConfigPath: {
 					type: 'string',
-					description: `Optional read-only MCP config path. Not loaded by default; pass ${DEFAULT_MCP_CONFIG_PATH} explicitly when you want external read-only context. Claude Code is run with --strict-mcp-config when this is set.`,
+					description: `Optional read-only MCP config path. Not loaded by default; pass ${DEFAULT_MCP_CONFIG_PATH} explicitly when you want external read-only context. Claude Code always runs with strict MCP isolation.`,
 				},
 				allowedMcpTools: {
 					type: 'array',
@@ -215,6 +218,17 @@ export default function (amp: PluginAPI) {
 				startedAt,
 				finishedAt,
 			})
+
+			if (result.outputLimitExceeded) {
+				return JSON.stringify({
+					ok: false,
+					error: 'Claude Code output exceeded the 5 MiB limit.',
+					auditLogPath: audit.auditPath,
+					usageLogPath: usageLog.path,
+					usageLogError: usageLog.error,
+					rawTranscriptPath: audit.rawPath,
+				}, null, 2)
+			}
 
 			if (result.timedOut) {
 				return JSON.stringify({
@@ -312,14 +326,26 @@ export default function (amp: PluginAPI) {
 			const input = normalizeDesignInput(rawInput)
 			if ('error' in input) return failureJson(input.error)
 
-			const args = buildDesignCommand(input)
+			const expectedSessionId = input.sessionId ?? randomUUID()
+			const args = buildDesignCommand(input, expectedSessionId)
 			const startedAt = new Date()
 			const result = await runClaude(args, buildDesignPrompt(input), resolve(input.workingDirectory), input.timeoutMinutes * 60_000, undefined, false)
 			const finishedAt = new Date()
 			const parsed = parseJson(result.stdout)
 			const output = parsed.ok ? extractResultCandidate(parsed.value) : undefined
-			const sessionId = parsed.ok ? extractClaudeSessionId(parsed.value) : undefined
+			const returnedSessionId = parsed.ok ? extractClaudeSessionId(parsed.value) : undefined
+			const sessionId = expectedSessionId
 			const audit = writeDesignAuditLog({ threadID: ctx.thread.id, input, args, result, output, sessionId, startedAt, finishedAt })
+
+			if (result.outputLimitExceeded) {
+				return JSON.stringify({
+					ok: false,
+					error: 'Claude Code output exceeded the 5 MiB limit.',
+					sessionId,
+					auditLogPath: audit.auditPath,
+					rawTranscriptPath: audit.rawPath,
+				}, null, 2)
+			}
 
 			if (result.timedOut) {
 				return JSON.stringify({
@@ -345,6 +371,25 @@ export default function (amp: PluginAPI) {
 					ok: false,
 					error: `Could not parse Claude CLI JSON: ${parsed.error}`,
 					stdout: truncate(result.stdout, 4_000),
+					sessionId,
+					auditLogPath: audit.auditPath,
+					rawTranscriptPath: audit.rawPath,
+				}, null, 2)
+			}
+			if (!returnedSessionId) {
+				return JSON.stringify({
+					ok: false,
+					error: 'Claude Code result did not include a session ID.',
+					sessionId,
+					auditLogPath: audit.auditPath,
+					rawTranscriptPath: audit.rawPath,
+				}, null, 2)
+			}
+			if (returnedSessionId && returnedSessionId !== expectedSessionId) {
+				return JSON.stringify({
+					ok: false,
+					error: 'Claude Code returned an unexpected session ID.',
+					sessionId,
 					auditLogPath: audit.auditPath,
 					rawTranscriptPath: audit.rawPath,
 				}, null, 2)
@@ -386,17 +431,19 @@ function normalizeDesignInput(raw: Record<string, unknown>): DesignToolInput | {
 	}
 }
 
-function buildDesignCommand(input: DesignToolInput): string[] {
+function buildDesignCommand(input: DesignToolInput, sessionId: string): string[] {
 	const args = [
 		'-p',
 		'--model', input.model,
 		'--output-format', 'json',
 		'--permission-mode', 'dontAsk',
+		'--setting-sources', 'user',
 		'--tools', DESIGN_ALLOWED_TOOLS.join(','),
 		'--allowedTools', [...DESIGN_ALLOWED_TOOLS, DESIGN_MCP_TOOLS].join(','),
 		'--disallowedTools', DESIGN_DENIED_TOOLS.join(','),
 	]
-	if (input.sessionId) args.push('--resume', input.sessionId)
+	if (input.sessionId) args.push('--resume', sessionId)
+	else args.push('--session-id', sessionId)
 	return args
 }
 
@@ -470,13 +517,15 @@ function buildClaudeCommand(input: ToolInput, schema: Record<string, unknown>): 
 		'--model', input.model,
 		'--output-format', 'json',
 		'--permission-mode', 'dontAsk',
+		'--setting-sources', '',
+		'--strict-mcp-config',
 		'--tools', BUILTIN_ALLOWED_TOOLS.join(','),
 		'--allowedTools', allowedTools.join(','),
 		'--disallowedTools', BUILTIN_DENIED_TOOLS.join(','),
 		'--json-schema', JSON.stringify(schema),
 	]
 
-	if (configuredMcpPath) args.push('--strict-mcp-config', '--mcp-config', configuredMcpPath)
+	if (configuredMcpPath) args.push('--mcp-config', configuredMcpPath)
 	for (const root of input.safeRoots) args.push('--add-dir', root)
 
 	return { args, cwd }
@@ -585,23 +634,39 @@ function runClaude(args: string[], prompt: string, cwd: string, timeoutMs: numbe
 		let stdout = ''
 		let stderr = ''
 		let timedOut = false
+		let outputLimitExceeded = false
+		let outputBytes = 0
+
+		const terminate = () => {
+			child.kill('SIGTERM')
+			setTimeout(() => child.kill('SIGKILL'), 5_000).unref()
+		}
+		const appendOutput = (current: string, chunk: string) => {
+			if (outputLimitExceeded) return current
+			outputBytes += Buffer.byteLength(chunk)
+			if (outputBytes > MAX_CLAUDE_OUTPUT_BYTES) {
+				outputLimitExceeded = true
+				terminate()
+				return current
+			}
+			return current + chunk
+		}
 
 		const timer = setTimeout(() => {
 			timedOut = true
-			child.kill('SIGTERM')
-			setTimeout(() => child.kill('SIGKILL'), 5_000).unref()
+			terminate()
 		}, timeoutMs)
 		child.stdout.setEncoding('utf8')
 		child.stderr.setEncoding('utf8')
-		child.stdout.on('data', (chunk) => { stdout += chunk })
-		child.stderr.on('data', (chunk) => { stderr += chunk })
+		child.stdout.on('data', (chunk) => { stdout = appendOutput(stdout, chunk) })
+		child.stderr.on('data', (chunk) => { stderr = appendOutput(stderr, chunk) })
 		child.on('error', (error) => {
 			clearTimeout(timer)
-			resolveRun({ exitCode: null, stdout, stderr: `${stderr}\n${error.message}`.trim(), timedOut })
+			resolveRun({ exitCode: null, stdout, stderr: `${stderr}\n${error.message}`.trim(), timedOut, outputLimitExceeded })
 		})
 		child.on('close', (code) => {
 			clearTimeout(timer)
-			resolveRun({ exitCode: code, stdout, stderr, timedOut })
+			resolveRun({ exitCode: code, stdout, stderr, timedOut, outputLimitExceeded })
 		})
 	})
 }
@@ -824,6 +889,7 @@ function writeAuditLog(details: {
 		durationMs: details.finishedAt.getTime() - details.startedAt.getTime(),
 		exitCode: details.result.exitCode,
 		timedOut: details.result.timedOut,
+		outputLimitExceeded: details.result.outputLimitExceeded,
 		args: details.args.map((arg) => arg === JSON.stringify(schemaForMode(details.input.mode)) ? '<json-schema>' : arg),
 		brief: redact(details.input.brief),
 		context: redact(truncate(details.input.context ?? '', 20_000)),
@@ -874,6 +940,7 @@ function writeDesignAuditLog(details: {
 		durationMs: details.finishedAt.getTime() - details.startedAt.getTime(),
 		exitCode: details.result.exitCode,
 		timedOut: details.result.timedOut,
+		outputLimitExceeded: details.result.outputLimitExceeded,
 		args: details.args,
 		prompt: redact(details.input.prompt),
 		result: redactObject(details.output),
@@ -912,6 +979,7 @@ function writeTokenUsageLog(details: {
 		durationMs: details.finishedAt.getTime() - details.startedAt.getTime(),
 		exitCode: details.result.exitCode,
 		timedOut: details.result.timedOut,
+		outputLimitExceeded: details.result.outputLimitExceeded,
 		validationError: details.validationError,
 		usage: details.usage,
 		metadata: {

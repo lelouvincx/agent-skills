@@ -22,7 +22,7 @@ amp:
   docs_sources:
     api_docs: "amp plugins show-docs"
     agent_options: null
-  last_verified: "2026-07-13"
+  last_verified: "2026-07-15"
 contract:
   input_kind: "json_schema"
   output_kind: "json_text"
@@ -68,6 +68,7 @@ safety:
     - "Uses Claude Code as the authenticated proxy; Amp does not connect to Claude Design MCP directly."
     - "Allows Read, Grep, Glob, ToolSearch, DesignSync, and mcp__claude-design__* only."
     - "Denies Bash, Edit, Write, and NotebookEdit."
+    - "Loads only Claude Code user settings; project and local settings cannot add hooks, plugins, skills, or permission rules."
     - "Does not load caller-supplied MCP configuration or arbitrary MCP tools."
     - "The spawned Claude process receives a sanitized environment so ambient API keys do not disable claude.ai connectors."
   risks:
@@ -137,19 +138,23 @@ Optional inputs:
 | `workingDirectory` | `string` | plugin process cwd | Repository whose design system or local files Claude may read. |
 | `includeRawTranscript` | `boolean` | `false` | Stores raw Claude CLI output for debugging. |
 
-Success output is JSON containing:
+Output is JSON containing:
 
 - `ok`
-- `result`
+- `result` on success or `error` on failure
 - `sessionId`
 - model metadata
 - `auditLogPath`
+
+A fresh call assigns its Claude Code session ID before the child starts. A resumed call retains the supplied session ID. The known ID is returned on success, timeout, output-limit failure, non-zero exit, and invalid JSON so an ambiguous cloud mutation can be inspected. A pre-start failure can still leave an ID with no persisted session.
 
 A call is complete when Amp has recorded the audit path and session ID. For project work, Amp must also validate the returned project ID or URL against the intended project.
 
 ## Behavior
 
-The tool runs `claude -p` with Claude Code's normal user configuration. This keeps its first-party Claude Design integration and account consent available.
+The tool runs `claude -p` with Claude Code user settings only. This keeps its first-party Claude Design integration and account consent available without loading repository-controlled project or local settings.
+
+Fresh calls receive a wrapper-generated UUID through `--session-id`; iterative calls use `--resume`. Claude's final session ID must match the expected ID. The child is terminated and the call fails explicitly if combined stdout and stderr exceed 5 MiB.
 
 It allows only:
 
@@ -178,6 +183,8 @@ As of 2026-07-13, the following cloud lifecycle capabilities are verified:
 - fresh-session recovery from a complete handoff packet
 
 Registration, command construction and session validation are also verified. Permission boundaries, environment sanitization, audit behavior and authentication are verified.
+
+Deterministic regression coverage verifies preassigned fresh-session IDs, resumed-session IDs, user-only setting sources, session-ID preservation on timeout and failure, and the shared output limit.
 
 Design-system attachment remains qualified. The ID was requested during creation and reflected in the project-bound design prompt. However, Claude Design exposes no independent project field for reading the attachment back.
 
@@ -244,6 +251,7 @@ If a mutating call times out or is ambiguous:
 3. Apply only the missing delta.
 
 Mutation idempotency is not guaranteed.
+If Claude failed before session initialization, the preassigned ID may not have a persisted conversation; project inspection remains authoritative.
 
 ## Permissions and side effects
 
@@ -303,6 +311,7 @@ Recover source in a fresh session for an authorized local handoff:
 - Enterprise account: ask an administrator to enable Claude Design.
 - Wrong design context: stop the mutation, omit `sessionId` to start fresh, and provide the complete handoff packet with the intended project ID or URL.
 - Timeout or ambiguous mutation: use the audit path and session ID to inspect the project before retrying; request only the missing delta.
+- `output exceeded the 5 MiB limit`: inspect the project with the returned session ID before issuing a narrower follow-up.
 
 ## Maintenance notes
 
