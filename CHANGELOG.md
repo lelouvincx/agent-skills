@@ -93,4 +93,4 @@ and this project does not currently use versioned releases.
 
 ### Security
 
-- Isolate Claude subagents from repository-controlled settings, preserve Claude Design session identity across ambiguous failures, and stop oversized child output.
+- Isolate Claude subagents from repository-controlled settings, preserve Claude Design session identity across ambiguous failures, and stop oversized child output. [#103](https://github.com/lelouvincx/agent-skills/pull/103)
