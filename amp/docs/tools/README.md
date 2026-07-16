@@ -43,6 +43,7 @@ All active documents use `amp-artifact/v2`, which supports skills and plugin cap
 
 - [Deep Classic](./deep-classic.md)
 - [DeepSeek V4 Pro](./deepseek-v4-pro.md)
+- [Inkling](./inkling.md)
 - [Smart Classic](./smart-classic.md)
 
 ### Commands
