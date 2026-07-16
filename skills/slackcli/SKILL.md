@@ -1,17 +1,33 @@
 ---
 name: slackcli
-description: Interact with Slack workspaces via the slackcli CLI. Use when the user asks to send messages, read channels, list conversations, or manage Slack auth.
+description: Use slackcli to search and read Slack, manage saved items and canvases, send messages or files, create drafts, add reactions, manage authentication and multiple workspaces, or upgrade the CLI.
 ---
 
 # slackcli – Slack Workspace CLI
 
-`slackcli` is on `PATH`. Verify auth before any action:
+`slackcli` is on `PATH`. These examples target v0.7.0. Run `slackcli --version` and `slackcli auth list` first; if the installed version differs, verify affected syntax with `<command> --help`.
 
 ```bash
+slackcli --version
 slackcli auth list
 ```
 
-If empty, prefer browser-token extraction: open Slack in browser → DevTools → Network → right-click any Slack API request → Copy as cURL → `slackcli auth parse-curl --from-clipboard --login`. **Never log or echo tokens.**
+If no workspace is configured, prefer a Slack app token for durable automation and use browser-session tokens only for personal access or features that require them, such as drafts. For browser auth: open Slack → DevTools → Network → copy a Slack API request as cURL, then run `slackcli auth parse-curl --from-clipboard --login`. Browser tokens inherit the user’s access and expire with the session. Keep tokens out of arguments, shell history, logs, and output.
+
+Run requested read-only commands without extra confirmation. Before a side effect, show and confirm: workspace; channel/user and message text for sends or drafts; attached file path for uploads; or channel, message timestamp, and emoji for reactions.
+
+## Finding Slack content
+
+Prefer targeted search over listing and scanning:
+
+```bash
+slackcli search messages "<query>" --limit 20 --json
+slackcli search messages "<query>" --in <channel-name> --from <username> --json
+slackcli search channels "<name>" --json
+slackcli search people "<name-or-email>" --json
+```
+
+Slack message search supports Slack search operators. Use `--page`, `--sort score|timestamp`, and `--sort-dir asc|desc` when needed.
 
 ## Reading messages (most common)
 
@@ -54,19 +70,43 @@ Bot/integration posts (GitHub, Linear, Jira, Calendly…) often have empty `text
 
 ```bash
 slackcli conversations list --exclude-archived --limit 100
-slackcli conversations list --types public_channel|private_channel|im|mpim
+slackcli conversations list --types public_channel,private_channel,im,mpim
 ```
 
-When user says "#general", list first to resolve the ID.
+When the user gives a channel name rather than an ID, prefer `search channels` to resolve it.
+
+## Saved items and canvases
+
+```bash
+slackcli saved list --state saved --limit 50 --json
+slackcli saved list --state to_do --json
+
+slackcli canvas list --limit 20 --json
+slackcli canvas list --channel <channel-id> --json
+slackcli canvas read <canvas-id>
+slackcli canvas read --channel <channel-id>
+```
+
+Canvas reads return markdown by default. Use `--json` for structured output or `--raw` only when the original HTML is required.
 
 ## Sending messages
 
 ```bash
 slackcli messages send --recipient-id <channel-or-user-id> --message "..."
 slackcli messages send --recipient-id <channel-id> --thread-ts <ts> --message "..."
+slackcli messages send --recipient-id <channel-or-user-id> --message "..." --file <path>
 ```
 
-**Always confirm recipient + content with the user before sending.**
+File uploads require suitable Slack permissions, such as `files:write` for app tokens.
+
+## Creating drafts
+
+Drafts work only with browser session tokens, not Slack app tokens:
+
+```bash
+slackcli messages draft --recipient-id <channel-or-user-id> --message "..."
+slackcli messages draft --recipient-id <channel-id> --thread-ts <ts> --message "..."
+```
 
 ## Reacting
 
@@ -78,4 +118,14 @@ Common: `thumbsup`, `heart`, `fire`, `eyes`, `white_check_mark`, `rocket`, `tada
 
 ## Multi-workspace
 
-Add `--workspace "<name|id>"` to any command if more than one workspace is configured.
+If more than one workspace is configured, resolve the intended workspace from `slackcli auth list` and pass `--workspace "<name|id>"` to search, conversation, saved, canvas, and message commands. Do not rely on the default workspace when the user’s target is ambiguous.
+
+## Updating the CLI
+
+Check without modifying the installation:
+
+```bash
+slackcli update check
+```
+
+With user approval, use `brew upgrade slackcli` for a Homebrew installation; otherwise use `slackcli update`. Verify the result with `slackcli --version`.
