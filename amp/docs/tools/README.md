@@ -64,3 +64,4 @@ All active documents use `amp-artifact/v2`, which supports skills and plugin cap
 - [_schema.md](./_schema.md) defines the current `amp-artifact/v2` frontmatter schema.
 - [_schema-v1.md](./_schema-v1.md) preserves the historical `amp-plugin-capability/v1` schema.
 - [_template.md](./_template.md) provides a copyable skeleton for new artifact docs.
+- [Issue docs](../issues/README.md) preserve the original intent, evidence, and decisions behind capability contracts.

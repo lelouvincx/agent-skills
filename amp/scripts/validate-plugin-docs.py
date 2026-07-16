@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate Amp artifact documentation consistency."""
+"""Validate Amp artifact and issue documentation consistency."""
 
 from __future__ import annotations
 
@@ -13,6 +13,7 @@ import yaml
 
 AMP_ROOT = Path(__file__).resolve().parents[1]
 DOCS_DIR = AMP_ROOT / "docs" / "tools"
+ISSUES_DIR = AMP_ROOT / "docs" / "issues"
 
 V2_REQUIRED_TOP_LEVEL = {
     "doc_schema": "scalar",
@@ -107,6 +108,40 @@ REQUIRED_H2S = [
     "Permissions and side effects",
     "Examples",
     "Troubleshooting",
+    "Maintenance notes",
+]
+
+ISSUE_REQUIRED_TOP_LEVEL = {
+    "doc_schema": "scalar",
+    "code": "scalar",
+    "title": "scalar",
+    "slug": "scalar",
+    "file": "scalar",
+    "status": "scalar",
+    "priority": "scalar",
+    "summary": "scalar",
+    "created": "scalar",
+    "updated": "scalar",
+    "amp_thread_id": "mapping",
+    "artifacts": "list",
+    "implementation": "list",
+    "pull_requests": "list",
+    "related": "list",
+    "tags": "list",
+}
+
+ISSUE_STATUSES = {"Open", "In progress", "Partially resolved", "Resolved", "Superseded"}
+ISSUE_PRIORITIES = {"P0", "P1", "P2", "P3"}
+ISSUE_REQUIRED_H2S = [
+    "Summary",
+    "Trigger",
+    "Original intent",
+    "Evidence",
+    "Findings",
+    "Decisions and scope",
+    "Resolution status",
+    "Follow-up",
+    "Validation",
     "Maintenance notes",
 ]
 
@@ -246,6 +281,91 @@ def validate_schema_contract(path: Path, data: dict[str, object], errors: list[s
         errors.append(f"{path}: H2 headings must be exactly {REQUIRED_H2S!r}; got {h2s!r}")
 
 
+def validate_issue_contract(path: Path, data: dict[str, object], errors: list[str]) -> None:
+    for field, expected in ISSUE_REQUIRED_TOP_LEVEL.items():
+        if field not in data:
+            errors.append(f"{path}: missing required frontmatter field {field}")
+            continue
+        validate_type(path, field, data[field], expected, errors)
+
+    for unknown in sorted(set(data) - set(ISSUE_REQUIRED_TOP_LEVEL)):
+        errors.append(f"{path}: unknown top-level frontmatter field {unknown}")
+
+    if data.get("doc_schema") != "amp-issue/v1":
+        errors.append(f"{path}: doc_schema must be 'amp-issue/v1'")
+
+    code = data.get("code")
+    if isinstance(code, str) and not re.fullmatch(r"ISSUE-\d{4}", code):
+        errors.append(f"{path}: code must look like ISSUE-0001")
+
+    slug = data.get("slug")
+    if isinstance(slug, str) and not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", slug):
+        errors.append(f"{path}: slug must be URL-safe lowercase kebab-case")
+
+    if data.get("file") != path.name:
+        errors.append(f"{path}: file must match filename {path.name!r}")
+    if isinstance(code, str) and isinstance(slug, str):
+        expected_filename = f"{code.lower()}-{slug}.md"
+        if path.name != expected_filename:
+            errors.append(f"{path}: code and slug require filename {expected_filename!r}")
+
+    status = data.get("status")
+    if isinstance(status, str) and status not in ISSUE_STATUSES:
+        errors.append(f"{path}: status has invalid value {status!r}")
+
+    priority = data.get("priority")
+    if isinstance(priority, str) and priority not in ISSUE_PRIORITIES:
+        errors.append(f"{path}: priority has invalid value {priority!r}")
+
+    parsed_dates: dict[str, date] = {}
+    for field in ("created", "updated"):
+        value = data.get(field)
+        try:
+            parsed_dates[field] = date.fromisoformat(value) if isinstance(value, str) else date.min
+        except ValueError:
+            parsed_dates[field] = date.min
+        if not isinstance(value, str) or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", value) or parsed_dates[field] == date.min:
+            errors.append(f"{path}: {field} must use YYYY-MM-DD")
+    if parsed_dates.get("updated", date.min) < parsed_dates.get("created", date.min):
+        errors.append(f"{path}: updated must not be earlier than created")
+
+    threads = data.get("amp_thread_id")
+    if isinstance(threads, dict):
+        if not threads:
+            errors.append(f"{path}: amp_thread_id must map at least one thread ID to its intent")
+        for thread_id, intent in threads.items():
+            if not isinstance(thread_id, str) or not re.fullmatch(r"T-[A-Za-z0-9-]+", thread_id):
+                errors.append(f"{path}: invalid amp_thread_id key {thread_id!r}")
+            if not isinstance(intent, str) or not intent:
+                errors.append(f"{path}: amp_thread_id {thread_id!r} must describe the thread intent")
+
+    implementation = data.get("implementation")
+    if isinstance(implementation, list):
+        for item in implementation:
+            if not isinstance(item, dict) or set(item) != {"path"} or not isinstance(item.get("path"), str) or not item["path"]:
+                errors.append(f"{path}: implementation items must contain exactly one string path")
+                continue
+            if Path(item["path"]).is_absolute():
+                errors.append(f"{path}: implementation path {item['path']!r} must be relative")
+            elif not (path.parent / item["path"]).resolve().exists():
+                errors.append(f"{path}: implementation path {item['path']!r} does not exist")
+
+    for field in ("artifacts", "pull_requests", "related", "tags"):
+        values = data.get(field)
+        if isinstance(values, list) and any(not isinstance(value, str) or not value for value in values):
+            errors.append(f"{path}: {field} items must be non-empty strings")
+
+    pull_requests = data.get("pull_requests")
+    if isinstance(pull_requests, list):
+        for pull_request in pull_requests:
+            if isinstance(pull_request, str) and not re.fullmatch(r"https://github\.com/[^/]+/[^/]+/pull/\d+", pull_request):
+                errors.append(f"{path}: pull request must use a full GitHub pull URL; got {pull_request!r}")
+
+    h2s = markdown_h2s(path)
+    if h2s != ISSUE_REQUIRED_H2S:
+        errors.append(f"{path}: H2 headings must be exactly {ISSUE_REQUIRED_H2S!r}; got {h2s!r}")
+
+
 def markdown_links(path: Path) -> list[str]:
     return re.findall(r"\[[^\]]+\]\((\./[^)]+)\)", path.read_text(encoding="utf-8"))
 
@@ -303,13 +423,57 @@ def main() -> int:
         if doc.resolve() not in linked_docs:
             errors.append(f"{doc}: slug {slug!r} is not linked from {readme}")
 
+    issue_docs = sorted(ISSUES_DIR.glob("issue-*.md"))
+    seen_issue_codes: dict[str, Path] = {}
+    seen_issue_slugs: dict[str, Path] = {}
+    issue_data: dict[Path, dict[str, object]] = {}
+    for issue in issue_docs:
+        fm = frontmatter(issue)
+        if fm is None:
+            errors.append(f"{issue}: missing or malformed frontmatter")
+            continue
+        data = parse_frontmatter(fm)
+        issue_data[issue] = data
+        validate_issue_contract(issue, data, errors)
+        for field, seen in (("code", seen_issue_codes), ("slug", seen_issue_slugs)):
+            value = data.get(field)
+            if not isinstance(value, str):
+                continue
+            previous = seen.setdefault(value, issue)
+            if previous != issue:
+                errors.append(f"{issue}: duplicate {field} {value!r}; already used by {previous}")
+        artifacts = data.get("artifacts")
+        for artifact_slug in artifacts if isinstance(artifacts, list) else []:
+            if isinstance(artifact_slug, str) and artifact_slug not in slug_to_doc:
+                errors.append(f"{issue}: artifact slug {artifact_slug!r} does not exist")
+
+    for issue, data in issue_data.items():
+        related = data.get("related")
+        for related_code in related if isinstance(related, list) else []:
+            if isinstance(related_code, str) and related_code not in seen_issue_codes:
+                errors.append(f"{issue}: related issue code {related_code!r} does not exist")
+
+    issues_readme = ISSUES_DIR / "README.md"
+    linked_issues: set[Path] = set()
+    if not issues_readme.exists():
+        errors.append(f"{issues_readme}: missing issue index")
+    else:
+        for link in markdown_links(issues_readme):
+            target = (ISSUES_DIR / link.removeprefix("./")).resolve()
+            linked_issues.add(target)
+            if not target.exists():
+                errors.append(f"{issues_readme}: link {link!r} points to a missing file")
+    for issue in issue_docs:
+        if issue.resolve() not in linked_issues:
+            errors.append(f"{issue}: is not linked from {issues_readme}")
+
     if errors:
-        print("Amp artifact doc validation failed:")
+        print("Amp documentation validation failed:")
         for error in errors:
             print(f"- {error}")
         return 1
 
-    print(f"Validated {len(doc_to_slug)} Amp artifact docs.")
+    print(f"Validated {len(doc_to_slug)} Amp artifact docs and {len(issue_docs)} issue docs.")
     return 0
 
 

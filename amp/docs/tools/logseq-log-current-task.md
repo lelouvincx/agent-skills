@@ -97,6 +97,8 @@ tags:
 
 `logseq_log_current_task` logs the durable outcome of the current Amp thread into the configured Logseq graph. It coordinates one hidden built-in Amp worker per parent thread, reports unresolved work as pending, and preserves separate Logseq-write, parent-rename, and worker-archive outcomes.
 
+[ISSUE-0001: Logseq logging reliability](../issues/issue-0001-logseq-logging-reliability.md) preserves the original intent, incident evidence, and decisions behind this contract.
+
 ## Invocation
 
 - Surface: agent-callable tool
@@ -183,4 +185,4 @@ Log the current thread with an optional hint:
 
 ## Maintenance notes
 
-Update this doc when the agent tool schema, routing hooks, operation state, worker result protocol, Backlog-first behavior, journal verification, reconciliation, parent rename, worker archive, default graph path, worker mode, startup timeout, mandatory `read_thread` behavior, Oracle guard, or timeout compatibility changes.
+Update this doc when the agent tool schema, routing hooks, operation state, worker result protocol, Backlog-first behavior, journal verification, reconciliation, parent rename, worker archive, default graph path, worker mode, startup timeout, mandatory `read_thread` behavior, Oracle guard, or timeout compatibility changes. Update ISSUE-0001 separately when a finding is resolved or scope changes; do not move historical evidence into this runtime contract.

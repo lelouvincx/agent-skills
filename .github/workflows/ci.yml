@@ -117,10 +117,10 @@ jobs:
       - name: Install Amp validator dependencies
         run: python -m pip install "PyYAML==${PYYAML_VERSION}"
 
-      - name: Test Amp artifact doc validator
+      - name: Test Amp documentation validator
         run: python -m unittest amp/scripts/test_validate_plugin_docs.py
 
-      - name: Validate Amp artifact docs
+      - name: Validate Amp artifact and issue docs
         run: python amp/scripts/validate-plugin-docs.py
 
       - name: Validate Amp RFC docs

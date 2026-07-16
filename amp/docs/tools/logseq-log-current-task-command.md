@@ -78,6 +78,8 @@ tags:
 
 `logseq-log-current-task` provides the command-palette action `logseq: Log current task`. It prompts for an optional hint, then runs the same Logseq logging flow exposed separately by the related agent tool.
 
+[ISSUE-0001: Logseq logging reliability](../issues/issue-0001-logseq-logging-reliability.md) preserves the original intent and evidence shared by the command and agent-tool surfaces.
+
 ## Invocation
 
 - Surface: command palette
@@ -110,4 +112,4 @@ Choose `logseq: Log current task` from the command palette, optionally enter `up
 
 ## Maintenance notes
 
-Update this document when the command ID, palette prompt, notifications, worker mode, startup timeout, context reconstruction, Oracle guard, or shared operation flow changes. Keep detailed routing and worker-result rules in the related agent-tool document.
+Update this document when the command ID, palette prompt, notifications, worker mode, startup timeout, context reconstruction, Oracle guard, or shared operation flow changes. Keep detailed routing and worker-result rules in the related agent-tool document and historical rationale in ISSUE-0001.

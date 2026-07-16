@@ -27,20 +27,20 @@ repos:
   - repo: local
     hooks:
       - id: amp-validator-tests
-        name: Test Amp artifact validator
+        name: Test Amp documentation validator
         entry: python -m unittest amp/scripts/test_validate_plugin_docs.py
         language: python
         additional_dependencies: [PyYAML==6.0.3]
         pass_filenames: false
-        files: ^(?:amp/(?:docs/tools|plugins)/|amp/scripts/(?:test_validate_plugin_docs|validate-plugin-docs)\.py$|\.github/workflows/ci\.yml$|\.pre-commit-config\.yaml$)
+        files: ^(?:amp/(?:docs/(?:issues|tools)|plugins)/|amp/scripts/(?:test_validate_plugin_docs|validate-plugin-docs)\.py$|\.github/workflows/ci\.yml$|\.pre-commit-config\.yaml$)
 
       - id: validate-amp-artifacts
-        name: Validate Amp artifacts
+        name: Validate Amp artifact and issue docs
         entry: python amp/scripts/validate-plugin-docs.py
         language: python
         additional_dependencies: [PyYAML==6.0.3]
         pass_filenames: false
-        files: ^(?:amp/(?:docs/tools|plugins)/|amp/scripts/(?:test_validate_plugin_docs|validate-plugin-docs)\.py$|\.github/workflows/ci\.yml$|\.pre-commit-config\.yaml$)
+        files: ^(?:amp/(?:docs/(?:issues|tools)|plugins)/|amp/scripts/(?:test_validate_plugin_docs|validate-plugin-docs)\.py$|\.github/workflows/ci\.yml$|\.pre-commit-config\.yaml$)
 
       - id: validate-amp-rfcs
         name: Validate Amp RFCs
