@@ -1,9 +1,9 @@
 ---
 doc_schema: "amp-artifact/v2"
-title: "Logseq: Log Current Task Command"
+title: "Logseq: log current task command"
 slug: "logseq-log-current-task-command"
 status: "active"
-summary: "Adds a command-palette action that logs the current Amp thread task into Logseq and renames the thread."
+summary: "Adds a command that logs the current Amp task to Logseq and renames the parent thread."
 artifact:
   id: "logseq-log-current-task"
   type: "command"
@@ -72,13 +72,13 @@ tags:
   - "worker"
 ---
 
-# Logseq: Log Current Task Command
+# Logseq: log current task command
 
 ## Summary
 
-`logseq-log-current-task` provides the command-palette action `logseq: Log current task`. It prompts for an optional hint, then runs the same Logseq logging flow exposed separately by the related agent tool.
+`logseq-log-current-task` adds the command-palette action `logseq: Log current task`. It asks for an optional hint, then runs the same flow as the related agent tool.
 
-[ISSUE-0001: Logseq logging reliability](../issues/issue-0001-logseq-logging-reliability.md) preserves the original intent and evidence shared by the command and agent-tool surfaces.
+[ISSUE-0001: Logseq logging reliability](../issues/issue-0001-logseq-logging-reliability.md) explains why this shared contract exists. It preserves the original intent and evidence.
 
 ## Invocation
 
@@ -90,26 +90,49 @@ tags:
 
 ## Contract
 
-The command requires an active thread and accepts no JSON input. It opens `Log current task to Logseq`, where the optional message can provide a target, note, or source link. Submitting `Log to Logseq` produces a UI notification with separate worker, Logseq, parent-rename, and worker-archive statuses.
+You must run the command from an active thread. It accepts no JSON input.
+
+The command opens `Log current task to Logseq`. You can enter a target, note or source link. Select `Log to Logseq` to start the operation. The notification reports worker, Logseq, parent rename and worker archive results separately.
 
 ## Behavior
 
-The command checks for an active thread, prompts for an optional hint, and calls the same in-memory operation coordinator as the agent tool. The first invocation starts one hidden built-in `high` worker for the parent thread. Concurrent or later invocations reconcile that operation instead of starting another worker. Ambiguous startup, message delivery, state, or response outcomes are reported as pending while the existing worker retains ownership. The worker must reconstruct parent context with `read_thread`, update Backlog before the journal, re-read both files, and return the strict JSON result documented by the related agent tool. A partial or malformed result is reconciled through the same worker. After worker-attested completion, parent rename and worker archive run as separate stages, so either downstream failure preserves Logseq success.
+The command calls the same in-memory operation coordinator as the agent tool. The first call starts one hidden built-in `high` worker for the parent thread. Concurrent and later calls use the existing operation instead of starting another worker.
+
+The command reports uncertain worker creation, message delivery, state and responses as pending. The existing worker keeps ownership of the operation.
+
+The worker uses `read_thread` to reconstruct the parent context. It updates Backlog before the journal, then re-reads both files. It returns the strict JSON result defined in the agent-tool document.
+
+The command uses the same worker to repair partial or malformed results. After verified Logseq completion, rename and archive run separately. A failure in either action does not change Logseq success.
 
 ## Permissions and side effects
 
-The command can write to the configured Logseq graph, create and archive a hidden Amp worker thread, and rename the parent Amp thread.
+The command can:
+
+- write to the configured Logseq graph
+- create and archive a hidden Amp worker thread
+- rename the parent Amp thread
 
 ## Examples
 
-Choose `logseq: Log current task` from the command palette, optionally enter `update DAT-594`, and select `Log to Logseq`.
+1. Choose `logseq: Log current task` from the command palette.
+2. Enter an optional hint, such as `update DAT-594`.
+3. Select `Log to Logseq`.
 
 ## Troubleshooting
 
-- Open an Amp thread before invoking the command.
-- If the notification says pending, partial, unverified, rename failed, or archive failed, run the command again to reconcile only unfinished work.
-- Set `AMP_LOGSEQ_GRAPH_DIR` before starting Amp to use a different graph.
+Use these checks when the command does not complete:
+
+- open an Amp thread before running the command
+- if the notification says pending, partial, unverified, rename failed or archive failed, run the command again
+- to use another graph, set `AMP_LOGSEQ_GRAPH_DIR` before starting Amp
 
 ## Maintenance notes
 
-Update this document when the command ID, palette prompt, notifications, worker mode, startup timeout, context reconstruction, Oracle guard, or shared operation flow changes. Keep detailed routing and worker-result rules in the related agent-tool document and historical rationale in ISSUE-0001.
+Update this document when any of these change:
+
+- the command ID, prompt or notifications
+- worker mode or startup timeout
+- context reconstruction or the Oracle guard
+- the shared operation flow
+
+Keep detailed routing and worker-result rules in the agent-tool document. Keep historical intent and evidence in ISSUE-0001.

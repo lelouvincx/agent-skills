@@ -6,7 +6,7 @@ slug: "logseq-logging-reliability"
 file: "issue-0001-logseq-logging-reliability.md"
 status: "Partially resolved"
 priority: "P0"
-summary: "Preserves the intent, incident evidence, reliability decisions, and follow-up behind the Logseq logging lifecycle."
+summary: "Explains the intent, evidence, decisions and follow-up behind the Logseq logging contract."
 created: "2026-07-15"
 updated: "2026-07-16"
 amp_thread_id:
@@ -36,37 +36,49 @@ tags:
 
 ## Summary
 
-This issue preserves why the Logseq logging contract exists. The incident exposed false terminal status, duplicate-writer risk, partial two-file state, direct capability bypass, and downstream status conflation. PR #98 resolves the P0 lifecycle and data-integrity findings with a process-scoped coordinator and worker-attested read-back verification. Metadata completeness, worker cost, graph configuration, and timezone behavior remain open.
+This issue explains why the Logseq logging contract exists. The incident exposed false terminal status, duplicate-worker risk, partial file updates, direct capability bypass and unclear later-action status.
 
-The current contracts live in [Logseq: Log Current Task](../tools/logseq-log-current-task.md) and [Logseq: Log Current Task Command](../tools/logseq-log-current-task-command.md). This document remains the source of truth for original intent, historical evidence, accepted trade-offs, and follow-up.
+PR #98 resolves the P0 lifecycle and data integrity findings. It adds a process-scoped coordinator and requires worker-attested read-back checks. Task metadata, worker cost, graph configuration and timezone behaviour remain open.
+
+The current contracts live in [Logseq: log current task](../tools/logseq-log-current-task.md) and [Logseq: log current task command](../tools/logseq-log-current-task-command.md). This issue remains the source of truth for the original intent, historical evidence, decisions and follow-up.
 
 ## Trigger
 
-This investigation started from the real workflow in [Amp thread T-019f63f5](https://ampcode.com/threads/T-019f63f5-d4b8-76e8-870e-b6ec96584a2d), beginning with the request:
+[Amp thread T-019f63f5](https://ampcode.com/threads/T-019f63f5-d4b8-76e8-870e-b6ec96584a2d) triggered this investigation. It began with the request:
 
 > log this into logseq today journal, keep TODO
 
-The parent agent initially edited the journal directly. After the user required the Logseq plugin, the plugin spawned [worker thread T-019f6417](https://ampcode.com/threads/T-019f6417-0880-755e-bc60-ce2faebe753d). The plugin reported a timeout, but the worker later completed both Logseq writes. Further user turns were needed to recover the task ID, add Amp labels, and correct the parent thread title.
+The parent agent edited the journal directly. The user then required the Logseq plugin. The plugin started [worker thread T-019f6417](https://ampcode.com/threads/T-019f6417-0880-755e-bc60-ce2faebe753d) and reported a timeout. The worker later completed both Logseq writes.
+
+The user needed further turns to recover the task ID, add Amp labels and correct the parent thread title.
 
 The source investigation is [Amp thread T-019f6428](https://ampcode.com/threads/T-019f6428-596b-70ce-ae87-1a13d907cbb5). The reviewed P0 design was implemented in [PR #98](https://github.com/lelouvincx/agent-skills/pull/98).
 
 ## Original intent
 
-The capability should turn an explicit request to log the current Amp task into one reliable, inspectable workflow. The user should be able to tell whether Logseq was updated, whether the operation is still running, and which downstream Amp metadata actions succeeded.
+An explicit request to log the current Amp task should start one reliable, inspectable workflow. The user should know whether Logseq changed, whether work is still running and which later Amp actions succeeded.
 
-The intended guarantees are:
+The workflow must:
 
-- explicit current-task Logseq requests use the logging capability rather than ad hoc graph edits;
-- one operation owns active or unresolved work for each parent thread;
-- an active or ambiguously accepted worker is reported as pending, never terminal failure;
-- completion requires read-back verification of the parent-linked Backlog task and its matching journal pointer;
-- Logseq, parent-thread rename, and worker archive outcomes remain independently inspectable;
-- Backlog-first logging followed by a short journal pointer remains the canonical write pattern; and
-- later phases can return task identity and apply Amp metadata without weakening the P0 lifecycle.
+- route explicit Logseq requests through the logging capability instead of direct graph edits
+- let one operation own active or unresolved work for each parent thread
+- report active or uncertain work as pending, never as a terminal failure
+- verify the parent-linked Backlog task and matching journal pointer by reading both files after the write
+- report Logseq, parent rename and worker archive results separately
+- write to Backlog first, then add a short journal pointer
+- allow later work to add task identity and Amp metadata without weakening P0 guarantees
 
 ## Evidence
 
-At the time of the incident, responsibility was distributed across the parent agent, a plugin coordinator, a general-purpose high-mode worker, free-form worker output, and separate Amp CLI commands:
+At the time of the incident, responsibility was split across 5 parts:
+
+- the parent agent
+- the plugin coordinator
+- a general-purpose high-mode worker
+- free-form worker output
+- separate Amp CLI commands
+
+The workflow was:
 
 ```text
 User request
@@ -103,17 +115,17 @@ The observed thread showed:
 
 The registered tool description asked the model to use the tool when the user requested Logseq logging, but it did not enforce routing. A direct generic file edit could silently replace the intended workflow.
 
-PR #98 added turn-scoped guidance and rejected recognized graph mutations for explicit logging turns. Unknown mutation forms still fail open because the plugin API cannot identify every possible write safely.
+PR #98 added guidance for each explicit logging turn. It rejects recognized graph changes during that turn. Unknown types of change still fail open because the plugin API cannot identify every possible write safely.
 
 #### A timeout could disagree with the actual write state
 
-The incident produced a terminal-looking failure result while the worker remained active and later wrote successfully. The plugin contained response-reconciliation logic, but a worker could still finish after the final grace window.
+The coordinator reported a terminal-looking failure while the worker was still active. The worker later wrote successfully. The plugin tried to find late responses, but a worker could still finish after the final grace period.
 
-PR #98 made an uncancelled or ambiguously accepted worker `pending`. `Failed` now requires a terminal typed worker state or a validated failure result.
+PR #98 reports an uncancelled or uncertain worker as `pending`. `Failed` now requires a terminal worker state or a validated failure result.
 
 #### There was no explicit operation lifecycle
 
-The capability did not model the stages between worker creation and cleanup. This made it difficult to distinguish an active writer, a verified Logseq write, a rename failure, and an archive failure.
+The capability did not record each stage between worker creation and cleanup. The user could not clearly distinguish active work, a verified Logseq write, a rename failure and an archive failure.
 
 A minimal lifecycle needed to represent:
 
@@ -126,23 +138,23 @@ created
 → archive-complete | archive-failed
 ```
 
-PR #98 implemented that lifecycle in memory and documented that plugin reload can lose pending-operation ownership because Amp exposes no dedicated operation store or child-thread enumeration.
+PR #98 records this lifecycle in memory. A plugin reload can still lose pending work because Amp provides no operation store or way to list child threads.
 
 #### Concurrent calls and retries could create duplicate writers
 
-The worker prompt asked the agent to deduplicate by parent thread ID, but the coordinator could still spawn another worker for the same parent while the first was active. Agent prompt compliance was not a concurrency guarantee.
+The worker prompt told the agent to avoid duplicate tasks by parent thread ID. The coordinator could still start another worker for the same parent. A prompt cannot prevent this race.
 
-PR #98 synchronously records and serializes one operation per parent thread. Concurrent calls return its current snapshot, and retries reconcile the same worker while acceptance remains active or uncertain.
+PR #98 records one operation for each parent thread before waiting for network work. It handles each state change in order. Concurrent calls return the current status. Retries use the same worker while work remains active or uncertain.
 
 #### The Backlog and journal update is not transactional
 
-The worker uses generic file tools to mutate two Markdown files. One write can succeed while the other fails, or concurrent graph changes can invalidate patch context.
+The worker uses general file tools to change 2 Markdown files. One change can succeed while the other fails. Another graph change can also make a patch invalid.
 
-The architecture still has no filesystem transaction. PR #98 instead requires post-write read-back of both files, reports verified Backlog-only state as partial, and constrains reconciliation to repair existing parent-linked state before creating anything.
+The architecture still has no file transaction. PR #98 instead makes the worker read both files after writing. It reports a verified Backlog-only result as partial. A retry must repair existing parent-linked state before creating anything.
 
 #### Logseq write status was conflated with downstream status
 
-The coordinator treated title parsing, parent rename, and worker archive as one success path. A completed Logseq write followed by rename or archive failure was therefore presented as a broad workflow failure.
+The coordinator treated title parsing, parent rename and worker archive as one success path. It could report the whole workflow as failed after a successful Logseq write.
 
 The result needed to preserve separate statuses for:
 
@@ -150,31 +162,31 @@ The result needed to preserve separate statuses for:
 - parent thread rename
 - worker archive
 
-PR #98 made these independent stages. A successful durable write remains successful when rename or archive fails, and a later invocation retries only unfinished downstream work.
+PR #98 made these separate stages. A successful Logseq write stays successful when rename or archive fails. A later call retries only unfinished work.
 
 #### Control flow depended on free-form text and English error strings
 
-The plugin extracted `Thread title:` from assistant prose with a regular expression. It also classified timeouts by matching English substrings such as `Timed out waiting for agent response`.
+The plugin used a regular expression to extract `Thread title:` from assistant prose. It also identified timeouts by matching English text such as `Timed out waiting for agent response`.
 
-PR #98 replaced prose parsing with an exact versioned JSON result, uses typed worker state where available, and isolates the two unavoidable English timeout compatibility strings.
+PR #98 replaced prose with an exact, versioned JSON result. It uses typed worker state when Amp provides it. One helper contains the 2 English timeout checks that remain necessary.
 
 ### P1: complete the end-to-end workflow
 
 #### The plugin does not return the Logseq task ID
 
-The generated task ID is required to link the Amp thread back to Logseq, but it is absent from the worker's required final response. The parent must inspect the graph or worker transcript to recover it.
+The parent needs the generated task ID to link the Amp thread back to Logseq. The worker's required response does not include it. The parent must inspect the graph or worker transcript to recover it.
 
 The structured result should return the task ID, task state, Backlog location, and journal location.
 
 #### Amp labels are outside the logging operation
 
-The worker already determines `project::`, `customer::`, and `id::`, but the plugin does not use them to label the parent thread. Separate user turns and CLI commands are required.
+The worker already determines `project::`, `customer::` and `id::`. The plugin does not use them to label the parent thread. The user needs separate turns and CLI commands.
 
 After P0 establishes a structured result, the plugin should apply canonical task-link, project, and customer labels as downstream actions with their own statuses.
 
 #### Task-ID label serialization is undefined
 
-Removing hyphens from a UUID produces 32 characters; adding `l-` exceeds Amp's 32-character label limit. Truncating the value loses information and creates avoidable collision risk.
+Removing hyphens from a UUID produces 32 characters. Adding `l-` exceeds Amp's 32-character label limit. Truncating the value loses information and creates a collision risk.
 
 The Logseq canonical rules should define one collision-safe compact encoding, such as base64url encoding of the UUID bytes without padding.
 
@@ -182,7 +194,7 @@ The Logseq canonical rules should define one collision-safe compact encoding, su
 
 The plugin currently derives `[Project] task title`, while the observed required title was `[Presales] DEX - <title>`.
 
-Add a canonical Logseq page such as `pages/Amp Thread Rules.md`, link it from `pages/Canonical Pages.md`, and define:
+Add a canonical Logseq page such as `pages/Amp Thread Rules.md`. Link it from `pages/Canonical Pages.md` and define:
 
 - project title patterns
 - customer aliases used in titles
@@ -199,25 +211,25 @@ PR #98 now reconciles pending and partial P0 operation state automatically. Reco
 
 #### `high` is compensating for an under-structured workflow
 
-The current worker must reconstruct intent, resolve redirects, interpret canonical pages, choose or update a task, edit files, and verify the result. Keeping it on `high` is reasonable while it owns all of that judgment and mutation.
+The current worker must reconstruct intent, resolve redirects and interpret canonical pages. It must also choose a task, edit 2 files and verify the result. Keep it on `high` while it owns all of these decisions and changes.
 
-However, `read_thread` has already performed semantic compression before the worker maps the result to canonical rules. Once the workflow has structured context, deterministic lookup, a validated result, and a constrained writer, normal cases should be benchmarked on `medium`. `High` can remain an escalation path for conflicting redirects, multiple plausible backlog matches, unclear state, or conflicting taxonomy.
+`read_thread` already summarises the parent thread before the worker applies canonical rules. Test normal cases on `medium` after the workflow has structured context, direct lookup, validated results and limited write actions. Keep `high` for conflicting redirects, several possible Backlog matches, unclear state or conflicting rules.
 
 #### Full-thread reconstruction is unconditional
 
-The worker must call `read_thread` even when the parent hint may already contain a complete task summary and source links. Long or multi-topic threads increase latency, token use, and timeout risk.
+The worker must call `read_thread` even when the hint contains a complete task summary and source links. Long or multi-topic threads increase response time, token use and timeout risk.
 
 A future structured parent payload can act as a candidate result that `read_thread` verifies or enriches instead of forcing the worker to rediscover every detail.
 
 #### Canonical lookup uses broad general-purpose reads and searches
 
-The observed worker read several complete pages and ran multiple searches before writing. A more direct canonical index could identify the relevant project rules, customer alias, naming convention, priority, and Backlog section with less search work.
+The worker read several complete pages and ran several searches before writing. A direct canonical index could find the project rules, customer alias, naming rule, priority and Backlog section with less work.
 
 ### P3: operational robustness and maintainability
 
 #### The fallback graph path is machine-specific
 
-The plugin defaults to `/Users/lelouvincx/Developer/second-brain-logseq`. Other machines or orbs fail later inside the worker.
+The plugin defaults to `/Users/lelouvincx/Developer/second-brain-logseq`. Other machines and orbs fail later inside the worker.
 
 Prefer explicit environment configuration, then project-registry resolution, then a clear configuration failure.
 
@@ -239,16 +251,19 @@ PR #98 made archive an independent operation stage and attempts it after verifie
 
 #### Tests covered only a narrow timeout slice
 
-Before PR #98, tests covered three `waitForWorkerResponse` cases. The focused suite now covers routing, operation serialization, ambiguous creation and append outcomes, pending state, partial writes, strict result validation, same-worker repair, downstream failures, and registry cleanup. Task metadata, timezone, and graph resolution remain later-phase concerns.
+Before PR #98, tests covered 3 `waitForWorkerResponse` cases. The focused suite now covers routing, ordered state changes, uncertain creation and message delivery, pending state, partial writes, strict results, same-worker repair, later-action failures and registry cleanup. Task metadata, timezone and graph resolution remain open.
 
 ## Decisions and scope
 
-- Backlog-first logging followed by a short journal pointer is expected behavior. It is not a problem and remains the default.
-- The explicit `high` worker remains appropriate while one general-purpose agent reconstructs intent, resolves canonical rules, mutates two files, and verifies the result.
-- User-specific title, customer alias, and label conventions belong in the Logseq graph, linked from `pages/Canonical Pages.md`; they must not be hard-coded in the plugin.
-- P0 covers correctness and data integrity. Task identity, Amp labels, and user-specific naming conventions remain P1.
-- The P0 guarantee is process-scoped and worker-attested. Durable ownership across plugin reloads and coordinator-side semantic parsing require stable task identity and are not claimed.
-- Routing protection is deliberately narrow and fail-open outside recognized file mutations to avoid intercepting unrelated work.
+The investigation set these boundaries:
+
+- keep Backlog-first logging followed by a short journal pointer
+- keep the `high` worker while one general-purpose agent reconstructs intent, applies rules, changes 2 files and verifies the result
+- store user-specific titles, customer aliases and label rules in the Logseq graph, linked from `pages/Canonical Pages.md`
+- keep task identity, Amp labels and user-specific naming rules outside P0
+- limit the P0 ownership guarantee to one plugin process and rely on worker-attested read-back checks
+- do not claim durable ownership across plugin reloads or that the coordinator independently verifies the graph's meaning
+- reject only recognized direct graph changes so unrelated work can continue
 
 ## Resolution status
 
@@ -269,14 +284,14 @@ Before PR #98, tests covered three `waitForWorkerResponse` cases. The focused su
 
 ## Follow-up
 
-1. Add canonical Amp thread rules inside the Logseq graph for task-ID encoding, labels, customer aliases, and title patterns.
-2. Extend the structured worker result with task identity and locations, then apply labels and customer-aware title as independent downstream stages.
+1. Add canonical Amp thread rules inside the Logseq graph for task-ID encoding, labels, customer aliases and title patterns.
+2. Add task identity and locations to the worker result. Then apply labels and the customer-aware title as separate actions.
 3. Add portable graph resolution and an explicit journal timezone.
-4. Reduce broad context and canonical lookup work, then benchmark ordinary structured cases on `medium` while retaining `high` for ambiguity.
+4. Reduce context and canonical lookup work. Then test normal structured cases on `medium` while keeping `high` for unclear cases.
 
 ## Validation
 
-P0 implementation should demonstrate at minimum:
+A P0 implementation must meet these criteria:
 
 - a running worker timeout returns `pending`
 - a completed response is reconciled
@@ -291,13 +306,18 @@ P0 implementation should demonstrate at minimum:
 - only a fresh assistant message can satisfy the current worker turn
 - routing protection is turn-scoped, worker-exempt, path-contained, and fail-open for unknown mutations
 
-PR #98 added focused coverage for the P0 acceptance criteria in `amp/scripts/logseq-manual-log.test.ts`, plus artifact validation, plugin builds, isolated projection, and live projection. Execute-mode routing reached the capability and preserved a disposable graph when worker creation was unavailable. A full interactive hidden-worker smoke remains the only runtime check not reproduced in execute mode because that context does not expose `agent.createThread`.
+PR #98 added focused tests in `amp/scripts/logseq-manual-log.test.ts`. It also passed document validation, plugin builds, isolated projection and live projection.
 
-Later phases should add coverage for task-ID output and encoding, canonical customer-aware titles and labels, timezone behavior, and graph resolution.
+The execute-mode test reached the capability and left a disposable graph unchanged when it could not create a worker. Execute mode does not expose `agent.createThread`, so a full interactive worker test remains open.
+
+Later work should test task-ID output and encoding, customer-aware titles and labels, timezone behaviour and graph resolution.
 
 ## Maintenance notes
 
-- Preserve the Trigger, Original intent, and Evidence sections as historical facts. Do not rewrite them to match current behavior.
-- Update Findings, Resolution status, Follow-up, and `updated` when later work resolves or supersedes an item.
-- Keep current runtime behavior in the two capability docs, not here.
-- Keep the frontmatter aligned with [`_schema.md`](./_schema.md) and the implementation paths valid.
+Maintain this issue as follows:
+
+- preserve Trigger, Original intent and Evidence as historical facts
+- update Findings, Resolution status, Follow-up and `updated` when work resolves or replaces an item
+- keep current runtime behaviour in the 2 capability documents
+- keep the frontmatter aligned with the [issue schema](./_schema.md)
+- keep all implementation paths valid

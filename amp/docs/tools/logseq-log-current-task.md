@@ -1,9 +1,9 @@
 ---
 doc_schema: "amp-artifact/v2"
-title: "Logseq: Log Current Task"
+title: "Logseq: log current task"
 slug: "logseq-log-current-task"
 status: "active"
-summary: "Adds an agent-callable tool that reliably coordinates Logseq task logging, parent-thread rename, and worker cleanup."
+summary: "Lets the agent log a task to Logseq, rename the parent thread and clean up the worker."
 artifact:
   id: "logseq_log_current_task"
   type: "agent_tool"
@@ -91,13 +91,13 @@ tags:
   - "worker"
 ---
 
-# Logseq: Log Current Task
+# Logseq: log current task
 
 ## Summary
 
-`logseq_log_current_task` logs the durable outcome of the current Amp thread into the configured Logseq graph. It coordinates one hidden built-in Amp worker per parent thread, reports unresolved work as pending, and preserves separate Logseq-write, parent-rename, and worker-archive outcomes.
+`logseq_log_current_task` logs the durable outcome of the current Amp thread to Logseq. Within one plugin process, it coordinates one active or pending hidden worker for each parent thread. It reports unresolved work as pending and reports Logseq, rename and archive results separately.
 
-[ISSUE-0001: Logseq logging reliability](../issues/issue-0001-logseq-logging-reliability.md) preserves the original intent, incident evidence, and decisions behind this contract.
+[ISSUE-0001: Logseq logging reliability](../issues/issue-0001-logseq-logging-reliability.md) explains why this contract exists. It preserves the original intent, incident evidence and decisions.
 
 ## Invocation
 
@@ -108,13 +108,20 @@ tags:
 
 ## Contract
 
-The agent tool requires an active thread and accepts one optional JSON input:
+You must run the tool from an active thread. It accepts one optional JSON input:
 
-| Field  | Type     | Notes                                                                                     |
-| ------ | -------- | ----------------------------------------------------------------------------------------- |
-| `hint` | `string` | Optional target, note, or source link, such as `update DAT-594` or a Slack/PR/Notion URL. |
+| Field | Type | Notes |
+| --- | --- | --- |
+| `hint` | `string` | A target, note or source link, such as `update DAT-594` or a Slack, PR or Notion URL. |
 
-Agent tool output is plain text and reports separate `Worker`, `Logseq`, `Rename`, and `Archive` statuses. `Pending` means the operation may still write or its accepted state is unresolved. `Partial` means the worker verified the parent-linked Backlog task but could not verify the matching journal pointer. `Complete` means the worker re-read both files and verified that the journal pointer targets the same parent-linked task. `Failed` requires either a verified worker failure result or a definite failure before any worker message could be accepted.
+The tool returns plain text with separate `Worker`, `Logseq`, `Rename` and `Archive` statuses:
+
+- `pending` means the operation may still write, or Amp cannot confirm whether it accepted the work
+- `partial` means the worker verified the parent-linked Backlog task but not the matching journal pointer
+- `complete` means the worker re-read both files and verified that the journal points to the same parent-linked task
+- `failed` means the operation can no longer write or the worker returned a validated failure
+
+Completion is worker-attested and read-back-verified. The coordinator validates the worker's result but does not independently inspect the meaning of the graph files.
 
 Runtime defaults:
 
@@ -129,33 +136,89 @@ Runtime defaults:
 
 ## Behavior
 
-The agent tool checks for an active thread and uses the optional `hint` input. The coordinator stores one in-memory operation per parent thread before beginning asynchronous worker creation. Every create, append, response-consumption, rename, and archive transition is serialized; a concurrent invocation returns the current snapshot instead of starting duplicate work. The first invocation starts a hidden built-in `high` worker without seeding recent parent messages. A later invocation reconciles the same worker and retries only unfinished stages. This guarantee covers one plugin process only because Amp exposes neither a dedicated operation store nor child-thread enumeration.
+### One operation owns each parent thread
 
-Worker creation, message delivery, state lookup, and response waiting may fail ambiguously. If a worker or message might have been accepted, the coordinator retains ownership and reports `pending`; it does not create another worker, append another turn, or cancel a potentially writing turn. At the five-minute deadline the coordinator performs one typed-state and fresh-message reconciliation. `running`, `awaiting-approval`, uncertain transport state, or an unresolved stored response remains pending. The worker-response and thread-message timeout strings are isolated compatibility fallbacks because the plugin API exposes no typed timeout errors.
+The tool records one in-memory operation for each parent thread before it creates a worker. It handles each create, append, response, rename and archive state change in order. A concurrent call returns the current status instead of starting duplicate work.
 
-The worker must first use `read_thread` on the parent thread; if that fails, it must stop without editing Logseq and return a structured error. Oracle calls from Logseq workers are rejected. After reconstructing the original user intent, latest coherent requested outcome, and durable result, the worker updates or creates the parent-linked task in `pages/Backlog.md` first. Today's journal then contains only a short pointer to that task under `Done`, `Tasks`, or `Notes` according to task state.
+The first call starts a hidden built-in `high` worker without recent parent messages. Later calls use the same worker and retry only unfinished stages.
 
-Before choosing or writing a block, the worker must treat the Logseq graph's canonical map as the source of truth: read `pages/Canonical Pages.md`, then read the corresponding canonical project/rule pages named there, especially `pages/Projects.md`, `pages/Backlog.md`, and relevant rule pages. The backlog task's `project:: [[...]]`, priority, title, and placement must be coherent with that canonical project taxonomy and any matching active backlog task. If reconstructed intent and canonical pages disagree, the worker should preserve the reconstructed user intent while applying the canonical project mapping.
+This guarantee lasts for one plugin process. Amp does not provide an operation store or a way to list child threads. A plugin reload can therefore lose ownership of pending work.
 
-When writing the backlog task block, the worker stores reference links in the `input::` property. It includes the parent Amp thread plus useful source or deliverable links found in the user hint or parent thread, such as Slack, Notion, Linear, GitHub PR/issue, ReadAI, customer docs, design docs, or related Amp threads. With multiple links, it uses numbered labels such as `input:: [1-Ampcode](T-...) [2-PR](https://...) [3-Slack](https://...)`, dedupes equivalent links, and skips incidental links that are not meaningful task references. The journal reference stays brief and points to the backlog task instead of duplicating task properties or source links.
+### Uncertain work stays pending
 
-After mutation, the worker re-reads both files and returns exactly one unfenced JSON object with this key set:
+Amp may not confirm whether it created a worker, delivered a message or stored a response. When this happens, the tool keeps ownership and reports `pending`. It does not create another worker, add another message or cancel work that may still write.
+
+After 5 minutes, the tool checks the worker state and looks for a new message. A worker stays pending if it is `running`, `awaiting-approval` or still uncertain.
+
+Only an assistant message with a new message ID can satisfy the current worker turn.
+
+The Amp plugin API does not provide typed timeout errors. The plugin therefore keeps 2 string checks in one compatibility helper.
+
+### The worker writes Backlog first
+
+The worker must call `read_thread` for the parent thread before editing Logseq. If this fails, it returns a structured error without changing the graph. The plugin also rejects Oracle calls from the worker.
+
+The worker reconstructs the original user intent and the latest coherent outcome. It then updates or creates the parent-linked task in `pages/Backlog.md`. Today's journal contains a short pointer to that task under `Done`, `Tasks` or `Notes`, based on the task state.
+
+### The worker follows the canonical map
+
+The worker reads `pages/Canonical Pages.md` before choosing or writing a block. It then reads the project and rule pages named there. These include `pages/Projects.md`, `pages/Backlog.md` and any relevant rule pages.
+
+The Backlog task must follow the canonical project, priority, title and placement rules. If the canonical map conflicts with the reconstructed request, the worker preserves the user's intent and applies the canonical project mapping.
+
+### The worker records useful source links
+
+The worker stores source links in the Backlog task's `input::` property. It always includes the parent Amp thread. It also includes useful links from the hint or parent thread, such as Slack, Notion, Linear, GitHub, ReadAI, customer documents, design documents or related Amp threads.
+
+For more than one link, the worker uses numbered labels. For example: `input:: [1-Ampcode](T-...) [2-PR](https://...) [3-Slack](https://...)`. It removes duplicate links and skips incidental references. The journal points to the Backlog task instead of copying its properties and links.
+
+### The worker returns strict JSON
+
+After editing, the worker re-reads both files. It then returns one unfenced JSON object with this exact key set:
 
 ```json
 {"version":1,"backlogVerified":true,"journalVerified":true,"threadTitle":"[Project] task title","summary":"Short outcome","error":null}
 ```
 
-`backlogVerified` means the worker found a Backlog task linked to the parent thread. `journalVerified` means it confirmed that the journal pointer targets that same task. The coordinator rejects extra keys, prose, fences, invalid types, multiline or malformed titles, `journalVerified` without `backlogVerified`, any verified Backlog without a title, both writes verified with an error, or neither write verified without an error. Malformed output is `unverified`, never complete or terminal failure.
+`backlogVerified` means the worker found a Backlog task linked to the parent thread. `journalVerified` means the journal points to that same task.
 
-Complete Logseq state triggers parent rename and worker archive as independent stages. Archive is attempted even if rename fails, and either downstream failure preserves `Logseq: complete`. A partial, malformed, or verified failed worker result retains the same worker for a later constrained reconciliation turn. That turn must inspect existing parent-linked state before mutation, repair only the missing state, and return the same JSON schema. A malformed repair response does not erase Logseq state that an earlier valid result already verified. A fully complete, renamed, and archived operation is removed from memory.
+The tool rejects results that contain:
 
-A typed worker error with no fresh response ends ownership of that failed worker so a later invocation can start a replacement. Transport errors with uncertain worker creation or message acceptance remain pending instead.
+- extra keys, prose or code fences
+- invalid field types
+- multiline or malformed titles
+- `journalVerified` without `backlogVerified`
+- a verified Backlog task without a title
+- an error when both files are verified
+- no error when neither file is verified
 
-When an `agent.start` message explicitly asks to log the current task to Logseq, the plugin appends hidden routing guidance requiring this tool. During that turn, recognized parent-agent file mutations under the configured graph are rejected and must be split from unrelated file changes. Logseq workers are exempt. Path checks use Amp's file-mutation helpers and normalized containment. Unrecognized mutation forms fail open; the hook does not start logging automatically or intercept unrelated paths.
+Malformed output remains `unverified`. It never counts as complete or as a terminal failure.
+
+### Rename and archive run separately
+
+Verified Logseq completion starts 2 separate actions: rename the parent thread and archive the worker. The tool still tries to archive the worker if rename fails. Either failure leaves `Logseq: complete` unchanged.
+
+The tool keeps the same worker after a partial, malformed or verified failed result. A later call makes the worker inspect existing parent-linked state and repair only missing work. A malformed repair response does not erase earlier verified Logseq state.
+
+The tool removes an operation after Logseq, rename and archive all complete. A typed worker error with no new response also ends ownership. A later call can then start a replacement worker.
+
+Transport errors stay pending if Amp cannot confirm worker creation or message acceptance.
+
+### Explicit requests use this tool
+
+When an `agent.start` message explicitly asks for Logseq logging, the plugin adds hidden guidance that requires this tool. During that turn, it rejects recognized parent-agent file changes inside the graph. The agent must split mixed changes into separate tool calls.
+
+The plugin converts and normalises file paths before checking whether they are inside the graph. The rule does not apply to Logseq workers. Unknown types of file change fail open. The hook never starts logging automatically and does not intercept unrelated paths.
 
 ## Permissions and side effects
 
-The tool can write to the configured Logseq graph through the spawned worker, rename the parent Amp thread through the Amp CLI, and create and archive a hidden Amp worker thread. Lifecycle hooks only strengthen routing for explicit current-task logging requests; they do not initiate logging automatically.
+The tool can:
+
+- write to the configured Logseq graph through the worker
+- create and archive a hidden Amp worker thread
+- rename the parent Amp thread through the Amp CLI
+
+Lifecycle hooks only guide explicit Logseq requests. They never start logging automatically.
 
 ## Examples
 
@@ -175,14 +238,26 @@ Log the current thread with an optional hint:
 
 ## Troubleshooting
 
-- `Open an Amp thread before running...`: switch to a thread and ask Amp to call the tool again.
-- `Worker: pending`: invoke the same capability again later; it will reconcile the existing operation rather than starting another worker.
-- `Logseq: partial` or `unverified`: invoke the same capability again to make the existing worker verify and repair missing state.
-- `Rename: failed`: invoke the same capability again to retry rename without another Logseq write.
-- `Archive: failed`: invoke the same capability again to retry cleanup without another Logseq write.
-- `Worker: failed`: invoke the capability again to start a replacement for the terminal worker.
-- Wrong Logseq graph: set `AMP_LOGSEQ_GRAPH_DIR` before starting Amp.
+Use these checks when the tool does not complete:
+
+- for `Open an Amp thread before running...`, switch to a thread and run the tool again
+- for `Worker: pending`, wait and run the tool again to check the same operation
+- for `Logseq: partial` or `unverified`, run the tool again so the same worker can verify and repair the state
+- for `Rename: failed`, run the tool again to retry rename without another Logseq write
+- for `Archive: failed`, run the tool again to retry cleanup without another Logseq write
+- for `Worker: failed`, run the tool again to start a replacement worker
+- for the wrong graph, set `AMP_LOGSEQ_GRAPH_DIR` before starting Amp
 
 ## Maintenance notes
 
-Update this doc when the agent tool schema, routing hooks, operation state, worker result protocol, Backlog-first behavior, journal verification, reconciliation, parent rename, worker archive, default graph path, worker mode, startup timeout, mandatory `read_thread` behavior, Oracle guard, or timeout compatibility changes. Update ISSUE-0001 separately when a finding is resolved or scope changes; do not move historical evidence into this runtime contract.
+Update this document when any of these change:
+
+- the agent tool schema or routing hooks
+- operation state, worker results or reconciliation
+- Backlog-first behaviour or journal verification
+- parent rename or worker archive
+- the default graph path, worker mode or startup timeout
+- mandatory `read_thread` behaviour or the Oracle guard
+- timeout compatibility
+
+Update ISSUE-0001 when work resolves a finding or changes scope. Keep historical evidence in the issue record, not this runtime contract.
