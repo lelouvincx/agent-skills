@@ -97,7 +97,7 @@ tags:
 
 `logseq_log_current_task` logs the durable outcome of the current Amp thread to Logseq. Within one plugin process, it coordinates one active or pending hidden worker for each parent thread. It reports unresolved work as pending and reports Logseq, rename and archive results separately.
 
-[ISSUE-0001: Logseq logging reliability](../issues/issue-0001-logseq-logging-reliability.md) explains why this contract exists. It preserves the original intent, incident evidence and decisions.
+[ISSUE-0001: Logseq logging reliability](../issues/issue-0001-logseq-logging-reliability.md) explains why this contract exists and preserves the original intent, incident evidence and decisions.
 
 ## Invocation
 

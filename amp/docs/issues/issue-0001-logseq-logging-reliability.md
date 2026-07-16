@@ -18,7 +18,7 @@ artifacts:
   - "logseq-log-current-task"
   - "logseq-log-current-task-command"
 implementation:
-  - path: "../tools/logseq-log-current-task.md"
+  - path: "../tools/issue-0001-logseq-log-current-task.md"
   - path: "../tools/logseq-log-current-task-command.md"
   - path: "../../plugins/logseq-manual-log.ts"
   - path: "../../scripts/logseq-manual-log.test.ts"
@@ -40,7 +40,7 @@ This issue explains why the Logseq logging contract exists. The incident exposed
 
 PR #98 resolves the P0 lifecycle and data integrity findings. It adds a process-scoped coordinator and requires worker-attested read-back checks. Task metadata, worker cost, graph configuration and timezone behaviour remain open.
 
-The current contracts live in [Logseq: log current task](../tools/logseq-log-current-task.md) and [Logseq: log current task command](../tools/logseq-log-current-task-command.md). This issue remains the source of truth for the original intent, historical evidence, decisions and follow-up.
+The current contracts live in [Logseq: log current task](../tools/issue-0001-logseq-log-current-task.md) and [Logseq: log current task command](../tools/logseq-log-current-task-command.md). This issue remains the source of truth for the original intent, historical evidence, decisions and follow-up.
 
 ## Trigger
 
