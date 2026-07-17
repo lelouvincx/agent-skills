@@ -330,10 +330,6 @@ skills:
     files:
       - .link
 
-  - name: setup-amql-development
-    url: https://raw.githubusercontent.com/holistics/skills/main/plugins/holistics-development/skills/setup-amql-development/SKILL.md
-    enabled: true
-
   - name: use-existing-viz
     url: https://raw.githubusercontent.com/holistics/skills/main/plugins/holistics-development/skills/use-existing-viz/SKILL.md
     enabled: true
