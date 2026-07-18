@@ -62,10 +62,9 @@ describe('waitForWorkerResponse', () => {
 
 describe('extractThreadLabels', () => {
 	test('normalizes and deduplicates worker labels', () => {
-		expect(extractThreadLabels('Thread labels: Duty Support, #P2, DONE, duty support')).toEqual([
+		expect(extractThreadLabels('Thread labels: Duty Support, FanServ, duty support')).toEqual([
 			'duty-support',
-			'p2',
-			'done',
+			'fanserv',
 		])
 	})
 })

@@ -306,7 +306,7 @@ Rules:
    - preserve surrounding indentation style, usually one tab for properties under a block
 8. Keep the backlog entry short: one task block plus few useful child notes, and one brief journal reference. Do not paste the transcript or your private intent-reconstruction notes.
 9. Determine the parent Amp thread title from the Logseq backlog task/block you wrote or updated, using exactly this pattern: \`[Project] task title\`. Use the Logseq \`project:: [[...]]\` value without brackets for \`Project\`; use the backlog task/block title text without TODO/DONE markers or properties for \`task title\`.
-10. Derive parent Amp thread labels from the same backlog task's project, priority, and TODO/DONE state. Normalize each label to lowercase words joined with hyphens and omit punctuation, for example \`Duty Support\` becomes \`duty-support\`, \`#P2\` becomes \`p2\`, and \`DONE\` becomes \`done\`.
+10. Derive parent Amp thread labels from the same backlog task's project and customer. Always include the normalized project label. Include the normalized customer label only when the backlog task identifies a customer through its title, properties, or canonical project/customer context. Normalize each label to lowercase words joined with hyphens and omit punctuation, for example \`Duty Support\` becomes \`duty-support\` and \`FanServ\` becomes \`fanserv\`. Do not add priority or TODO/DONE state labels.
 11. Do not invoke Oracle. The plugin blocks Oracle calls from this worker.
 12. Do not commit, push, run weekly report automation, or modify unrelated blocks.
 13. Do not send messages to the parent thread. Return your result only as this worker thread's final answer.
@@ -316,7 +316,7 @@ User instruction: ${hint || '(none, infer the best target from this thread)'}
 After editing, reply with exactly three plain-text lines, without bullets or code formatting:
 Logged to <backlog file/block> and <journal file/block> — <summary>.
 Thread title: [Project] task title
-Thread labels: project-label, priority-label, state-label
+Thread labels: project-label, customer-label-if-present
 `
 }
 
