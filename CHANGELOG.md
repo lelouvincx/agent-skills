@@ -9,6 +9,7 @@ and this project does not currently use versioned releases.
 
 ### Added
 
+- Add deterministic local skill and remote registry validation, and strengthen manual skill behavior regression guidance.
 - Add an experimental Inkling-backed Amp agent mode. [#106](https://github.com/lelouvincx/agent-skills/pull/106)
 - Add `readai` for retrieving speaker-attributed call transcripts through the Read AI MCP. [#105](https://github.com/lelouvincx/agent-skills/pull/105)
 - Add parent-scoped list, status, and cancel controls for spawned Amp subagents. [#101](https://github.com/lelouvincx/agent-skills/pull/101)

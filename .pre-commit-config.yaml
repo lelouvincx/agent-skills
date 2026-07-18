@@ -26,6 +26,22 @@ repos:
 
   - repo: local
     hooks:
+      - id: skill-validator-tests
+        name: Test skill validator
+        entry: python -m unittest scripts/test_validate_skills.py
+        language: python
+        additional_dependencies: [PyYAML==6.0.3]
+        pass_filenames: false
+        files: ^(?:skills/|remote-skills\.yaml$|scripts/(?:test_validate_skills|validate-skills)\.py$|\.github/workflows/ci\.yml$|\.pre-commit-config\.yaml$)
+
+      - id: validate-skills
+        name: Validate skills
+        entry: python scripts/validate-skills.py
+        language: python
+        additional_dependencies: [PyYAML==6.0.3]
+        pass_filenames: false
+        files: ^(?:skills/|remote-skills\.yaml$|scripts/(?:test_validate_skills|validate-skills)\.py$|\.github/workflows/ci\.yml$|\.pre-commit-config\.yaml$)
+
       - id: amp-validator-tests
         name: Test Amp artifact validator
         entry: python -m unittest amp/scripts/test_validate_plugin_docs.py

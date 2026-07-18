@@ -84,6 +84,8 @@ pre-commit run --hook-stage pre-push
 Pre-push checks additionally require `uv`/`uvx`, `rsync`, Bun 1.3.14 or newer, and npm. The SDK check uses `npm ci` and the committed lockfile. To debug a failure, run its repository command directly:
 
 ```bash
+python3 -m unittest scripts/test_validate_skills.py
+python3 scripts/validate-skills.py
 python3 -m unittest amp/scripts/test_validate_plugin_docs.py
 python3 amp/scripts/validate-plugin-docs.py
 python3 amp/scripts/validate-rfcs.py
