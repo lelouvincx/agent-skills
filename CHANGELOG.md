@@ -78,6 +78,7 @@ and this project does not currently use versioned releases.
 
 ### Removed
 
+- Remove the redundant agent-callable Logseq logging tool now that its command-palette action is available on Amp Web.
 - Remove the `setup-amql-development` remote skill. [#107](https://github.com/lelouvincx/agent-skills/pull/107)
 
 - Remove unused or retired skills, including context window notifier, caveman, holistics-query, sql-formatter, grill-me, grill-with-docs, and teach. [#12](https://github.com/lelouvincx/agent-skills/pull/12) [#17](https://github.com/lelouvincx/agent-skills/pull/17) [#27](https://github.com/lelouvincx/agent-skills/pull/27) [#36](https://github.com/lelouvincx/agent-skills/pull/36)
