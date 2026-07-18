@@ -5,6 +5,7 @@
 // once no follow-up is needed.
 
 import type {
+	AgentThreadExecutor,
 	BuiltinAgentMode,
 	PluginAPI,
 	PluginThread,
@@ -80,7 +81,8 @@ export default function (amp: PluginAPI) {
 			'Use this when the current thread is acting as the design/coordinator thread and wants a subagent to execute one clear slice while the main thread keeps iterating on the broader design.',
 			'Give the subagent concrete scope, constraints, expected output, and validation instructions. Do not wait for the subagent.',
 			'The subagent is instructed to privately reconstruct parent-thread intent before executing so incidental recent context does not replace the original task intent.',
-			"Choose cwd when another directory is more appropriate for the bounded task; it defaults to the parent thread's cwd.",
+			"Execution defaults to local. Choose cwd only for local execution; Orb and runner children use the selected executor's workspace.",
+			'Runner execution requires a known stable runner ID; this tool does not discover runners.',
 			'The subagent is instructed to report back to this thread with a structured summary via send_to_thread, decide whether parent follow-up is required, then archive itself with archive_current_thread once no required follow-up remains.',
 			"Defaults to Amp's built-in medium mode.",
 		].join(' '),
@@ -98,7 +100,22 @@ export default function (amp: PluginAPI) {
 				},
 				cwd: {
 					type: 'string',
-					description: "Working directory the subagent should use. Defaults to the parent thread's cwd.",
+					description: "Local-only working directory. Defaults to the parent thread's cwd and cannot be combined with a remote executor.",
+				},
+				executor: {
+					description: 'Execution target. Defaults to local. Runner targets require a stable live runner ID.',
+					oneOf: [
+						{ type: 'string', enum: ['local', 'orb'] },
+						{
+							type: 'object',
+							properties: {
+								type: { type: 'string', enum: ['runner'] },
+								id: { type: 'string', minLength: 1 },
+							},
+							required: ['type', 'id'],
+							additionalProperties: false,
+						},
+					],
 				},
 			},
 			required: ['instructions'],
@@ -110,16 +127,23 @@ export default function (amp: PluginAPI) {
 				throw new Error('instructions are required')
 			}
 			const mode = normalizeMode(input.mode)
-			const cwd = normalizeCwd(input.cwd)
+			const executor = normalizeExecutor(input.executor)
+			if (executor !== 'local' && input.cwd !== undefined) {
+				throw new Error('cwd is only supported with the local executor')
+			}
+			const cwd = executor === 'local' ? normalizeCwd(input.cwd) : undefined
 
 			const subagent = amp.getBuiltinAgent(mode)
-			const thread = await subagent.createThread({ parentThreadID: ctx.thread.id })
+			const thread = await subagent.createThread({ parentThreadID: ctx.thread.id, executor })
 			spawnedThreadIDs.add(thread.id)
+			const workingDirectoryInstruction = cwd
+				? `Use ${JSON.stringify(cwd)} as your working directory for file reads, searches, shell commands, edits, and validation. Do not assume the task belongs in another directory unless the reconstructed parent intent explicitly redirects you.`
+				: `Use the selected ${executor === 'orb' ? 'Orb' : 'runner'} executor's current workspace for file reads, searches, shell commands, edits, and validation. Do not use or infer a path from the parent machine.`
 			const message = `${SUBAGENT_PROMPT_PREFIX}${ctx.thread.id}.
 
 The parent thread is the design/coordinator thread and owns the broader architectural intent. Your job is to execute only the bounded task below, preserve the stated constraints, and avoid speculative abstractions or unrelated cleanup.
 
-Use ${JSON.stringify(cwd)} as your working directory for file reads, searches, shell commands, edits, and validation. Do not assume the task belongs in another directory unless the reconstructed parent intent explicitly redirects you.
+${workingDirectoryInstruction}
 
 Before executing, first perform a private intent-reconstruction step. You must use read_thread on ${ctx.thread.id}. Do not fall back to inspecting any partial parent context available to you. If read_thread is unavailable or fails, report that you are blocked and do not execute the bounded task. Infer and keep distinct: (a) the original user intent, (b) any later user redirect, (c) the latest coherent requested outcome, and (d) how this bounded subagent task supports that outcome. Do not write anything yet.
 
@@ -397,6 +421,18 @@ function normalizeMode(raw: unknown): BuiltinAgentMode {
 		throw new Error('mode must be one of: low, medium, high')
 	}
 	return mode as BuiltinAgentMode
+}
+
+function normalizeExecutor(raw: unknown): AgentThreadExecutor {
+	if (raw === undefined || raw === 'local') return 'local'
+	if (raw === 'orb') return 'orb'
+	if (raw && typeof raw === 'object' && (raw as { type?: unknown }).type === 'runner') {
+		const rawID = (raw as { id?: unknown }).id
+		const id = typeof rawID === 'string' ? rawID.trim() : ''
+		if (!id) throw new Error('runner executor id is required')
+		return { type: 'runner', id }
+	}
+	throw new Error('executor must be local, orb, or a runner target with a stable id')
 }
 
 function normalizeCwd(raw: unknown): string {

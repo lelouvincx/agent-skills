@@ -92,6 +92,8 @@ The skill receives the current task and its coordination requirements through co
 
 After spawning, use `subagent_control` only when the user asks to list or inspect children, when a child needs diagnosis, or when an active child turn must be cancelled. Normal completion still arrives through `send_to_thread`; do not poll status while waiting.
 
+Use the default local executor unless the task explicitly needs an Amp Orb or a known live runner. Orb and runner children use their executor workspace rather than a parent-machine `cwd`; runner targeting requires a stable runner ID supplied by the user or existing context because `spawn_subagent` does not discover runners.
+
 The skill declares no tool allowlist.
 
 ## Behavior
@@ -121,6 +123,7 @@ Loading the skill only adds instructions to agent context. The skill itself does
 | Investigate a bounded failure whose result determines the current response | Built-in `Task` | The parent needs the result before this turn can finish. |
 | Run two independent checks whose results are both needed now | Parallel built-in `Task` calls | The work is independent and remains in-turn. |
 | Implement an independent slice while the parent continues shaping the design | `spawn_subagent` | The work benefits from a durable child thread and asynchronous reporting. |
+| Run durable delegated work in an Amp Orb or on a known live runner | `spawn_subagent` with `executor` | Select `orb` or pass the runner's stable ID; do not pass a local `cwd` to remote execution. |
 | Investigate a slice that may require a later product or architecture decision from the parent | `spawn_subagent` | The child can remain open for required follow-up. |
 | "Ask an agent to check this" with no asynchronous or durable-thread requirement | Built-in `Task` | Generic requests for an agent do not imply `spawn_subagent`. |
 | “Btw, why does this test use a fake clock?” or `\|btw why does this test use a fake clock?` | Built-in `Task` by default | The aside must not displace the parent's current task; delegate the question after removing the trigger. |

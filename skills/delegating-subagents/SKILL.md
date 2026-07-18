@@ -18,6 +18,8 @@ Keep the skill aligned with the related [Spawn Subagent](../../amp/docs/tools/sp
 
 After spawning, use `subagent_control` only when the user asks to list or inspect children, when a child needs diagnosis, or when an active child turn must be cancelled. Normal completion arrives through `send_to_thread`; do not poll status while waiting.
 
+Keep `spawn_subagent` local by default. Select `executor: "orb"` only when the task needs an Amp Orb, or pass `{ "type": "runner", "id": "<stable-id>" }` for a known live runner. Do not pass `cwd` for either remote executor; they use their own workspace. The tool cannot discover runners, so never guess or resolve a runner name.
+
 Additionally, when the user introduces a side question with `btw` or triggers `|btw`, delegate that question so it does not displace the parent's current task. Remove the trigger from the delegated brief. This is a request to delegate, not a request for a specific mechanism: use built-in `Task` by default when the answer is needed now, or `spawn_subagent` when it should run asynchronously or may need later follow-up.
 
 ## Constraints
@@ -43,6 +45,7 @@ Ask in order:
 - A `btw` aside that can report later or may need parent follow-up → `spawn_subagent`.
 - “Ask an agent” or “use a subagent” without an asynchronous requirement → built-in `Task`.
 - “Spawn a subagent”, “run this in parallel”, `/subagent`, or `|subagent` → `spawn_subagent`; the user explicitly selected the durable mechanism.
+- Durable work explicitly requested in an Orb or on a known live runner → `spawn_subagent` with the requested executor; omit `cwd` for remote execution.
 - “Which subagents are running?” → `subagent_control` with `list`; return point-in-time child states and report statuses without waiting.
 - “Check that subagent” → `subagent_control` with `status`; return that child's point-in-time state, report status, and report summary without waiting.
 - “Stop that subagent” → `subagent_control` with `cancel`; stop its active turn without archiving or deleting its thread.

@@ -35,6 +35,7 @@ and this project does not currently use versioned releases.
 
 ### Changed
 
+- Let `spawn_subagent` run locally, in an Amp Orb, or on a live runner selected by stable ID while preventing local `cwd` paths from reaching remote executors.
 - Update the `slackcli` skill for SlackCLI v0.7.0 search, saved-item, canvas, file-upload, and draft workflows. [#104](https://github.com/lelouvincx/agent-skills/pull/104)
 - Update the Amp SDK workspace to use the latest bundled Amp CLI and platform packages. [#102](https://github.com/lelouvincx/agent-skills/pull/102)
 - Remove the blanket "every browser task" wording from the local agent-browser workflow. [#100](https://github.com/lelouvincx/agent-skills/pull/100)

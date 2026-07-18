@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 
 import {
+	default as registerSubagentTools,
 	discoverSpawnedSubagents,
 	executeSubagentControl,
 	readAllMessages,
@@ -57,6 +58,85 @@ function threadDirectory(state: 'idle' | 'running' | 'awaiting-approval' | 'erro
 		cancelCalls: () => cancelCalls,
 	}
 }
+
+function spawnHarness() {
+	let spawnTool: { execute: (input: Record<string, unknown>, ctx: unknown) => Promise<string> } | undefined
+	const createCalls: unknown[] = []
+	const initialMessages: string[] = []
+	registerSubagentTools({
+		on: () => undefined,
+		registerTool: (tool: { name: string }) => {
+			if (tool.name === 'spawn_subagent') spawnTool = tool as typeof spawnTool
+		},
+		getBuiltinAgent: () => ({
+			createThread: async (options: unknown) => {
+				createCalls.push(options)
+				return {
+					id: childID,
+					appendUserMessage: async ({ content }: { content: string }) => { initialMessages.push(content) },
+				}
+			},
+		}),
+	} as never)
+	if (!spawnTool) throw new Error('spawn_subagent was not registered')
+	return {
+		execute: (input: Record<string, unknown>) => spawnTool!.execute(input, { thread: { id: otherID } }),
+		createCalls,
+		initialMessages,
+	}
+}
+
+describe('subagent execution target', () => {
+	test('defaults to local execution and preserves local cwd behavior', async () => {
+		const harness = spawnHarness()
+		await harness.execute({ instructions: 'Check locally' })
+
+		expect(harness.createCalls).toEqual([{ parentThreadID: otherID, executor: 'local' }])
+		expect(harness.initialMessages[0]).toContain(`Use ${JSON.stringify(process.cwd())} as your working directory`)
+	})
+
+	test('targets an Orb without sending the parent cwd', async () => {
+		const harness = spawnHarness()
+		await harness.execute({ instructions: 'Check remotely', executor: 'orb' })
+
+		expect(harness.createCalls).toEqual([{ parentThreadID: otherID, executor: 'orb' }])
+		expect(harness.initialMessages[0]).toContain("Use the selected Orb executor's current workspace")
+		expect(harness.initialMessages[0]).not.toContain(process.cwd())
+	})
+
+	test('targets a runner by stable ID', async () => {
+		const harness = spawnHarness()
+		await harness.execute({
+			instructions: 'Check on runner',
+			executor: { type: 'runner', id: ' runner-123 ' },
+		})
+
+		expect(harness.createCalls).toEqual([{
+			parentThreadID: otherID,
+			executor: { type: 'runner', id: 'runner-123' },
+		}])
+		expect(harness.initialMessages[0]).toContain("Use the selected runner executor's current workspace")
+	})
+
+	test('rejects a runner without a stable ID', async () => {
+		const harness = spawnHarness()
+		await expect(harness.execute({
+			instructions: 'Check on runner',
+			executor: { type: 'runner', id: '  ' },
+		})).rejects.toThrow('runner executor id is required')
+		expect(harness.createCalls).toEqual([])
+	})
+
+	test('rejects cwd for remote execution', async () => {
+		const harness = spawnHarness()
+		await expect(harness.execute({
+			instructions: 'Check remotely',
+			executor: 'orb',
+			cwd: '/tmp',
+		})).rejects.toThrow('cwd is only supported with the local executor')
+		expect(harness.createCalls).toEqual([])
+	})
+})
 
 describe('subagent transcript discovery', () => {
 	test('discovers successful spawns and associates the latest structured report', () => {

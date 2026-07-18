@@ -3,7 +3,7 @@ doc_schema: "amp-artifact/v2"
 title: "Spawn Subagent"
 slug: "spawn-subagent"
 status: "active"
-summary: "Launches a bounded independent Amp subagent thread, with companion skill guidance for choosing it over built-in Task."
+summary: "Launches a bounded independent Amp subagent thread locally, in an Orb, or on a stable runner target."
 artifact:
   id: "spawn_subagent"
   type: "agent_tool"
@@ -22,7 +22,7 @@ amp:
   docs_sources:
     api_docs: "amp plugins show-docs"
     agent_options: "amp plugins show-agent-options --json"
-  last_verified: "2026-07-12"
+  last_verified: "2026-07-18"
 contract:
   input_kind: "json_schema"
   output_kind: "text"
@@ -33,6 +33,10 @@ contract:
   agent_mode_key: null
   required_inputs:
     - "instructions"
+  optional_inputs:
+    - "mode"
+    - "cwd"
+    - "executor"
 runtime:
   uses:
     - "amp.getBuiltinAgent"
@@ -49,6 +53,7 @@ runtime:
   reads:
     - "current thread id"
     - "plugin process working directory as the parent thread default"
+    - "explicit executor target and stable runner ID when supplied"
     - "parent Amp thread through spawned subagent for intent reconstruction"
   writes:
     - "new child Amp thread"
@@ -63,6 +68,8 @@ safety:
   constraints:
     - "Subagent must receive bounded instructions with scope, constraints, output, and validation."
     - "Subagent must use read_thread to privately reconstruct parent-thread intent before executing."
+    - "cwd is accepted only for local execution; Orb and runner children use the remote executor's workspace."
+    - "Runner execution requires a non-empty stable runner ID supplied by the caller; the plugin does not discover runners."
     - "Oracle tool calls from spawned subagent threads are rejected; unresolved judgment calls must be reported to the parent coordinator, which alone owns expert escalation."
     - "Caller must not poll or wait for the subagent."
     - "Subagent is instructed to report completion through send_to_thread with steer=true."
@@ -132,10 +139,11 @@ Required inputs:
 
 Optional inputs:
 
-| Field  | Type                       | Default             | Notes                                                                                                       |
-| ------ | -------------------------- | ------------------- | ----------------------------------------------------------------------------------------------------------- |
-| `mode` | `low \| medium \| high` | `medium`            | Built-in Amp agent mode for the subagent.                                                                   |
-| `cwd`  | `string`                   | Parent thread's cwd | Working directory the subagent should use. The caller may choose a more appropriate directory for the task. |
+| Field      | Type                                                   | Default             | Notes                                                                                                                  |
+| ---------- | ------------------------------------------------------ | ------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `mode`     | `low \| medium \| high`                             | `medium`            | Built-in Amp agent mode for the subagent.                                                                              |
+| `cwd`      | `string`                                               | Parent thread's cwd | Local-only working directory. Supplying it with an Orb or runner executor is rejected.                                 |
+| `executor` | `local \| orb \| { type: "runner", id: string }` | `local`             | Execution target passed to Amp. Runner IDs must be non-empty stable IDs for live runners and are not discovered here. |
 
 `ultra` is intentionally unsupported because its Fable 5 usage can consume disproportionate credits in spawned subagents.
 
@@ -143,7 +151,7 @@ Output is a short text confirmation: `Started <mode> subagent in <threadID>. Do 
 
 ## Behavior
 
-The tool validates `instructions`, normalizes the built-in mode and `cwd`, obtains a built-in agent with `amp.getBuiltinAgent`, creates a child thread with the current thread as `parentThreadID`, and appends a structured subagent prompt. The caller should choose the directory that owns the bounded task when it differs from the parent thread's working directory. When omitted, `cwd` defaults to the plugin process working directory, which is the parent thread's workspace working directory. The child is instructed to use the selected directory for file and shell operations. If the initial append fails after thread creation, the error includes the child thread ID so the orphaned thread can be inspected or archived manually.
+The tool validates `instructions`, normalizes the built-in mode and executor, obtains a built-in agent with `amp.getBuiltinAgent`, creates a child thread with the current thread as `parentThreadID` and the selected executor, and appends a structured subagent prompt. Local execution preserves the existing behavior: `cwd` defaults to the plugin process working directory, which is the parent thread's workspace working directory, and the child is instructed to use that path. Orb and runner execution reject an explicitly supplied `cwd` so a parent-machine path is never sent to a remote child; the child instead uses its executor's own current workspace. Runner execution accepts only a caller-supplied stable runner ID because the Plugin API does not provide runner discovery. If the initial append fails after thread creation, the error includes the child thread ID so the orphaned thread can be inspected or archived manually.
 
 The prompt treats `read_thread` as the required source of truth for parent context. It does not fall back to static prompt reconstruction or whatever partial parent context is otherwise visible. If `read_thread` is unavailable or fails, the subagent must report that it is blocked rather than execute the bounded task from incomplete context.
 
@@ -205,6 +213,24 @@ Spawn a subagent in another project directory:
 }
 ```
 
+Spawn a subagent in an Amp Orb, using the Orb workspace rather than a local `cwd`:
+
+```json
+{
+  "executor": "orb",
+  "instructions": "Inspect the checked-out project and run its focused validation."
+}
+```
+
+Spawn on a known live runner by stable ID:
+
+```json
+{
+  "executor": { "type": "runner", "id": "runner-stable-id" },
+  "instructions": "Run the bounded task in the runner's current workspace."
+}
+```
+
 ### Scenario stress test
 
 | Scenario | Expected behavior |
@@ -228,6 +254,8 @@ This point-in-time understanding is an inherent part of asynchronous delegation,
 
 - `instructions are required`: pass a non-empty task brief.
 - `mode must be one of...`: use only `low`, `medium`, or `high`.
+- `executor must be...`: use `local`, `orb`, or `{ "type": "runner", "id": "..." }` with a non-empty stable runner ID.
+- `cwd is only supported with the local executor`: omit `cwd` for Orb and runner execution; the remote executor supplies its workspace.
 - `cwd does not exist` or `cwd is not a directory`: pass an existing directory accessible to the parent Amp process.
 - Initial message append failed: use the child thread ID included in the error to inspect or archive the empty thread manually.
 - Subagent does not report back: inspect the child thread ID from the return value and check whether `send_to_thread` is available.
@@ -236,6 +264,7 @@ This point-in-time understanding is an inherent part of asynchronous delegation,
 ## Maintenance notes
 
 - Update this doc when built-in agent modes or reasoning efforts change.
+- Re-check `AgentThreadExecutor` with `amp plugins show-docs` when Amp updates its Plugin API.
 - Update this doc when parent-thread intent reconstruction changes.
 - Update this doc when the subagent report format changes.
 - Update this doc when self-archive behavior changes.
