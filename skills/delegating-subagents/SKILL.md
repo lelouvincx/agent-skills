@@ -10,15 +10,21 @@ Choose the delegation mechanism from what the parent needs next.
 The [Delegating Subagents artifact document](../../amp/docs/tools/delegating-subagents.md) is the source of truth for these rules.
 Keep the skill aligned with the related [Spawn Subagent](../../amp/docs/tools/spawn-subagent.md) and [Subagent Control](../../amp/docs/tools/subagent-control.md) capability documents.
 
-## Decision
+## Choose the delegation mechanism
 
 1. Use a direct or specialist tool when it already covers the job or delegation overhead is greater than the task. Do not delegate exact reads, simple searches, one localized edit, or work owned by `finder`, `librarian`, or `oracle`.
 2. Use built-in `Task` for ordinary bounded delegation when the parent needs the result in the current turn. The worker returns one final summary through the current tool call.
 3. Use `spawn_subagent` when the work needs durable asynchronous execution, visible child-thread history, or possible parent follow-up. It creates an addressable child thread that reports back later through `send_to_thread`.
 
-After spawning, use `subagent_control` only when the user asks to list or inspect children, when a child needs diagnosis, or when an active child turn must be cancelled. Normal completion arrives through `send_to_thread`; do not poll status while waiting.
+## Choose where the child runs
 
 Keep `spawn_subagent` local by default. Select `executor: "orb"` only when the task needs an Amp Orb, or pass `{ "type": "runner", "id": "<stable-id>" }` for a known live runner. Do not pass `cwd` for either remote target; the Orb or selected runner supplies the workspace. The tool cannot discover runners, so never guess or resolve a runner name.
+
+See [Choose where the subagent runs](../../amp/docs/tools/spawn-subagent.md#choose-where-the-subagent-runs) for the full contract.
+
+## Control a spawned child
+
+After spawning, use `subagent_control` only when the user asks to list or inspect children, when a child needs diagnosis, or when an active child turn must be cancelled. Normal completion arrives through `send_to_thread`; do not poll status while waiting.
 
 Additionally, when the user introduces a side question with `btw` or triggers `|btw`, delegate that question so it does not displace the parent's current task. Remove the trigger from the delegated brief. This is a request to delegate, not a request for a specific mechanism: use built-in `Task` by default when the answer is needed now, or `spawn_subagent` when it should run asynchronously or may need later follow-up.
 

@@ -93,13 +93,23 @@ tags:
 
 ## Summary
 
-`spawn_subagent` starts an independent Amp subagent thread for one bounded implementation or investigation slice. It lets a coordinator thread keep working while the child thread reports back later through `send_to_thread`, then archives itself after a terminal final report when no required follow-up is needed.
+`spawn_subagent` starts an independent Amp subagent thread for one bounded task.
 
-It complements Amp's built-in `Task` tool rather than replacing it. Use `Task` when the parent needs a bounded subagent's final result within its current turn. Use `spawn_subagent` when the work should continue in an addressable child thread while the parent keeps working.
+Choose where the subagent runs with the `executor` field:
 
-### Relationship with built-in Task
+- use local execution by default
+- use an Amp Orb when the task needs a cloud sandbox
+- use a live runner when you know its stable runner ID
 
-Both tools delegate work to an Amp subagent with a separate context window and tool access. Their lifecycle and coordination models differ:
+Only local execution accepts `cwd`. Orb and runner execution reject `cwd` and use their remote workspace.
+
+The parent can keep working while the child reports back through `send_to_thread`. The child archives itself after a terminal report when it needs no follow-up.
+
+### Choose Task or spawn_subagent
+
+Use built-in `Task` when the parent needs the result in its current turn. Use `spawn_subagent` when the work needs a durable child thread, asynchronous execution or later follow-up.
+
+Both tools give the subagent a separate context window and tool access. Their lifecycle and coordination models differ:
 
 | Use | Built-in `Task` | `spawn_subagent` |
 | --- | --- | --- |
@@ -109,15 +119,15 @@ Both tools delegate work to an Amp subagent with a separate context window and t
 | Reporting | Returns one final summary | Reports through `send_to_thread`, then archives itself when no follow-up is required |
 | Best fit | Ordinary bounded delegation whose result is needed in the current turn | Work needing durable asynchronous execution, visible child-thread history, or possible parent follow-up |
 
-Before delegating, use a direct or specialist tool when it already covers the job; for example, prefer exact reads, direct searches, `finder`, `librarian`, or `oracle` over a generic subagent. Otherwise, prefer built-in `Task` for ordinary in-turn delegation because it has less coordination overhead. Prefer `spawn_subagent` when the work needs durable asynchronous execution, visible child-thread history, or possible parent follow-up.
+Use a direct or specialist tool when it already covers the job. For example, prefer exact reads, direct searches, `finder`, `librarian` or `oracle` over a generic subagent.
 
 ### Decision-guidance artifact
 
-The capability contract produces [`skills/delegating-subagents/SKILL.md`](../../../skills/delegating-subagents/SKILL.md) as its reusable decision-guidance artifact. The skill operationalizes this comparison whenever an agent considers delegation: use a direct or specialist tool when sufficient, built-in `Task` for ordinary in-turn work, or `spawn_subagent` for durable asynchronous child-thread work.
+The capability contract produces the [`delegating-subagents` skill](../../../skills/delegating-subagents/SKILL.md). The skill applies this comparison whenever an agent considers delegation.
 
-`amp/AGENTS.md` requires the agent to load this skill before delegating so the documented choice is applied consistently.
+`amp/AGENTS.md` requires agents to load the skill before delegating.
 
-The related `subagent_control` tool can list child states and report statuses, inspect one child's status and report summary, or cancel children spawned by the current parent when the user requests intervention or diagnosis. It does not change the normal lifecycle: the caller should not poll or wait for spawned children.
+The related `subagent_control` tool can list, inspect or cancel children created by the current parent. Use it only when the user asks for intervention or diagnosis. Do not poll or wait for a child during its normal lifecycle.
 
 ## Invocation
 
@@ -131,31 +141,61 @@ When invoking from the start of a prompt, prefer `|subagent` because Amp reserve
 
 ## Contract
 
-Required inputs:
+### Required input
 
 | Field          | Type     | Notes                                                                                                                         |
 | -------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------- |
 | `instructions` | `string` | Must be non-empty. Include exact scope, non-goals, expected report shape, and the validation the subagent should run or skip. |
 
-Optional inputs:
+### Optional inputs
 
-| Field      | Type                                                   | Default             | Notes                                                                                                                  |
-| ---------- | ------------------------------------------------------ | ------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| `mode`     | `low \| medium \| high`                             | `medium`            | Built-in Amp agent mode for the subagent.                                                                              |
-| `cwd`      | `string`                                               | Parent thread's cwd | Local-only working directory. Supplying it for Orb or runner execution is rejected.                                    |
-| `executor` | `local \| orb \| { type: "runner", id: string }` | `local`             | Execution target passed to Amp. Runner IDs must be non-empty stable IDs for live runners and are not discovered here. |
+| Field      | Type                                                   | Default             | Notes                                                                             |
+| ---------- | ------------------------------------------------------ | ------------------- | --------------------------------------------------------------------------------- |
+| `mode`     | `low \| medium \| high`                             | `medium`            | Built-in Amp agent mode for the subagent.                                         |
+| `cwd`      | `string`                                               | Parent thread's cwd | Working directory for local execution. Orb and runner execution reject this field. |
+| `executor` | `local \| orb \| { type: "runner", id: string }` | `local`             | Execution target passed to Amp's `Agent.createThread` API.                        |
 
 `ultra` is intentionally unsupported because its Fable 5 usage can consume disproportionate credits in spawned subagents.
+
+### Choose where the subagent runs
+
+| Target | `executor` value | `cwd` behavior | Workspace |
+| --- | --- | --- | --- |
+| Local execution | omit the field or use `"local"` | accepts `cwd`; defaults to the parent thread's working directory | the local path selected by `cwd` |
+| Orb execution | `"orb"` | rejects `cwd` | the Orb's current workspace |
+| Runner execution | `{ "type": "runner", "id": "<stable-id>" }` | rejects `cwd` | the selected runner's current workspace |
+
+Keep the public field name `executor`. It matches Amp's `AgentThreadExecutor` union for local, Orb and runner targets.
+
+Runner execution needs a non-empty stable ID for a live runner. The Plugin API cannot list runners, so `spawn_subagent` does not discover or resolve them.
+
+### Output
 
 Output is a short text confirmation: `Started <mode> subagent in <threadID>. Do not poll or wait for it.`
 
 ## Behavior
 
-The tool validates `instructions`, normalizes the built-in mode and execution target, obtains a built-in agent with `amp.getBuiltinAgent`, creates a child thread with the current thread as `parentThreadID`, passes the target through the `executor` field, and appends a structured subagent prompt. Local execution preserves the existing behavior: `cwd` defaults to the plugin process working directory, which is the parent thread's workspace working directory, and the child is instructed to use that path. Orb and runner execution reject an explicitly supplied `cwd` so a parent-machine path is never sent to a remote child; the child instead uses the Orb workspace or selected runner's current workspace. Runner execution accepts only a caller-supplied stable runner ID because the Plugin API does not provide runner discovery. If the initial append fails after thread creation, the error includes the child thread ID so the orphaned thread can be inspected or archived manually.
+### Create the child thread
 
-The prompt treats `read_thread` as the required source of truth for parent context. It does not fall back to static prompt reconstruction or whatever partial parent context is otherwise visible. If `read_thread` is unavailable or fails, the subagent must report that it is blocked rather than execute the bounded task from incomplete context.
+The tool validates `instructions`, `mode`, `executor` and `cwd`. It gets a built-in agent with `amp.getBuiltinAgent`.
 
-The plugin also registers a `tool.call` guard that rejects Oracle calls from threads created by `spawn_subagent`. It tracks newly created child thread IDs in memory and recognizes earlier spawned threads from their generated initial message after a plugin restart. The rejection instructs the child to report the unresolved judgment call to its parent coordinator instead.
+The tool then calls `Agent.createThread`. It passes the current thread as `parentThreadID` and passes the execution target through `executor`.
+
+The tool appends a structured prompt to the child. If this fails after thread creation, the error includes the child thread ID. Use that ID to inspect or archive the empty thread.
+
+### Reconstruct parent intent
+
+The prompt requires the child to use `read_thread` as the source of truth for parent context. The child cannot fall back to static prompt reconstruction or partial context.
+
+If `read_thread` is unavailable or fails, the child reports that it is blocked. It does not run the task from incomplete context.
+
+### Restrict Oracle calls
+
+The plugin registers a `tool.call` guard that rejects Oracle calls from children created by `spawn_subagent`. It tracks new child thread IDs in memory.
+
+After a plugin restart, it recognizes earlier children from their generated initial message. The rejection tells the child to report the unresolved judgment call to its parent coordinator.
+
+### Follow the child lifecycle
 
 The prompt gives the subagent two phases:
 
@@ -178,14 +218,16 @@ The prompt gives the subagent two phases:
 
 ## Permissions and side effects
 
-- Creates a new Amp thread.
-- Appends a user message to the new thread.
-- Instructs the subagent to archive itself after a terminal report.
-- The subagent inherits the selected built-in mode's tool permissions.
-- The subagent may make code changes if its task asks for implementation.
-- The parent thread does not wait for the subagent and should not poll it.
+- creates a new Amp thread
+- appends a user message to the new thread
+- tells the subagent to archive itself after a terminal report
+- gives the subagent the selected built-in mode's tool permissions
+- lets the subagent change code when its task asks for implementation
+- lets the parent continue without waiting or polling
 
 ## Examples
+
+### Local examples
 
 Spawn a default medium subagent:
 
@@ -213,7 +255,9 @@ Spawn a subagent in another project directory:
 }
 ```
 
-Spawn a subagent in an Amp Orb, using the Orb workspace rather than a local `cwd`:
+### Orb example
+
+Use the Orb workspace rather than a local `cwd`:
 
 ```json
 {
@@ -222,7 +266,9 @@ Spawn a subagent in an Amp Orb, using the Orb workspace rather than a local `cwd
 }
 ```
 
-Spawn on a known live runner by stable ID:
+### Runner example
+
+Use a known live runner by stable ID:
 
 ```json
 {
@@ -231,7 +277,7 @@ Spawn on a known live runner by stable ID:
 }
 ```
 
-### Scenario stress test
+### Lifecycle scenarios
 
 | Scenario | Expected behavior |
 | --- | --- |
@@ -248,7 +294,7 @@ Spawn on a known live runner by stable ID:
 | The child discovers unrelated cleanup or a nearby non-blocking issue | Do not broaden scope. Mention it briefly as evidence only if it materially affects integration. |
 | `send_to_thread` fails | Do not archive. Retry only after diagnosing the failure; preserve the report for a later successful send. |
 
-This point-in-time understanding is an inherent part of asynchronous delegation, not a condition the child should try to eliminate by polling. The parent owns integration against the current direction.
+Asynchronous delegation gives the child a point-in-time understanding of the parent task. The child must not poll to remove this limit. The parent owns integration with the current direction.
 
 ## Troubleshooting
 
