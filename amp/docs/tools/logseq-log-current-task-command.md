@@ -1,9 +1,9 @@
 ---
 doc_schema: "amp-artifact/v2"
-title: "Logseq: Log Current Task Command"
+title: "Logseq: log current task command"
 slug: "logseq-log-current-task-command"
 status: "active"
-summary: "Adds a command-palette action that logs the current Amp thread task into Logseq and renames the thread."
+summary: "Adds a command that reliably logs the current Amp task to Logseq, then updates the parent thread."
 artifact:
   id: "logseq-log-current-task"
   type: "command"
@@ -22,7 +22,7 @@ amp:
   docs_sources:
     api_docs: "amp plugins show-docs"
     agent_options: "amp plugins show-agent-options --json"
-  last_verified: "2026-07-13"
+  last_verified: "2026-07-18"
 contract:
   input_kind: "ui_prompt"
   output_kind: "ui_notification"
@@ -34,8 +34,19 @@ contract:
 runtime:
   uses:
     - "amp.registerCommand"
+    - "amp.on tool.call"
     - "ctx.ui.input"
     - "ctx.ui.notify"
+    - "amp.getBuiltinAgent"
+    - "Agent.createThread"
+    - "PluginThread.appendUserMessage"
+    - "PluginThread.waitForResponse"
+    - "PluginThread.messages"
+    - "PluginThread.state"
+    - "amp.threads.get(...).messages"
+    - "amp.$ amp threads rename"
+    - "amp.$ amp threads label"
+    - "amp.$ amp threads archive"
   dependencies:
     - "Amp CLI on PATH"
     - "Logseq graph directory"
@@ -59,10 +70,14 @@ safety:
   constraints:
     - "Requires an active Amp thread."
     - "Does not run automatically from lifecycle events."
-    - "Worker must reconstruct parent context with read_thread and is blocked from invoking Oracle."
+    - "Worker must reconstruct parent context with read_thread before editing Logseq."
+    - "Worker must re-read and verify both Logseq files before reporting completion."
+    - "Worker must return the exact versioned JSON result."
+    - "Oracle calls from the worker are rejected."
   risks:
     - "Worker can edit the configured Logseq graph."
-    - "Malformed worker responses can leave the parent thread title unchanged."
+    - "Write verification is worker-attested; the coordinator validates the result but does not independently parse Logseq semantics."
+    - "Operation state is in memory and cannot prevent duplicate workers after plugin reload or process restart."
 related:
   - "spawn-subagent"
 tags:
@@ -72,11 +87,13 @@ tags:
   - "worker"
 ---
 
-# Logseq: Log Current Task Command
+# Logseq: log current task command
 
 ## Summary
 
-`logseq-log-current-task` provides the command-palette action `logseq: Log current task`. It prompts for an optional hint, then runs the Logseq logging flow.
+`logseq-log-current-task` adds the command-palette action `logseq: Log current task`. It asks for an optional hint, then logs the task through one coordinated worker operation.
+
+[ISSUE-0001: Logseq logging reliability](../issues/issue-0001-logseq-logging-reliability.md) preserves the original incident, revised command-only intent and reliability decisions.
 
 ## Invocation
 
@@ -88,48 +105,86 @@ tags:
 
 ## Contract
 
-The command requires an active thread and accepts no JSON input.
+You must run the command from an active thread. It accepts no JSON input.
 
-It opens `Log current task to Logseq`. You can enter any of these optional details:
+The command opens `Log current task to Logseq`. You can enter:
 
-- target
-- note
-- source link
+- a target
+- a note
+- a source link
 
-Select `Log to Logseq` to start the flow. The command shows a success or error notification when the flow ends.
+Select `Log to Logseq` to start the operation. The notification reports these statuses separately:
+
+- `Worker`
+- `Logseq`
+- `Rename`
+- `Labels`
+- `Archive`
+
+`Pending` means the operation may still write or Amp cannot confirm whether it accepted the work. `Partial` means the worker verified the parent-linked Backlog task but not the matching journal pointer. `Complete` means the worker re-read both files and verified that the journal points to the same parent-linked task.
 
 ## Behavior
 
-The command runs this sequence:
+### One operation owns each parent thread
 
-1. It checks that an Amp thread is active.
-2. It prompts you for an optional hint.
-3. It starts a hidden built-in `high` worker without copying recent parent messages.
-4. The worker reconstructs the parent context with `read_thread`.
-5. The worker updates Logseq.
-6. The plugin derives the parent thread title and labels from the result.
-7. The plugin renames and labels the parent thread.
-8. The plugin archives the worker.
+The command records one in-memory operation for each parent thread before it creates a worker. It handles each create, append, response, rename, label and archive state change in order. A concurrent invocation returns the current status instead of starting duplicate work.
 
-The worker must leave its initial idle state within 15 seconds. This includes cases where the account lacks credits for `high` mode. The flow fails early instead of waiting for the full worker timeout.
+The first invocation starts one hidden built-in `high` worker without copying recent parent messages. Later invocations use the same worker and retry only unfinished stages.
 
-If `read_thread` fails, the worker stops without editing Logseq. The plugin also rejects Oracle calls from the worker.
+This guarantee lasts for one plugin process. Amp does not provide an operation store or a way to list child threads. A plugin reload can therefore lose ownership of pending work.
 
-### Parent thread title
+### Uncertain work stays pending
 
-The plugin derives the title in this format:
+Amp may not confirm whether it created a worker, delivered a message or stored a response. When this happens, the command keeps ownership and reports `pending`. It does not create another worker, append another message or cancel work that may still write.
 
-`[Project] task title`
+After 5 minutes, the command checks worker state and looks for a fresh assistant message. Only a message with a new ID can satisfy the current worker turn.
 
-### Parent thread labels
+The Amp plugin API does not provide typed timeout errors. The plugin keeps the 2 required string checks in one compatibility helper.
 
-The plugin adds these labels:
+### The worker writes Backlog first
 
-- backlog project, normalized to lowercase alphanumeric words joined with hyphens, such as `presales`
-- working project, using the project registry key for the parent Amp workspace, such as `logseq`, `agent-skills` or `demo4`
-- customer, when the backlog task identifies one, normalized with a `customer-` prefix, such as `customer-fanserv` or `customer-basata`
+The worker must call `read_thread` for the parent thread before editing Logseq. If this fails, it returns a structured error without changing the graph. The plugin rejects Oracle calls from the worker.
 
-The plugin does not add priority or TODO/DONE state labels. It preserves existing parent thread labels.
+The worker reconstructs original user intent and latest coherent outcome. It then updates or creates the parent-linked task in `pages/Backlog.md`. Today's journal contains a short pointer to that task under `Done`, `Tasks` or `Notes`, based on task state.
+
+The worker reads `pages/Canonical Pages.md` and relevant rule pages before writing. It stores parent Amp thread and useful source links in the Backlog task's `input::` property.
+
+### The worker returns strict JSON
+
+After editing, the worker re-reads both files. It returns one unfenced JSON object with this exact key set:
+
+```json
+{"version":1,"backlogVerified":true,"journalVerified":true,"threadTitle":"[Project] task title","threadLabels":["project","working-project","customer-name"],"summary":"Short outcome","error":null}
+```
+
+`backlogVerified` means the worker found a Backlog task linked to the parent thread. `journalVerified` means the journal points to that same task.
+
+The result also includes:
+
+- `threadTitle` in the format `[Project] task title`
+- `threadLabels` for the Backlog project, working project and customer when present
+
+The coordinator normalises and removes duplicate labels. A verified Backlog task needs at least one usable label. An unverified Backlog result must return an empty label list.
+
+The coordinator rejects extra keys, prose, code fences, invalid field types and contradictory verification results. Malformed output remains `unverified`. It never counts as complete or as a terminal failure.
+
+Completion is worker-attested and read-back-verified. The coordinator validates the result but does not independently inspect the meaning of graph files.
+
+### The same worker repairs incomplete state
+
+The command keeps the same worker after a partial, malformed or validated failed result. A later invocation makes the worker inspect existing parent-linked state and repair only missing work. A malformed repair response does not erase earlier verified Logseq state.
+
+### Later actions run separately
+
+Verified Logseq completion starts 3 separate actions:
+
+- rename parent thread
+- add labels without removing existing labels
+- archive worker
+
+The plugin still attempts archive if rename or labelling fails. Any later-action failure leaves `Logseq: complete` unchanged. A later invocation retries only failed stages.
+
+The operation leaves memory after Logseq, rename, labels and archive all complete. A typed worker error with no fresh response also ends ownership so a later invocation can start a replacement worker.
 
 ## Permissions and side effects
 
@@ -140,25 +195,37 @@ The command can:
 - rename the parent Amp thread
 - add labels to the parent Amp thread
 
+The command does not run from an agent message or lifecycle event. You must select it from the command palette.
+
 ## Examples
 
-Choose `logseq: Log current task` from the command palette, optionally enter `update DAT-594`, and select `Log to Logseq`.
+1. Choose `logseq: Log current task` from the command palette.
+2. Enter an optional hint, such as `update DAT-594`.
+3. Select `Log to Logseq`.
 
 ## Troubleshooting
 
-- Open an Amp thread before invoking the command.
-- If the worker fails, inspect the worker thread linked from the notification.
-- Set `AMP_LOGSEQ_GRAPH_DIR` before starting Amp to use a different graph.
+Use these checks when the command does not complete:
+
+- open an Amp thread before running the command
+- for `Worker: pending`, wait and run the command again to check the same operation
+- for `Logseq: partial`, `Logseq: unverified` or `Logseq: failed`, run the command again so the same worker can repair the state
+- for `Rename: failed`, `Labels: failed` or `Archive: failed`, run the command again to retry only that action
+- for `Worker: failed`, run the command again to start a replacement worker
+- if `Worker: pending` remains unresolved after repeated retries, reload the plugins or restart Amp to clear in-memory ownership; use this only as an escape hatch because the original worker may still write
+- to use another graph, set `AMP_LOGSEQ_GRAPH_DIR` before starting Amp
 
 ## Maintenance notes
 
 Update this document when any of these change:
 
-- command ID
-- palette prompt
-- notifications
+- the command ID, prompt or notifications
 - worker mode or startup timeout
-- context reconstruction
-- Oracle guard
+- context reconstruction or the Oracle guard
+- operation state, worker result or reconciliation
+- Backlog-first behaviour or journal verification
 - parent thread title or labels
-- Logseq flow
+- rename, label or archive behaviour
+- default graph path or timeout compatibility
+
+Keep historical intent and evidence in ISSUE-0001.

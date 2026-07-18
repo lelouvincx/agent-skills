@@ -74,5 +74,38 @@ class ArtifactValidationTests(unittest.TestCase):
         self.assertEqual("2026-07-12", str(data["last"]))
 
 
+class IssueValidationTests(unittest.TestCase):
+    def data(self):
+        return {
+            "doc_schema": "amp-issue/v1", "code": "ISSUE-0001", "title": "Test issue",
+            "slug": "test-issue", "file": "issue-0001-test-issue.md", "status": "Open",
+            "priority": "P1", "summary": "Test issue summary.", "created": "2026-07-15",
+            "updated": "2026-07-16", "amp_thread_id": {"T-test": "captured original intent"},
+            "artifacts": ["test-artifact"], "implementation": [], "pull_requests": [],
+            "related": [], "tags": ["test"],
+        }
+
+    def validate(self, data, headings=None):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "issue-0001-test-issue.md"
+            path.write_text("\n".join(f"## {heading}" for heading in headings or validator.ISSUE_REQUIRED_H2S))
+            errors = []
+            validator.validate_issue_contract(path, data, errors)
+            return errors
+
+    def test_valid_issue_contract(self):
+        self.assertEqual([], self.validate(self.data()))
+
+    def test_rejects_invalid_issue_identity_and_structure(self):
+        data = self.data()
+        data["code"] = "LOGSEQ-1"
+        data["status"] = "Done"
+        errors = self.validate(data, ["Summary"])
+        self.assertTrue(any("code must look like ISSUE-0001" in error for error in errors))
+        self.assertTrue(any("code and slug require filename" in error for error in errors))
+        self.assertTrue(any("status has invalid value" in error for error in errors))
+        self.assertTrue(any("H2 headings must be exactly" in error for error in errors))
+
+
 if __name__ == "__main__":
     unittest.main()
