@@ -106,8 +106,9 @@ Local hooks provide early feedback and may be bypassed with `--no-verify`; GitHu
 | [Send to thread](amp/docs/tools/send-to-thread.md) | Agent tool | Agent | send a message to another Amp thread |
 | [Spawn subagent](amp/docs/tools/spawn-subagent.md) | Agent tool | Agent | start a bounded subagent thread that reports back |
 | [DeepSeek V4 Pro](amp/docs/tools/deepseek-v4-pro.md) | Agent mode | Mode picker | run an experimental DeepSeek-backed agent mode |
+| [Inkling](amp/docs/tools/inkling.md) | Agent mode | Mode picker | run an experimental Inkling-backed agent mode |
 | [Codex usage command](amp/docs/tools/codex-usage.md) | Command | Command palette | show Codex usage limits |
-| [Logseq log current task](amp/docs/tools/issue-0001-logseq-log-current-task.md) | Command + agent tool | Command palette / Agent | log the current Amp task into Logseq |
+| [Logseq log current task](amp/docs/tools/logseq-log-current-task-command.md) | Command | Command palette | log the current Amp task into Logseq |
 | [Track event](amp/docs/tools/track-event.md) | Command | Command palette | record skill or plugin usage manually |
 | [Capture skill and plugin magic words](amp/docs/tools/capture-skill-plugin-magic-words.md) | Event handler | Plugin event pipeline | record usage events from trigger phrases |
 | [Holistics MCP error logger](amp/docs/tools/holistics-mcp-errors.md) | Event handler | Plugin event pipeline | log Holistics MCP CLI failures |

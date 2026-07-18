@@ -9,6 +9,8 @@ and this project does not currently use versioned releases.
 
 ### Added
 
+- Add an experimental Inkling-backed Amp agent mode. [#106](https://github.com/lelouvincx/agent-skills/pull/106)
+- Add `readai` for retrieving speaker-attributed call transcripts through the Read AI MCP. [#105](https://github.com/lelouvincx/agent-skills/pull/105)
 - Add parent-scoped list, status, and cancel controls for spawned Amp subagents. [#101](https://github.com/lelouvincx/agent-skills/pull/101)
 - Add a narrowly scoped Claude Design subagent that proxies authenticated design work through Claude Code. [#92](https://github.com/lelouvincx/agent-skills/pull/92)
 - Add RFC-0008 and implement layered pre-commit, pre-push, and authoritative GitHub Actions validation. [#87](https://github.com/lelouvincx/agent-skills/pull/87)
@@ -33,7 +35,10 @@ and this project does not currently use versioned releases.
 
 ### Changed
 
-- Harden Logseq logging with process-scoped operation serialization, truthful pending and partial states, verified structured worker results, same-worker reconciliation, independent rename and archive outcomes, and schema-managed ISSUE-0001 rationale. [#98](https://github.com/lelouvincx/agent-skills/pull/98)
+- Label parent Amp threads from their Logseq backlog project, working project, and customer before archiving logging workers. [#111](https://github.com/lelouvincx/agent-skills/pull/111)
+- Let `spawn_subagent` run locally, in an Amp Orb, or on a live runner selected by stable ID while preventing local `cwd` paths from reaching remote targets. [#110](https://github.com/lelouvincx/agent-skills/pull/110)
+- Update the `slackcli` skill for SlackCLI v0.7.0 search, saved-item, canvas, file-upload, and draft workflows. [#104](https://github.com/lelouvincx/agent-skills/pull/104)
+- Harden the command-only Logseq workflow with process-scoped operation ordering, truthful pending and partial states, verified structured worker results, same-worker repair, independent rename, label and archive outcomes, and schema-managed ISSUE-0001 rationale. [#98](https://github.com/lelouvincx/agent-skills/pull/98)
 - Update the Amp SDK workspace to use the latest bundled Amp CLI and platform packages. [#102](https://github.com/lelouvincx/agent-skills/pull/102)
 - Remove the blanket "every browser task" wording from the local agent-browser workflow. [#100](https://github.com/lelouvincx/agent-skills/pull/100)
 - Guide GOV.UK-style writing to use articles sparingly, especially "the", and avoid em dashes. [#99](https://github.com/lelouvincx/agent-skills/pull/99)
@@ -76,12 +81,16 @@ and this project does not currently use versioned releases.
 
 ### Removed
 
+- Remove the redundant agent-callable Logseq logging tool now that its command-palette action is available on Amp Web. [#108](https://github.com/lelouvincx/agent-skills/pull/108)
+- Remove the `setup-amql-development` remote skill. [#107](https://github.com/lelouvincx/agent-skills/pull/107)
+
 - Remove unused or retired skills, including context window notifier, caveman, holistics-query, sql-formatter, grill-me, grill-with-docs, and teach. [#12](https://github.com/lelouvincx/agent-skills/pull/12) [#17](https://github.com/lelouvincx/agent-skills/pull/17) [#27](https://github.com/lelouvincx/agent-skills/pull/27) [#36](https://github.com/lelouvincx/agent-skills/pull/36)
 - Remove stale duplicated README maintenance sections after moving agent-facing instructions into `AGENTS.md`. [#41](https://github.com/lelouvincx/agent-skills/pull/41) [#47](https://github.com/lelouvincx/agent-skills/pull/47)
 - Remove the `glm-5.2` experimental agent mode plugin and capability doc, since GLM 5.2 is now the default model for the built-in `low` mode per [The Dial](https://ampcode.com/news/the-dial). [#72](https://github.com/lelouvincx/agent-skills/pull/72)
 
 ### Fixed
 
+- Support Claude Fable 5 in Claude Code subagents and remove obsolete Claude Code tool names that prevented the read-only agent from launching. [#109](https://github.com/lelouvincx/agent-skills/pull/109)
 - Reconcile completed Logseq worker responses at the five-minute timeout boundary instead of reporting successful writes as failures. [#95](https://github.com/lelouvincx/agent-skills/pull/95)
 - Preserve Claude Design audit and opt-in raw transcript paths when the Claude Code proxy times out or fails, add deterministic regression coverage, and document the verified supervised design and response-mediated source handoff workflow. [#93](https://github.com/lelouvincx/agent-skills/pull/93)
 - Prevent `spawn_subagent` from launching `ultra` mode subagents. [#89](https://github.com/lelouvincx/agent-skills/pull/89)

@@ -10,11 +10,19 @@ Choose the delegation mechanism from what the parent needs next.
 The [Delegating Subagents artifact document](../../amp/docs/tools/delegating-subagents.md) is the source of truth for these rules.
 Keep the skill aligned with the related [Spawn Subagent](../../amp/docs/tools/spawn-subagent.md) and [Subagent Control](../../amp/docs/tools/subagent-control.md) capability documents.
 
-## Decision
+## Choose the delegation mechanism
 
 1. Use a direct or specialist tool when it already covers the job or delegation overhead is greater than the task. Do not delegate exact reads, simple searches, one localized edit, or work owned by `finder`, `librarian`, or `oracle`.
 2. Use built-in `Task` for ordinary bounded delegation when the parent needs the result in the current turn. The worker returns one final summary through the current tool call.
 3. Use `spawn_subagent` when the work needs durable asynchronous execution, visible child-thread history, or possible parent follow-up. It creates an addressable child thread that reports back later through `send_to_thread`.
+
+## Choose where the child runs
+
+Keep `spawn_subagent` local by default. Select `executor: "orb"` only when the task needs an Amp Orb, or pass `{ "type": "runner", "id": "<stable-id>" }` for a known live runner. Do not pass `cwd` for either remote target; the Orb or selected runner supplies the workspace. The tool cannot discover runners, so never guess or resolve a runner name.
+
+See [Choose where the subagent runs](../../amp/docs/tools/spawn-subagent.md#choose-where-the-subagent-runs) for the full contract.
+
+## Control a spawned child
 
 After spawning, use `subagent_control` only when the user asks to list or inspect children, when a child needs diagnosis, or when an active child turn must be cancelled. Normal completion arrives through `send_to_thread`; do not poll status while waiting.
 
@@ -43,6 +51,7 @@ Ask in order:
 - A `btw` aside that can report later or may need parent follow-up → `spawn_subagent`.
 - “Ask an agent” or “use a subagent” without an asynchronous requirement → built-in `Task`.
 - “Spawn a subagent”, “run this in parallel”, `/subagent`, or `|subagent` → `spawn_subagent`; the user explicitly selected the durable mechanism.
+- Durable work explicitly requested in an Orb or on a known live runner → `spawn_subagent` with the requested executor; omit `cwd` for remote execution.
 - “Which subagents are running?” → `subagent_control` with `list`; return point-in-time child states and report statuses without waiting.
 - “Check that subagent” → `subagent_control` with `status`; return that child's point-in-time state, report status, and report summary without waiting.
 - “Stop that subagent” → `subagent_control` with `cancel`; stop its active turn without archiving or deleting its thread.

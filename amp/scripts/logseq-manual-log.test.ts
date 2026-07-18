@@ -2,8 +2,6 @@ import { describe, expect, test } from 'bun:test'
 
 import plugin, {
 	classifyWorkerCompatibilityError,
-	isExplicitLogseqLoggingRequest,
-	isPathInsideLogseqGraph,
 	logCurrentTask,
 	parseWorkerResult,
 	waitForWorkerOutcome,
@@ -12,14 +10,13 @@ import plugin, {
 
 const parentID = 'T-parent'
 const workerID = 'T-worker'
-const graphRoot = '/tmp/logseq-graph'
-const runtimeGraphRoot = '/Users/lelouvincx/Developer/second-brain-logseq'
 const timing = { startupTimeoutMs: 20, workerTimeoutMs: 20 }
 const completeResult = {
 	version: 1,
 	backlogVerified: true,
 	journalVerified: true,
 	threadTitle: '[Presales] Follow up with FanServ',
+	threadLabels: ['presales', 'agent-skills', 'customer-fanserv'],
 	summary: 'Logged and verified both files.',
 	error: null,
 }
@@ -34,6 +31,7 @@ const failedResult = {
 	backlogVerified: false,
 	journalVerified: false,
 	threadTitle: null,
+	threadLabels: [],
 	summary: 'No Logseq writes verified.',
 	error: 'Canonical pages could not be read.',
 }
@@ -95,7 +93,6 @@ function fakeShell(handler?: (command: string, values: unknown[]) => { exitCode:
 function fakeAmp(options: {
 	createThread?: () => unknown | Promise<unknown>
 	shell?: ReturnType<typeof fakeShell>['shell']
-	filesModifiedByToolCall?: (event: { input: Record<string, unknown> }) => unknown[] | null
 } = {}) {
 	let createCalls = 0
 	const hooks = new Map<string, (event: never, ctx?: never) => unknown>()
@@ -125,10 +122,6 @@ function fakeAmp(options: {
 			}
 		},
 		$: options.shell ?? defaultShell.shell,
-		helpers: {
-			filesModifiedByToolCall: options.filesModifiedByToolCall ?? ((event: { input: { files?: unknown[] } }) => event.input.files ?? null),
-			filePathFromURI: (file: unknown) => String(file),
-		},
 		threads: {
 			get: () => ({ messages: async () => [] }),
 		},
@@ -165,41 +158,20 @@ describe('worker result protocol', () => {
 		['complete with error', JSON.stringify({ ...completeResult, error: 'contradiction' })],
 		['failed without error', JSON.stringify({ ...failedResult, error: null })],
 		['backlog without title', JSON.stringify({ ...partialResult, threadTitle: null })],
+		['backlog without labels', JSON.stringify({ ...partialResult, threadLabels: [] })],
 		['unverified backlog with title', JSON.stringify({ ...failedResult, threadTitle: 'invalid' })],
+		['unverified backlog with labels', JSON.stringify({ ...failedResult, threadLabels: ['presales'] })],
 		['multiline title', JSON.stringify({ ...completeResult, threadTitle: '[Presales] Bad\ntitle' })],
 	])('rejects %s', (_label, value) => {
 		expect(parseWorkerResult(value).ok).toBe(false)
 	})
-})
 
-describe('routing helpers', () => {
-	test.each([
-		'Log this into Logseq.',
-		"Add the current task to today's Logseq journal.",
-		'Use the Logseq plugin tool to log this.',
-		'Save this outcome to Logseq.',
-	])('recognizes explicit logging request: %s', (message) => {
-		expect(isExplicitLogseqLoggingRequest(message)).toBe(true)
-	})
-
-	test.each([
-		'Fix the Logseq plugin.',
-		'Read this Logseq page.',
-		'Explain how Logseq logging works.',
-		'How do I log this to Logseq?',
-		'Add support for Logseq logging.',
-		'Add Logseq routing support.',
-		'Do not log this to Logseq.',
-		'Edit Canonical Pages.md in Logseq.',
-	])('ignores non-logging request: %s', (message) => {
-		expect(isExplicitLogseqLoggingRequest(message)).toBe(false)
-	})
-
-	test('uses normalized directory containment', () => {
-		expect(isPathInsideLogseqGraph(`${graphRoot}/pages/Backlog.md`, graphRoot)).toBe(true)
-		expect(isPathInsideLogseqGraph(graphRoot, graphRoot)).toBe(true)
-		expect(isPathInsideLogseqGraph(`${graphRoot}-copy/pages/Backlog.md`, graphRoot)).toBe(false)
-		expect(isPathInsideLogseqGraph('/tmp/elsewhere.md', graphRoot)).toBe(false)
+	test('normalizes and deduplicates labels', () => {
+		const parsed = parseWorkerResult(JSON.stringify({
+			...completeResult,
+			threadLabels: ['Presales', 'agent-skills', 'customer-FanServ', 'presales'],
+		}))
+		expect(parsed.ok && parsed.result.threadLabels).toEqual(['presales', 'agent-skills', 'customer-fanserv'])
 	})
 })
 
@@ -246,7 +218,7 @@ describe('worker wait outcomes', () => {
 })
 
 describe('operation coordinator', () => {
-	test('completes, renames, archives, and cleans up one operation', async () => {
+	test('completes Logseq and downstream stages, then cleans up one operation', async () => {
 		const { worker, appended } = fakeWorker()
 		const harness = fakeAmp({ createThread: () => worker })
 		const operations: LogseqOperationStore = new Map()
@@ -254,6 +226,7 @@ describe('operation coordinator', () => {
 
 		expect(output).toContain('Logseq: complete')
 		expect(output).toContain('Rename: complete')
+		expect(output).toContain('Labels: complete')
 		expect(output).toContain('Archive: complete')
 		expect(harness.createCalls).toBe(1)
 		expect(appended).toHaveLength(1)
@@ -302,6 +275,21 @@ describe('operation coordinator', () => {
 		await first
 	})
 
+	test('serializes concurrent calls during labeling', async () => {
+		const labels = deferred<{ exitCode: number }>()
+		const { worker } = fakeWorker()
+		const shell = fakeShell((command) => command.includes('label') ? labels.promise : { exitCode: 0 })
+		const harness = fakeAmp({ createThread: () => worker, shell: shell.shell })
+		const operations: LogseqOperationStore = new Map()
+		const first = logCurrentTask(harness.amp as never, context() as never, '', 500, operations, timing)
+		while (!shell.calls.some((call) => call.includes('label'))) await Promise.resolve()
+		const second = await logCurrentTask(harness.amp as never, context() as never, '', 500, operations, timing)
+		expect(second).toContain('already reconciling')
+		expect(shell.calls.filter((call) => call.includes('label'))).toHaveLength(1)
+		labels.resolve({ exitCode: 0 })
+		await first
+	})
+
 	test('serializes concurrent calls during archive', async () => {
 		const archive = deferred<{ exitCode: number }>()
 		const { worker } = fakeWorker()
@@ -333,11 +321,40 @@ describe('operation coordinator', () => {
 		const first = await logCurrentTask(harness.amp as never, context() as never, '', 500, operations, timing)
 		expect(first).toContain('Logseq: complete')
 		expect(first).toContain('Rename: failed')
+		expect(first).toContain('Labels: complete')
 		expect(first).toContain('Archive: complete')
 		const second = await logCurrentTask(harness.amp as never, context() as never, '', 500, operations, timing)
 		expect(second).toContain('Rename: complete')
 		expect(second).not.toContain('rename failed')
 		expect(appended).toHaveLength(1)
+		expect(shell.calls.filter((call) => call.includes('archive'))).toHaveLength(1)
+	})
+
+	test('preserves Logseq success, archives after label failure, then retries labels only', async () => {
+		let labelCalls = 0
+		const { worker, appended } = fakeWorker()
+		const shell = fakeShell((command) => {
+			if (command.includes('label')) {
+				labelCalls += 1
+				return labelCalls === 1 ? { exitCode: 1, stderr: 'label failed' } : { exitCode: 0 }
+			}
+			return { exitCode: 0 }
+		})
+		const harness = fakeAmp({ createThread: () => worker, shell: shell.shell })
+		const operations: LogseqOperationStore = new Map()
+
+		const first = await logCurrentTask(harness.amp as never, context() as never, '', 500, operations, timing)
+		expect(first).toContain('Logseq: complete')
+		expect(first).toContain('Rename: complete')
+		expect(first).toContain('Labels: failed')
+		expect(first).toContain('Archive: complete')
+
+		const second = await logCurrentTask(harness.amp as never, context() as never, '', 500, operations, timing)
+		expect(second).toContain('Labels: complete')
+		expect(second).not.toContain('label failed')
+		expect(appended).toHaveLength(1)
+		expect(shell.calls.filter((call) => call.includes('rename'))).toHaveLength(1)
+		expect(shell.calls.filter((call) => call.includes('label'))).toHaveLength(2)
 		expect(shell.calls.filter((call) => call.includes('archive'))).toHaveLength(1)
 	})
 
@@ -348,6 +365,7 @@ describe('operation coordinator', () => {
 		const operations: LogseqOperationStore = new Map()
 		const output = await logCurrentTask(harness.amp as never, context() as never, '', 500, operations, timing)
 		expect(output).toContain('Logseq: complete')
+		expect(output).toContain('Labels: complete')
 		expect(output).toContain('Archive: failed')
 		expect(operations.size).toBe(1)
 	})
@@ -546,72 +564,28 @@ describe('operation coordinator', () => {
 	})
 })
 
-describe('plugin turn routing and shared operation', () => {
-	test('blocks graph writes for the matching explicit turn and fails open otherwise', async () => {
-		const { worker } = fakeWorker({ waitForResponse: async () => { throw new Error('Timed out waiting for agent response') } })
-		const harness = fakeAmp({ createThread: () => worker })
-		plugin(harness.amp as never)
-		const start = harness.hooks.get('agent.start')!
-		const end = harness.hooks.get('agent.end')!
-		const toolCall = harness.hooks.get('tool.call')!
-
-		expect(await start({ thread: { id: parentID }, id: 'turn-1', message: 'Log this into Logseq.' } as never)).toBeTruthy()
-		expect(await toolCall({ thread: { id: parentID }, tool: 'apply_patch', input: { files: [`${runtimeGraphRoot}/pages/Backlog.md`, '/tmp/code.ts'] } } as never)).toEqual(expect.objectContaining({ action: 'reject-and-continue' }))
-		expect(await toolCall({ thread: { id: parentID }, tool: 'apply_patch', input: { files: ['/tmp/code.ts'] } } as never)).toEqual({ action: 'allow' })
-		expect(await toolCall({ thread: { id: parentID }, tool: 'shell_command', input: {} } as never)).toEqual({ action: 'allow' })
-
-		await end({ thread: { id: parentID }, id: 'other-turn' } as never)
-		expect(await toolCall({ thread: { id: parentID }, tool: 'apply_patch', input: { files: [`${runtimeGraphRoot}/pages/Backlog.md`] } } as never)).toEqual(expect.objectContaining({ action: 'reject-and-continue' }))
-		await end({ thread: { id: parentID }, id: 'turn-1' } as never)
-		expect(await toolCall({ thread: { id: parentID }, tool: 'apply_patch', input: { files: [`${runtimeGraphRoot}/pages/Backlog.md`] } } as never)).toEqual({ action: 'allow' })
-	})
-
-	test('replaces stale routing markers on every new turn', async () => {
+describe('command-only plugin surface', () => {
+	test('registers one command without an agent tool or lifecycle routing', () => {
 		const harness = fakeAmp()
 		plugin(harness.amp as never)
-		const start = harness.hooks.get('agent.start')!
-		const end = harness.hooks.get('agent.end')!
-		const toolCall = harness.hooks.get('tool.call')!
-		const graphWrite = { thread: { id: parentID }, tool: 'apply_patch', input: { files: [`${runtimeGraphRoot}/pages/Backlog.md`] } }
-
-		await start({ thread: { id: parentID }, id: 'turn-1', message: 'Log this into Logseq.' } as never)
-		await start({ thread: { id: parentID }, id: 'turn-2', message: 'Log this task into Logseq.' } as never)
-		await end({ thread: { id: parentID }, id: 'turn-1' } as never)
-		expect(await toolCall(graphWrite as never)).toEqual(expect.objectContaining({ action: 'reject-and-continue' }))
-
-		await start({ thread: { id: parentID }, id: 'turn-3', message: 'Inspect the project code.' } as never)
-		expect(await toolCall(graphWrite as never)).toEqual({ action: 'allow' })
+		expect(harness.command).toBeFunction()
+		expect(harness.tool).toBeUndefined()
+		expect([...harness.hooks.keys()]).toEqual(['tool.call'])
 	})
 
-	test('fails open when file-mutation helpers cannot classify a call', async () => {
-		const harness = fakeAmp({ filesModifiedByToolCall: () => { throw new Error('unsupported input') } })
-		plugin(harness.amp as never)
-		await harness.hooks.get('agent.start')!({ thread: { id: parentID }, id: 'turn-1', message: 'Log this into Logseq.' } as never)
-		const result = await harness.hooks.get('tool.call')!({ thread: { id: parentID }, tool: 'unknown_writer', input: {} } as never)
-		expect(result).toEqual({ action: 'allow' })
-	})
-
-	test('exempts worker-prefixed turns and known workers', async () => {
-		const { worker } = fakeWorker({ waitForResponse: async () => { throw new Error('Timed out waiting for agent response') } })
-		const harness = fakeAmp({ createThread: () => worker })
-		plugin(harness.amp as never)
-		const start = harness.hooks.get('agent.start')!
-		const toolCall = harness.hooks.get('tool.call')!
-
-		expect(await start({ thread: { id: workerID }, id: 'worker-turn', message: '[logseq-manual-log]\nLog to Logseq.' } as never)).toBeUndefined()
-		await harness.tool!.execute({}, context() as never)
-		expect(await toolCall({ thread: { id: workerID }, tool: 'apply_patch', input: { files: [`${runtimeGraphRoot}/pages/Backlog.md`] } } as never)).toEqual({ action: 'allow' })
-	})
-
-	test('command and agent tool reuse the same parent operation', async () => {
+	test('keeps the Oracle guard for active command workers', async () => {
 		const { worker, appended } = fakeWorker({ waitForResponse: async () => { throw new Error('Timed out waiting for agent response') } })
 		const harness = fakeAmp({ createThread: () => worker })
 		plugin(harness.amp as never)
-		await harness.tool!.execute({}, context() as never)
 		await harness.command!({
 			thread: { id: parentID },
 			ui: { input: async () => '', notify: async () => {} },
 		} as never)
+
+		const toolCall = harness.hooks.get('tool.call')!
+		expect(await toolCall({ thread: { id: workerID }, tool: 'oracle' } as never)).toEqual(expect.objectContaining({ action: 'reject-and-continue' }))
+		expect(await toolCall({ thread: { id: workerID }, tool: 'apply_patch' } as never)).toEqual({ action: 'allow' })
+		expect(await toolCall({ thread: { id: parentID }, tool: 'oracle' } as never)).toEqual({ action: 'allow' })
 		expect(harness.createCalls).toBe(1)
 		expect(appended).toHaveLength(1)
 	})

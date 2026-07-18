@@ -71,7 +71,15 @@ tags:
 
 ## Summary
 
-`delegating-subagents` provides the reusable decision rules for choosing direct work, Amp's built-in `Task`, or the `spawn_subagent` capability. It keeps ordinary bounded delegation in the current turn and reserves durable child threads for work that benefits from asynchronous execution or later parent follow-up.
+Choose the delegation mechanism from what the parent needs next:
+
+| Parent need | Choice |
+| --- | --- |
+| The task is small or a specialist tool already covers it | work directly or use the specialist tool |
+| The parent needs the delegated result in this turn | use built-in `Task` |
+| The work needs an addressable child thread, asynchronous execution or later follow-up | use `spawn_subagent` |
+
+Task difficulty does not decide between `Task` and `spawn_subagent`. The lifecycle does.
 
 ## Invocation
 
@@ -84,33 +92,57 @@ Repository instructions require loading this skill before delegating work.
 
 ## Contract
 
-The skill receives the current task and its coordination requirements through conversation context. It returns instructions for selecting one of three paths:
+The skill receives the current task and its coordination needs from conversation context. It returns instructions for choosing one of 3 paths:
 
 1. Work directly or use a specialist tool when it already covers the task.
 2. Use built-in `Task` when bounded delegated work must return during the current turn.
 3. Use `spawn_subagent` when work needs durable asynchronous execution, visible child-thread history, or possible parent follow-up.
 
-After spawning, use `subagent_control` only when the user asks to list or inspect children, when a child needs diagnosis, or when an active child turn must be cancelled. Normal completion still arrives through `send_to_thread`; do not poll status while waiting.
-
 The skill declares no tool allowlist.
+
+### Choose where a spawned child runs
+
+Choose the execution target only after choosing `spawn_subagent`:
+
+| Need | Target |
+| --- | --- |
+| Use the parent's current machine and working directory | local execution, which is the default |
+| Use an Amp cloud sandbox | Orb execution |
+| Use a known live Amp runner | runner execution with its stable ID |
+
+Orb children use the Orb workspace. Runner children use the selected runner's workspace. Do not pass a parent-machine `cwd` to either remote target.
+
+`spawn_subagent` cannot discover runners. Use only a stable runner ID supplied by the user or existing context.
+
+See [Choose where the subagent runs](./spawn-subagent.md#choose-where-the-subagent-runs) for the full `executor` and `cwd` contract.
+
+### Control a spawned child
+
+Use `subagent_control` only when the user asks to list or inspect children, when a child needs diagnosis, or when an active child turn must be cancelled.
+
+Normal completion arrives through `send_to_thread`. Do not poll while waiting.
 
 ## Behavior
 
-The skill first tests whether delegation is worthwhile. If so, it distinguishes in-turn work from durable asynchronous work, then applies constraints for bounded briefs, independent parallel work, parent-owned integration, and final verification.
+The skill first checks whether delegation is worthwhile. It then separates in-turn work from durable asynchronous work.
 
-As an additional use case, a side question introduced with `btw` or triggered with `|btw` always makes delegation worthwhile because the parent should preserve its current task. The skill delegates the question after removing the trigger, using built-in `Task` by default when the answer is needed now or `spawn_subagent` when the aside should run asynchronously or may need later follow-up.
+It applies the same safety rules to both mechanisms. Briefs must be bounded, parallel work must be independent, and the parent owns integration and final checks.
+
+### Delegate side questions
+
+A side question introduced with `btw` or `|btw` always makes delegation worthwhile. Delegating it lets the parent preserve its current task.
+
+Remove the trigger from the delegated brief. Use built-in `Task` when the answer is needed now. Use `spawn_subagent` when the question can report later or may need follow-up.
 
 ## Permissions and side effects
 
-Loading the skill only adds instructions to agent context. The skill itself does not create threads, invoke tools, edit files, access the network, or write logs. Side effects occur only if the agent subsequently chooses and invokes a delegation mechanism.
+Loading the skill only adds instructions to agent context. The skill does not create threads, invoke tools, edit files, access the network or write logs.
+
+Side effects start only when the agent invokes a delegation mechanism.
 
 ## Examples
 
-- Reading one known file: work directly.
-- Running a bounded test investigation needed before the current response: use built-in `Task`.
-- Implementing an independent slice that should report back to a continuing coordinator thread: use `spawn_subagent`.
-
-### Scenario stress test
+### Test the decision
 
 | Scenario | Choice | Why |
 | --- | --- | --- |
@@ -121,6 +153,7 @@ Loading the skill only adds instructions to agent context. The skill itself does
 | Investigate a bounded failure whose result determines the current response | Built-in `Task` | The parent needs the result before this turn can finish. |
 | Run two independent checks whose results are both needed now | Parallel built-in `Task` calls | The work is independent and remains in-turn. |
 | Implement an independent slice while the parent continues shaping the design | `spawn_subagent` | The work benefits from a durable child thread and asynchronous reporting. |
+| Run durable delegated work in an Amp Orb or on a known live runner | `spawn_subagent` with `executor` | Select `orb` or pass the runner's stable ID; do not pass a local `cwd` to remote execution. |
 | Investigate a slice that may require a later product or architecture decision from the parent | `spawn_subagent` | The child can remain open for required follow-up. |
 | "Ask an agent to check this" with no asynchronous or durable-thread requirement | Built-in `Task` | Generic requests for an agent do not imply `spawn_subagent`. |
 | “Btw, why does this test use a fake clock?” or `\|btw why does this test use a fake clock?` | Built-in `Task` by default | The aside must not displace the parent's current task; delegate the question after removing the trigger. |
@@ -133,9 +166,9 @@ Loading the skill only adds instructions to agent context. The skill itself does
 | The parent has not decided what should be built | Keep designing in the parent | Do not delegate understanding or ask a worker to choose the product direction. |
 | The result is neither needed now nor useful as durable follow-up | Do not delegate | There is no useful coordination outcome. |
 
-An explicit mechanism request wins over the default decision order, unless it would create an unsafe or overlapping write. Explicit `spawn_subagent` requests still need a bounded brief; they do not justify broad delegation.
+An explicit mechanism request wins over the default decision order unless it would create unsafe or overlapping work. An explicit `spawn_subagent` request still needs a bounded brief.
 
-The stress-test invariants are:
+Keep these rules:
 
 - lifecycle decides between built-in `Task` and `spawn_subagent`, not task difficulty alone
 - natural `btw` side questions and the `|btw` trigger mark work for delegation; they do not select a delegation mechanism

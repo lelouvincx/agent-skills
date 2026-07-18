@@ -72,16 +72,20 @@ else {
 	assert(!existsSync(capturePath), 'invalid session ID must fail before spawning Claude')
 
 	process.env.AMP_DESIGN_TEST_SCENARIO = 'success'
-	const codeSuccess = await invokeCode({ mode: 'research', brief: 'test', workingDirectory: root }, 'code-success')
+	const codeSuccess = await invokeCode({ mode: 'research', brief: 'test', model: 'fable', workingDirectory: root }, 'code-success')
 	assert(codeSuccess.ok, 'code subagent success scenario must succeed')
 	const codeCapture = readCapture()
+	assert(argumentValue(codeCapture.args, '--model') === 'fable', 'code subagent must pass the Fable model alias')
 	assert(argumentValue(codeCapture.args, '--setting-sources') === '', 'code subagent must disable filesystem setting sources')
 	assert(codeCapture.args.includes('--strict-mcp-config'), 'code subagent must always use strict MCP isolation')
 	assert(!codeCapture.args.includes('--mcp-config'), 'code subagent must not load MCP config by default')
+	assert(codeCapture.args.includes('Read,Grep,Glob'), 'code subagent built-in allowlist must use current Claude Code tools')
+	assert(codeCapture.args.includes('Bash,Edit,Write,NotebookEdit'), 'code subagent denylist must use current Claude Code tools')
+	assert(!codeCapture.args.some((arg) => arg.includes('MultiEdit') || arg.includes('LS')), 'obsolete Claude Code tools must not be passed')
 
 	const success = await invoke({
 		prompt: `test ${secret}`,
-		model: 'sonnet',
+		model: 'fable',
 		sessionId,
 		workingDirectory: root,
 	}, 'success')
@@ -89,6 +93,7 @@ else {
 	assert(success.sessionId === sessionId, 'success must return the Claude session ID')
 	assert(success.rawTranscriptPath === undefined, 'raw transcript must be disabled by default')
 	const capture = readCapture()
+	assert(argumentValue(capture.args, '--model') === 'fable', 'design subagent must pass the Fable model alias')
 	assert(capture.args.includes('--resume') && capture.args.includes(sessionId), 'valid session ID must be passed with --resume')
 	assert(!capture.args.includes('--session-id'), 'resumed sessions must not also pass --session-id')
 	assert(argumentValue(capture.args, '--setting-sources') === 'user', 'design must load user settings only')
