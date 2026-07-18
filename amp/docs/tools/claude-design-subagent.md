@@ -133,7 +133,7 @@ Optional inputs:
 | Field | Type | Default | Notes |
 | --- | --- | --- | --- |
 | `sessionId` | `string` | none | Resume the Claude Code session returned by an earlier call for iterative work. |
-| `model` | `opus \| sonnet` | `opus` | Use Sonnet for a faster or lighter orchestration turn. |
+| `model` | `fable \| opus \| sonnet` | `opus` | Use Fable for the most ambitious work or Sonnet for a faster or lighter orchestration turn. |
 | `timeoutMinutes` | `number` | `10` | Rounded up and capped at `30`. |
 | `workingDirectory` | `string` | plugin process cwd | Repository whose design system or local files Claude may read. |
 | `includeRawTranscript` | `boolean` | `false` | Stores raw Claude CLI output for debugging. |
