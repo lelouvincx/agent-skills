@@ -1,6 +1,6 @@
 ---
 name: delegating-subagents
-description: "Chooses between direct work, Amp's built-in Task tool, and spawn_subagent. Use before delegating or splitting independent work across agents, including side questions introduced with 'btw' or triggered with '|btw'."
+description: "Chooses between direct work, named Claude Code, Claude Design, or Pi specialists, Amp's built-in Task tool, and spawn_subagent. Use before delegating or splitting independent work across agents, including side questions introduced with 'btw' or triggered with '|btw'."
 ---
 
 # Delegating Subagents
@@ -13,8 +13,11 @@ Keep the skill aligned with the related [Spawn Subagent](../../amp/docs/tools/sp
 ## Choose the delegation mechanism
 
 1. Use a direct or specialist tool when it already covers the job or delegation overhead is greater than the task. Do not delegate exact reads, simple searches, one localized edit, or work owned by `finder`, `librarian`, or `oracle`.
-2. Use built-in `Task` for ordinary bounded delegation when the parent needs the result in the current turn. The worker returns one final summary through the current tool call.
-3. Use `spawn_subagent` when the work needs durable asynchronous execution, visible child-thread history, or possible parent follow-up. It creates an addressable child thread that reports back later through `send_to_thread`.
+2. If the user explicitly requests Claude or Claude Code, use `claude_code_subagent`. If they explicitly request Claude Design, use `claude_design_subagent`. If they explicitly request Pi, pi.dev, or Pi Coding Agent, use `pi_code_subagent`. Do not infer these requests from generic agent wording or substitute one named specialist for another.
+3. Use built-in `Task` for ordinary bounded delegation when the parent needs the result in the current turn. The worker returns one final summary through the current tool call.
+4. Use `spawn_subagent` when the work needs durable asynchronous execution, visible child-thread history, or possible parent follow-up. It creates an addressable child thread that reports back later through `send_to_thread`.
+
+Claude Code and Pi are read-only advisers for review, patch proposals, or research. Amp applies and verifies any proposed changes. Claude Design may create or modify cloud-hosted design projects, but it cannot edit local files.
 
 ## Choose where the child runs
 
@@ -42,13 +45,17 @@ Additionally, when the user introduces a side question with `btw` or triggers `|
 Ask in order:
 
 1. Does a direct or specialist tool cover the job, or is the task too small to delegate? → use that tool or work directly.
-2. Does the work need durable asynchronous execution, visible child-thread history, or possible parent follow-up? → `spawn_subagent`.
-3. Is bounded delegation still worthwhile and its result needed in the current turn? → `Task`.
+2. Did the user explicitly request Claude Code, Claude Design, or Pi? → use the matching named specialist subagent.
+3. Does the work need durable asynchronous execution, visible child-thread history, or possible parent follow-up? → `spawn_subagent`.
+4. Is bounded delegation still worthwhile and its result needed in the current turn? → `Task`.
 
 ## Stress cases
 
 - “Btw, why does this test use a fake clock?” or `|btw why does this test use a fake clock?` → delegate with built-in `Task` by default, after removing the trigger.
 - A `btw` aside that can report later or may need parent follow-up → `spawn_subagent`.
+- “Ask Claude Code to review this diff” → `claude_code_subagent`; it returns read-only advice for Amp to apply and verify.
+- “Use Claude Design to create this design” → `claude_design_subagent`; the explicit request authorizes the named cloud design workflow.
+- “Ask Pi to propose a patch” → `pi_code_subagent`; it returns a read-only proposal for Amp to apply and verify.
 - “Ask an agent” or “use a subagent” without an asynchronous requirement → built-in `Task`.
 - “Spawn a subagent”, “run this in parallel”, `/subagent`, or `|subagent` → `spawn_subagent`; the user explicitly selected the durable mechanism.
 - Durable work explicitly requested in an Orb or on a known live runner → `spawn_subagent` with the requested executor; omit `cwd` for remote execution.
