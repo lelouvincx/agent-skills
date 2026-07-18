@@ -35,7 +35,7 @@ and this project does not currently use versioned releases.
 
 ### Changed
 
-- Label parent Amp threads from their Logseq backlog project and customer before archiving logging workers. [#111](https://github.com/lelouvincx/agent-skills/pull/111)
+- Label parent Amp threads from their Logseq backlog project, working project, and customer before archiving logging workers. [#111](https://github.com/lelouvincx/agent-skills/pull/111)
 - Let `spawn_subagent` run locally, in an Amp Orb, or on a live runner selected by stable ID while preventing local `cwd` paths from reaching remote targets. [#110](https://github.com/lelouvincx/agent-skills/pull/110)
 - Update the `slackcli` skill for SlackCLI v0.7.0 search, saved-item, canvas, file-upload, and draft workflows. [#104](https://github.com/lelouvincx/agent-skills/pull/104)
 - Update the Amp SDK workspace to use the latest bundled Amp CLI and platform packages. [#102](https://github.com/lelouvincx/agent-skills/pull/102)
