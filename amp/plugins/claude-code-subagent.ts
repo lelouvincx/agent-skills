@@ -13,7 +13,7 @@ import { dirname, isAbsolute, join, resolve } from 'node:path'
 import type { PluginAPI } from '@ampcode/plugin'
 
 type Mode = 'patch' | 'review' | 'research'
-type Model = 'opus' | 'sonnet'
+type Model = 'fable' | 'opus' | 'sonnet'
 type GithubProfile = string
 
 interface ToolInput {
@@ -65,8 +65,8 @@ const AUDIT_DIR = process.env.AMP_CLAUDE_CODE_SUBAGENT_AUDIT_DIR ?? join(homedir
 const TOKEN_USAGE_LOG_PATH = process.env.AMP_AGENT_TOKEN_USAGE_LOG ?? join(homedir(), '.config', 'amp', 'logs', 'agent-token-usage.jsonl')
 const SUBAGENT_ENV_FILE = process.env.AMP_CLAUDE_CODE_SUBAGENT_ENV_FILE
 
-const BUILTIN_ALLOWED_TOOLS = ['Read', 'Grep', 'Glob', 'LS']
-const BUILTIN_DENIED_TOOLS = ['Bash', 'Edit', 'Write', 'MultiEdit', 'NotebookEdit']
+const BUILTIN_ALLOWED_TOOLS = ['Read', 'Grep', 'Glob']
+const BUILTIN_DENIED_TOOLS = ['Bash', 'Edit', 'Write', 'NotebookEdit']
 const DESIGN_ALLOWED_TOOLS = ['Read', 'Grep', 'Glob', 'ToolSearch', 'DesignSync']
 const DESIGN_DENIED_TOOLS = ['Bash', 'Edit', 'Write', 'NotebookEdit']
 const DESIGN_MCP_TOOLS = 'mcp__claude-design__*'
@@ -112,7 +112,7 @@ export default function (amp: PluginAPI) {
 		description: [
 			'Use Claude Code CLI as a manual, read-only second-opinion subagent.',
 			'Call this tool ONLY when the user explicitly mentions "Claude" or "Claude Code".',
-			'Claude Code must not edit files: this tool allows only the shared local read-only subagent toolkit (Read/Grep/Glob/LS), denies Bash/Edit/Write/MultiEdit/NotebookEdit, and asks Claude for structured JSON only.',
+			'Claude Code must not edit files: this tool allows only the shared local read-only subagent toolkit (Read/Grep/Glob), denies Bash/Edit/Write/NotebookEdit, and asks Claude for structured JSON only.',
 			'No MCP bridge is loaded by default so the default toolkit matches Pi Coding Agent. Pass mcpConfigPath/allowedMcpTools only for explicit read-only external context.',
 			'For GitHub profile routing, pass githubProfile explicitly as work, personal, or bot; do not pass natural-language profile phrases to this tool.',
 			'Use mode=review for reviewing a diff/implementation, mode=patch for a small-to-medium patch proposal, and mode=research for read-only investigation.',
@@ -141,8 +141,8 @@ export default function (amp: PluginAPI) {
 				},
 				model: {
 					type: 'string',
-					enum: ['opus', 'sonnet'],
-					description: 'Claude Code model alias. Defaults to opus; use sonnet only when the user asks for speed/lightweight behavior.',
+					enum: ['fable', 'opus', 'sonnet'],
+					description: 'Claude Code model alias. Defaults to opus; use fable for ambitious work or sonnet for speed/lightweight behavior.',
 				},
 				timeoutMinutes: {
 					type: 'number',
@@ -304,8 +304,8 @@ export default function (amp: PluginAPI) {
 				},
 				model: {
 					type: 'string',
-					enum: ['opus', 'sonnet'],
-					description: 'Claude Code orchestration model. Defaults to opus; use sonnet for faster or lighter turns.',
+					enum: ['fable', 'opus', 'sonnet'],
+					description: 'Claude Code orchestration model. Defaults to opus; use fable for ambitious work or sonnet for faster or lighter turns.',
 				},
 				timeoutMinutes: {
 					type: 'number',
@@ -424,7 +424,7 @@ function normalizeDesignInput(raw: Record<string, unknown>): DesignToolInput | {
 	return {
 		prompt: raw.prompt.trim(),
 		sessionId,
-		model: raw.model === 'sonnet' ? 'sonnet' : DEFAULT_MODEL,
+		model: raw.model === 'fable' || raw.model === 'sonnet' ? raw.model : DEFAULT_MODEL,
 		timeoutMinutes: clampTimeout(raw.timeoutMinutes),
 		workingDirectory,
 		includeRawTranscript: raw.includeRawTranscript === true || process.env.AMP_CLAUDE_CODE_SUBAGENT_DEBUG === '1',
@@ -469,7 +469,7 @@ function normalizeInput(raw: Record<string, unknown>): ToolInput | { error: stri
 		return { error: 'brief is required and must be a non-empty string.' }
 	}
 
-	const model = raw.model === 'sonnet' ? 'sonnet' : DEFAULT_MODEL
+	const model = raw.model === 'fable' || raw.model === 'sonnet' ? raw.model : DEFAULT_MODEL
 	const timeoutMinutes = clampTimeout(raw.timeoutMinutes)
 	const githubProfile = normalizeGithubProfile(raw.githubProfile)
 	const workingDirectory = typeof raw.workingDirectory === 'string' && raw.workingDirectory.trim()
@@ -535,7 +535,7 @@ function buildPrompt(input: ToolInput): string {
 	const schemaDescription = JSON.stringify(schemaForMode(input.mode), null, 2)
 	return [
 		'You are Claude Code running as a read-only subagent for Amp.',
-		'You must not modify files. Do not attempt to use Bash, Edit, Write, MultiEdit, or NotebookEdit.',
+		'You must not modify files. Do not attempt to use Bash, Edit, Write, or NotebookEdit.',
 		'Amp is the executor. Your job is to provide structured advice only.',
 		`Mode: ${input.mode}`,
 		'',

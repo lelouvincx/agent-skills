@@ -22,7 +22,7 @@ amp:
   docs_sources:
     api_docs: "amp plugins show-docs"
     agent_options: "amp plugins show-agent-options --json"
-  last_verified: "2026-07-15"
+  last_verified: "2026-07-18"
 contract:
   input_kind: "json_schema"
   output_kind: "json_text"
@@ -67,8 +67,8 @@ safety:
   permission_level: "read-only-subagent"
   user_gate: "explicit user mention of Claude or Claude Code"
   constraints:
-    - "Allows only Read, Grep, Glob, and LS by default."
-    - "Denies Bash, Edit, Write, MultiEdit, and NotebookEdit."
+    - "Allows only Read, Grep, and Glob by default."
+    - "Denies Bash, Edit, Write, and NotebookEdit."
     - "MCP is explicit-only; allowedMcpTools requires mcpConfigPath."
     - "User, project, and local Claude Code setting sources are disabled so ambient hooks, plugins, skills, and permission rules cannot change the read-only child."
     - "Strict MCP isolation is always enabled; only an explicitly supplied read-only MCP configuration can add MCP servers."
@@ -116,7 +116,7 @@ Optional inputs:
 | --- | --- | --- | --- |
 | `context` | `string` | none | Pre-processed excerpts, diffs, or decisions. |
 | `githubProfile` | `work \| personal \| bot` | default profile | Sets `AMP_GITHUB_PROFILE` when valid. |
-| `model` | `opus \| sonnet` | `opus` | Use `sonnet` only for speed/lightweight requests. |
+| `model` | `fable \| opus \| sonnet` | `opus` | Use `fable` for the most ambitious work or `sonnet` for speed/lightweight requests. |
 | `timeoutMinutes` | `number` | `10` | Rounded up and capped at `30`. |
 | `workingDirectory` | `string` | plugin process cwd | Must exist. `~` is expanded. |
 | `safeRoots` | `string[]` | `[]` | Extra read roots passed as `--add-dir`. |
@@ -134,7 +134,7 @@ Claude receives a prompt that says Amp is the executor and Claude must provide s
 
 ## Permissions and side effects
 
-Claude Code gets only local read tools by default: `Read`, `Grep`, `Glob`, and `LS`. The plugin explicitly denies shell and file-edit tools. It writes redacted audit logs under `~/.config/amp/logs/claude-code-subagent/` and appends token usage to `~/.config/amp/logs/agent-token-usage.jsonl` unless overridden by environment variables.
+Claude Code gets only local read tools by default: `Read`, `Grep`, and `Glob`. The plugin explicitly denies shell and current file-edit tools. It writes redacted audit logs under `~/.config/amp/logs/claude-code-subagent/` and appends token usage to `~/.config/amp/logs/agent-token-usage.jsonl` unless overridden by environment variables.
 
 Do not pass raw thread transcripts unless needed. Prefer curated `brief` and `context` to avoid leaking irrelevant sensitive context into audit logs or model input.
 
