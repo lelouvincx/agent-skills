@@ -18,7 +18,7 @@ Keep the skill aligned with the related [Spawn Subagent](../../amp/docs/tools/sp
 
 After spawning, use `subagent_control` only when the user asks to list or inspect children, when a child needs diagnosis, or when an active child turn must be cancelled. Normal completion arrives through `send_to_thread`; do not poll status while waiting.
 
-Keep `spawn_subagent` local by default. Select `executor: "orb"` only when the task needs an Amp Orb, or pass `{ "type": "runner", "id": "<stable-id>" }` for a known live runner. Do not pass `cwd` for either remote executor; they use their own workspace. The tool cannot discover runners, so never guess or resolve a runner name.
+Keep `spawn_subagent` local by default. Select `executor: "orb"` only when the task needs an Amp Orb, or pass `{ "type": "runner", "id": "<stable-id>" }` for a known live runner. Do not pass `cwd` for either remote target; the Orb or selected runner supplies the workspace. The tool cannot discover runners, so never guess or resolve a runner name.
 
 Additionally, when the user introduces a side question with `btw` or triggers `|btw`, delegate that question so it does not displace the parent's current task. Remove the trigger from the delegated brief. This is a request to delegate, not a request for a specific mechanism: use built-in `Task` by default when the answer is needed now, or `spawn_subagent` when it should run asynchronously or may need later follow-up.
 

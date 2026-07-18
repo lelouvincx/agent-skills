@@ -100,7 +100,7 @@ describe('subagent execution target', () => {
 		await harness.execute({ instructions: 'Check remotely', executor: 'orb' })
 
 		expect(harness.createCalls).toEqual([{ parentThreadID: otherID, executor: 'orb' }])
-		expect(harness.initialMessages[0]).toContain("Use the selected Orb executor's current workspace")
+		expect(harness.initialMessages[0]).toContain("Use the Orb's current workspace")
 		expect(harness.initialMessages[0]).not.toContain(process.cwd())
 	})
 
@@ -115,7 +115,7 @@ describe('subagent execution target', () => {
 			parentThreadID: otherID,
 			executor: { type: 'runner', id: 'runner-123' },
 		}])
-		expect(harness.initialMessages[0]).toContain("Use the selected runner executor's current workspace")
+		expect(harness.initialMessages[0]).toContain("Use the selected runner's current workspace")
 	})
 
 	test('rejects a runner without a stable ID', async () => {
@@ -123,7 +123,7 @@ describe('subagent execution target', () => {
 		await expect(harness.execute({
 			instructions: 'Check on runner',
 			executor: { type: 'runner', id: '  ' },
-		})).rejects.toThrow('runner executor id is required')
+		})).rejects.toThrow('runner id is required')
 		expect(harness.createCalls).toEqual([])
 	})
 
@@ -133,7 +133,7 @@ describe('subagent execution target', () => {
 			instructions: 'Check remotely',
 			executor: 'orb',
 			cwd: '/tmp',
-		})).rejects.toThrow('cwd is only supported with the local executor')
+		})).rejects.toThrow('cwd is only supported for local execution')
 		expect(harness.createCalls).toEqual([])
 	})
 })

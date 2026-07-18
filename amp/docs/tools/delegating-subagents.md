@@ -92,7 +92,7 @@ The skill receives the current task and its coordination requirements through co
 
 After spawning, use `subagent_control` only when the user asks to list or inspect children, when a child needs diagnosis, or when an active child turn must be cancelled. Normal completion still arrives through `send_to_thread`; do not poll status while waiting.
 
-Use the default local executor unless the task explicitly needs an Amp Orb or a known live runner. Orb and runner children use their executor workspace rather than a parent-machine `cwd`; runner targeting requires a stable runner ID supplied by the user or existing context because `spawn_subagent` does not discover runners.
+Use local execution by default unless the task explicitly needs an Amp Orb or a known live runner. Orb children use the Orb workspace and runner children use the selected runner's workspace rather than a parent-machine `cwd`; runner targeting requires a stable runner ID supplied by the user or existing context because `spawn_subagent` does not discover runners.
 
 The skill declares no tool allowlist.
 
