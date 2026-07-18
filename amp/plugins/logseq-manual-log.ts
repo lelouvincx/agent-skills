@@ -128,20 +128,29 @@ async function logCurrentTask(
 		if (!newTitle) {
 			return `Logseq worker ${workerThread.id} finished, but did not return a valid thread title; leaving it unarchived for inspection.\n${truncate(summary, MAX_NOTIFICATION_CHARS)}`
 		}
+		const labels = extractThreadLabels(summary)
+		if (labels.length === 0) {
+			return `Logseq worker ${workerThread.id} finished, but did not return valid thread labels; leaving it unarchived for inspection.\n${truncate(summary, MAX_NOTIFICATION_CHARS)}`
+		}
 
 		try {
 			await renameThread(ctx, parentThreadID, newTitle)
 		} catch (error) {
 			return `Logseq worker ${workerThread.id} finished, but parent thread rename failed; leaving it unarchived for inspection.\n${errorMessage(error)}`
 		}
+		try {
+			await labelThread(ctx, parentThreadID, labels)
+		} catch (error) {
+			return `Logseq worker ${workerThread.id} finished and renamed this thread to ${newTitle}, but parent thread labeling failed; leaving it unarchived for inspection.\n${errorMessage(error)}`
+		}
 
 		try {
 			await archiveThread(ctx, workerThread.id)
 		} catch (error) {
-			return `Logseq worker ${workerThread.id} finished and renamed this thread to ${newTitle}, but archive failed; leaving it unarchived for inspection.\n${errorMessage(error)}`
+			return `Logseq worker ${workerThread.id} finished, renamed this thread to ${newTitle}, and added labels ${labels.join(', ')}, but archive failed; leaving it unarchived for inspection.\n${errorMessage(error)}`
 		}
 
-		return `Logseq worker ${workerThread.id} finished, renamed this thread to ${newTitle}, and was archived.\n${truncate(summary, MAX_NOTIFICATION_CHARS)}`
+		return `Logseq worker ${workerThread.id} finished, renamed this thread to ${newTitle}, added labels ${labels.join(', ')}, and was archived.\n${truncate(summary, MAX_NOTIFICATION_CHARS)}`
 	} catch (error) {
 		return `Logseq worker ${workerThread.id} failed or timed out; leaving it unarchived for inspection.\n${errorMessage(error)}`
 	} finally {
@@ -297,15 +306,17 @@ Rules:
    - preserve surrounding indentation style, usually one tab for properties under a block
 8. Keep the backlog entry short: one task block plus few useful child notes, and one brief journal reference. Do not paste the transcript or your private intent-reconstruction notes.
 9. Determine the parent Amp thread title from the Logseq backlog task/block you wrote or updated, using exactly this pattern: \`[Project] task title\`. Use the Logseq \`project:: [[...]]\` value without brackets for \`Project\`; use the backlog task/block title text without TODO/DONE markers or properties for \`task title\`.
-10. Do not invoke Oracle. The plugin blocks Oracle calls from this worker.
-11. Do not commit, push, run weekly report automation, or modify unrelated blocks.
-12. Do not send messages to the parent thread. Return your result only as this worker thread's final answer.
+10. Derive parent Amp thread labels from the same backlog task's project, priority, and TODO/DONE state. Normalize each label to lowercase words joined with hyphens and omit punctuation, for example \`Duty Support\` becomes \`duty-support\`, \`#P2\` becomes \`p2\`, and \`DONE\` becomes \`done\`.
+11. Do not invoke Oracle. The plugin blocks Oracle calls from this worker.
+12. Do not commit, push, run weekly report automation, or modify unrelated blocks.
+13. Do not send messages to the parent thread. Return your result only as this worker thread's final answer.
 
 User instruction: ${hint || '(none, infer the best target from this thread)'}
 
-After editing, reply with exactly two plain-text lines, without bullets or code formatting:
+After editing, reply with exactly three plain-text lines, without bullets or code formatting:
 Logged to <backlog file/block> and <journal file/block> — <summary>.
 Thread title: [Project] task title
+Thread labels: project-label, priority-label, state-label
 `
 }
 
@@ -332,10 +343,27 @@ async function renameThread(ctx: LogContext, threadID: ThreadID, newTitle: strin
 	}
 }
 
+async function labelThread(ctx: LogContext, threadID: ThreadID, labels: string[]): Promise<void> {
+	const result = await ctx.$`amp threads label ${threadID} ${labels}`
+	if (result.exitCode !== 0) {
+		throw new Error(result.stderr.trim() || result.stdout.trim() || `amp threads label exited with ${result.exitCode}`)
+	}
+}
+
 function extractThreadTitle(text: string): string | null {
 	const match = text.match(/^\s*`?Thread title:\s*(\[[^\]\n]+\]\s+.+?)`?\s*\.?\s*$/im)
 	if (!match) return null
 	return oneLine(match[1]).trim() || null
+}
+
+export function extractThreadLabels(text: string): string[] {
+	const match = text.match(/^\s*`?Thread labels:\s*(.+?)`?\s*\.?\s*$/im)
+	if (!match) return []
+	return [...new Set(match[1].split(',').map(normalizeLabel).filter(Boolean))]
+}
+
+function normalizeLabel(label: string): string {
+	return label.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
 }
 
 function oneLine(text: string): string {

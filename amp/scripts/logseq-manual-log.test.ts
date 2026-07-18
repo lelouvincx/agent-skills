@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 
-import { waitForWorkerResponse } from '../plugins/logseq-manual-log'
+import { extractThreadLabels, waitForWorkerResponse } from '../plugins/logseq-manual-log'
 
 const response = {
 	role: 'assistant',
@@ -57,5 +57,15 @@ describe('waitForWorkerResponse', () => {
 
 		expect(await waitForWorkerResponse(worker as never, startupGuard)).toEqual(response)
 		expect(timeouts.at(-1)).toBe(15_000)
+	})
+})
+
+describe('extractThreadLabels', () => {
+	test('normalizes and deduplicates worker labels', () => {
+		expect(extractThreadLabels('Thread labels: Duty Support, #P2, DONE, duty support')).toEqual([
+			'duty-support',
+			'p2',
+			'done',
+		])
 	})
 })

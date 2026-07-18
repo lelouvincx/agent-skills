@@ -47,6 +47,7 @@ runtime:
   writes:
     - "Logseq graph through spawned worker"
     - "parent Amp thread title"
+    - "parent Amp thread labels"
     - "worker thread archive state"
   network:
     - "Amp built-in high agent runtime"
@@ -91,11 +92,11 @@ The command requires an active thread and accepts no JSON input. It opens `Log c
 
 ## Behavior
 
-The command checks for an active thread, prompts for an optional hint, and calls the plugin's shared logging flow. That flow starts a hidden built-in `high` worker without seeding recent parent messages. If the worker cannot leave its initial idle state within 15 seconds, including when `high` mode cannot start because the account lacks credits, the flow fails instead of waiting for the full worker timeout. The worker must reconstruct parent context with `read_thread`; if that fails, it stops without editing Logseq. Oracle calls from the worker are rejected. After a successful Logseq update, the flow derives a `[Project] task title`, renames the parent thread, and archives the worker.
+The command checks for an active thread, prompts for an optional hint, and calls the plugin's shared logging flow. That flow starts a hidden built-in `high` worker without seeding recent parent messages. If the worker cannot leave its initial idle state within 15 seconds, including when `high` mode cannot start because the account lacks credits, the flow fails instead of waiting for the full worker timeout. The worker must reconstruct parent context with `read_thread`; if that fails, it stops without editing Logseq. Oracle calls from the worker are rejected. After a successful Logseq update, the flow derives a `[Project] task title` and labels from the backlog task's project, priority, and TODO/DONE state. The plugin renames and labels the parent thread before archiving the worker. Labels are normalized to lowercase alphanumeric hyphenated values, for example `presales`, `p2`, and `done`.
 
 ## Permissions and side effects
 
-The command can write to the configured Logseq graph, create and archive a hidden Amp worker thread, and rename the parent Amp thread.
+The command can write to the configured Logseq graph, create and archive a hidden Amp worker thread, and rename and add labels to the parent Amp thread. Existing parent-thread labels are preserved.
 
 ## Examples
 
@@ -109,4 +110,4 @@ Choose `logseq: Log current task` from the command palette, optionally enter `up
 
 ## Maintenance notes
 
-Update this document when the command ID, palette prompt, notifications, worker mode, startup timeout, context reconstruction, Oracle guard, or Logseq flow changes.
+Update this document when the command ID, palette prompt, notifications, worker mode, startup timeout, context reconstruction, Oracle guard, parent-thread title or labels, or Logseq flow changes.
