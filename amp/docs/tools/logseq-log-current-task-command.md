@@ -43,6 +43,7 @@ runtime:
     - "PluginThread.waitForResponse"
     - "PluginThread.messages"
     - "PluginThread.state"
+    - "amp.threads.get(...).messages"
     - "amp.$ amp threads rename"
     - "amp.$ amp threads label"
     - "amp.$ amp threads archive"
@@ -208,9 +209,10 @@ Use these checks when the command does not complete:
 
 - open an Amp thread before running the command
 - for `Worker: pending`, wait and run the command again to check the same operation
-- for `Logseq: partial` or `unverified`, run the command again so the same worker can repair the state
+- for `Logseq: partial`, `Logseq: unverified` or `Logseq: failed`, run the command again so the same worker can repair the state
 - for `Rename: failed`, `Labels: failed` or `Archive: failed`, run the command again to retry only that action
 - for `Worker: failed`, run the command again to start a replacement worker
+- if `Worker: pending` remains unresolved after repeated retries, reload the plugins or restart Amp to clear in-memory ownership; use this only as an escape hatch because the original worker may still write
 - to use another graph, set `AMP_LOGSEQ_GRAPH_DIR` before starting Amp
 
 ## Maintenance notes

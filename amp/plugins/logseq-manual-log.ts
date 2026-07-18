@@ -261,8 +261,8 @@ async function startWorkerTurn(operation: LogseqOperation, timing: Timing): Prom
 		operation.generation -= 1
 		operation.turnInFlight = false
 		operation.appendStatus = 'none'
-		operation.workerStatus = 'failed'
-		operation.workerError = errorMessage(error)
+		operation.workerStatus = 'pending'
+		operation.workerError = `Worker message delivery failed before acceptance: ${errorMessage(error)}`
 		return
 	}
 
@@ -362,6 +362,8 @@ async function getFreshWorkerResponse(
 	lastConsumedAssistantMessageID: ThreadMessageID | undefined,
 ): Promise<{ kind: 'response'; response: ThreadAssistantMessage } | { kind: 'none' } | { kind: 'unknown'; error: string }> {
 	try {
+		const state = await workerThread.state.get()
+		if (state !== 'idle') return { kind: 'none' }
 		const [message] = await workerThread.messages({ from: 'end', limit: 1, roles: ['assistant'] })
 		if (message?.role !== 'assistant' || message.id === lastConsumedAssistantMessageID) return { kind: 'none' }
 		return { kind: 'response', response: message }

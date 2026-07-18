@@ -71,9 +71,9 @@ function fakeWorker(options: {
 		},
 		waitForResponse: async () => options.waitForResponse ? options.waitForResponse() : assistantResponse('response-1'),
 		messages: async () => options.messages ? options.messages() : [],
-		appendUserMessage: async (message: { content: string }) => {
+		appendUserMessage: (message: { content: string }) => {
 			appended.push(message.content)
-			await options.appendUserMessage?.(message)
+			return Promise.resolve(options.appendUserMessage?.(message))
 		},
 	}
 	return { worker, appended }
@@ -178,8 +178,30 @@ describe('worker result protocol', () => {
 describe('worker wait outcomes', () => {
 	test('consumes a fresh stored response', async () => {
 		const response = assistantResponse('stored')
-		const { worker } = fakeWorker({ messages: () => [response] })
+		const { worker } = fakeWorker({ state: 'idle', messages: () => [response] })
 		expect(await waitForWorkerOutcome(worker as never, undefined, neverStartupGuard(), 1)).toEqual({ kind: 'response', response })
+	})
+
+	test.each(['running', 'awaiting-approval'])('does not consume a fresh stored response while the worker is %s', async (state) => {
+		const response = assistantResponse('intermediate')
+		const { worker } = fakeWorker({
+			state,
+			messages: () => [response],
+			waitForResponse: async () => { throw new Error('Timed out waiting for agent response') },
+		})
+		const outcome = await waitForWorkerOutcome(worker as never, undefined, neverStartupGuard(), 1)
+		expect(outcome.kind).toBe('pending')
+	})
+
+	test('does not consume a stored response when worker state is unresolved', async () => {
+		const response = assistantResponse('possibly-intermediate')
+		const { worker } = fakeWorker({
+			state: () => { throw new Error('state unavailable') },
+			messages: () => [response],
+			waitForResponse: async () => { throw new Error('Timed out waiting for agent response') },
+		})
+		const outcome = await waitForWorkerOutcome(worker as never, undefined, neverStartupGuard(), 1)
+		expect(outcome.kind).toBe('pending')
 	})
 
 	test('returns pending while a timed-out worker is running', async () => {
@@ -328,6 +350,7 @@ describe('operation coordinator', () => {
 		expect(second).not.toContain('rename failed')
 		expect(appended).toHaveLength(1)
 		expect(shell.calls.filter((call) => call.includes('archive'))).toHaveLength(1)
+		expect(operations.size).toBe(0)
 	})
 
 	test('preserves Logseq success, archives after label failure, then retries labels only', async () => {
@@ -356,6 +379,7 @@ describe('operation coordinator', () => {
 		expect(shell.calls.filter((call) => call.includes('rename'))).toHaveLength(1)
 		expect(shell.calls.filter((call) => call.includes('label'))).toHaveLength(2)
 		expect(shell.calls.filter((call) => call.includes('archive'))).toHaveLength(1)
+		expect(operations.size).toBe(0)
 	})
 
 	test('preserves Logseq success across archive failure', async () => {
@@ -445,6 +469,7 @@ describe('operation coordinator', () => {
 	test('accepts a fresh stored response when append settlement is unresolved', async () => {
 		const response = assistantResponse('stored-after-append')
 		const { worker, appended } = fakeWorker({
+			state: 'idle',
 			appendUserMessage: () => new Promise(() => {}),
 			messages: () => [response],
 		})
@@ -453,6 +478,24 @@ describe('operation coordinator', () => {
 		const output = await logCurrentTask(harness.amp as never, context() as never, '', 500, operations, { ...timing, startupTimeoutMs: 1 })
 		expect(output).toContain('Logseq: complete')
 		expect(appended).toHaveLength(1)
+	})
+
+	test('does not consume or append after a fresh intermediate message from a running worker', async () => {
+		const response = assistantResponse('intermediate')
+		const { worker, appended } = fakeWorker({
+			state: 'running',
+			messages: () => [response],
+			waitForResponse: async () => { throw new Error('Timed out waiting for agent response') },
+		})
+		const harness = fakeAmp({ createThread: () => worker })
+		const operations: LogseqOperationStore = new Map()
+
+		const first = await logCurrentTask(harness.amp as never, context() as never, '', 500, operations, timing)
+		const second = await logCurrentTask(harness.amp as never, context() as never, '', 500, operations, timing)
+		expect(first).toContain('Worker: pending')
+		expect(second).toContain('Worker: pending')
+		expect(appended).toHaveLength(1)
+		expect(operations.get(parentID)?.lastConsumedAssistantMessageID).toBeUndefined()
 	})
 
 	test('does not duplicate an unresolved initial append', async () => {
@@ -547,6 +590,28 @@ describe('operation coordinator', () => {
 		expect(second).toContain('Worker: pending')
 		expect(harness.createCalls).toBe(1)
 		expect(appended).toHaveLength(1)
+	})
+
+	test('retries a synchronous append failure on the same worker', async () => {
+		let appendCalls = 0
+		const { worker, appended } = fakeWorker({
+			appendUserMessage: () => {
+				appendCalls += 1
+				if (appendCalls === 1) throw new Error('invalid append request')
+			},
+		})
+		const harness = fakeAmp({ createThread: () => worker })
+		const operations: LogseqOperationStore = new Map()
+
+		const first = await logCurrentTask(harness.amp as never, context() as never, '', 500, operations, timing)
+		expect(first).toContain('Worker: pending')
+		expect(first).toContain('failed before acceptance')
+		expect(operations.size).toBe(1)
+
+		const second = await logCurrentTask(harness.amp as never, context() as never, '', 500, operations, timing)
+		expect(second).toContain('Logseq: complete')
+		expect(harness.createCalls).toBe(1)
+		expect(appended).toHaveLength(2)
 	})
 
 	test('keeps different parent operations independent', async () => {

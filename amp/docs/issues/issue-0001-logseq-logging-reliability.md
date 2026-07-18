@@ -330,7 +330,7 @@ A P0 implementation must meet these criteria:
 - every create, append, result-consumption, rename, label and archive transition is handled in order
 - ambiguous worker creation or message delivery remains pending without launching duplicate work
 - only a fresh assistant message can satisfy the current worker turn
-- the plugin registers only the command and does not add agent-turn routing
+- the plugin registers the command and a `tool.call` Oracle guard, but does not add agent-turn routing or automatic logging
 - a failed downstream stage can be retried without another Logseq write
 
 PR #98 added focused tests in `amp/scripts/logseq-manual-log.test.ts`. It also passed document validation, plugin builds, isolated projection and live projection.
