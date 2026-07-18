@@ -47,6 +47,7 @@ runtime:
   writes:
     - "Logseq graph through spawned worker"
     - "parent Amp thread title"
+    - "parent Amp thread labels"
     - "worker thread archive state"
   network:
     - "Amp built-in high agent runtime"
@@ -87,15 +88,57 @@ tags:
 
 ## Contract
 
-The command requires an active thread and accepts no JSON input. It opens `Log current task to Logseq`, where the optional message can provide a target, note, or source link. Submitting `Log to Logseq` produces a UI success or error notification.
+The command requires an active thread and accepts no JSON input.
+
+It opens `Log current task to Logseq`. You can enter any of these optional details:
+
+- target
+- note
+- source link
+
+Select `Log to Logseq` to start the flow. The command shows a success or error notification when the flow ends.
 
 ## Behavior
 
-The command checks for an active thread, prompts for an optional hint, and calls the plugin's shared logging flow. That flow starts a hidden built-in `high` worker without seeding recent parent messages. If the worker cannot leave its initial idle state within 15 seconds, including when `high` mode cannot start because the account lacks credits, the flow fails instead of waiting for the full worker timeout. The worker must reconstruct parent context with `read_thread`; if that fails, it stops without editing Logseq. Oracle calls from the worker are rejected. After a successful Logseq update, the flow derives a `[Project] task title`, renames the parent thread, and archives the worker.
+The command runs this sequence:
+
+1. It checks that an Amp thread is active.
+2. It prompts you for an optional hint.
+3. It starts a hidden built-in `high` worker without copying recent parent messages.
+4. The worker reconstructs the parent context with `read_thread`.
+5. The worker updates Logseq.
+6. The plugin derives the parent thread title and labels from the result.
+7. The plugin renames and labels the parent thread.
+8. The plugin archives the worker.
+
+The worker must leave its initial idle state within 15 seconds. This includes cases where the account lacks credits for `high` mode. The flow fails early instead of waiting for the full worker timeout.
+
+If `read_thread` fails, the worker stops without editing Logseq. The plugin also rejects Oracle calls from the worker.
+
+### Parent thread title
+
+The plugin derives the title in this format:
+
+`[Project] task title`
+
+### Parent thread labels
+
+The plugin adds these labels:
+
+- backlog project, normalized to lowercase alphanumeric words joined with hyphens, such as `presales`
+- working project, using the project registry key for the parent Amp workspace, such as `logseq`, `agent-skills` or `demo4`
+- customer, when the backlog task identifies one, normalized with a `customer-` prefix, such as `customer-fanserv` or `customer-basata`
+
+The plugin does not add priority or TODO/DONE state labels. It preserves existing parent thread labels.
 
 ## Permissions and side effects
 
-The command can write to the configured Logseq graph, create and archive a hidden Amp worker thread, and rename the parent Amp thread.
+The command can:
+
+- write to the configured Logseq graph
+- create and archive a hidden Amp worker thread
+- rename the parent Amp thread
+- add labels to the parent Amp thread
 
 ## Examples
 
@@ -109,4 +152,13 @@ Choose `logseq: Log current task` from the command palette, optionally enter `up
 
 ## Maintenance notes
 
-Update this document when the command ID, palette prompt, notifications, worker mode, startup timeout, context reconstruction, Oracle guard, or Logseq flow changes.
+Update this document when any of these change:
+
+- command ID
+- palette prompt
+- notifications
+- worker mode or startup timeout
+- context reconstruction
+- Oracle guard
+- parent thread title or labels
+- Logseq flow
