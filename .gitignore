@@ -68,6 +68,19 @@ skills/tdd/.remote-source
 skills/tdd/mocking.md
 skills/tdd/tests.md
 
+skills/systematic-debugging/SKILL.md
+skills/systematic-debugging/.remote-source
+skills/systematic-debugging/root-cause-tracing.md
+skills/systematic-debugging/defense-in-depth.md
+skills/systematic-debugging/condition-based-waiting.md
+skills/systematic-debugging/condition-based-waiting-example.ts
+skills/systematic-debugging/find-polluter.sh
+
+skills/verification-before-completion/SKILL.md
+skills/verification-before-completion/.remote-source
+
+# PERSONAL.md overlays and skills/SUPERPOWERS-NOTICE.md remain tracked.
+
 skills/teach/SKILL.md
 skills/teach/.remote-source
 skills/teach/GLOSSARY-FORMAT.md

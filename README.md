@@ -57,6 +57,8 @@ See [PROJECTS.md](PROJECTS.md) for the generated project list.
 | [domain-modeling](skills/domain-modeling/SKILL.md) | Remote | define domain terms and decisions |
 | [grilling](skills/grilling/SKILL.md) | Remote | stress-test a plan or design through questions |
 | [tdd](skills/tdd/SKILL.md) | Remote | work test-first |
+| [systematic-debugging](skills/systematic-debugging/SKILL.md) | Remote | investigate root causes before fixing bugs |
+| [verification-before-completion](skills/verification-before-completion/SKILL.md) | Remote | verify work before reporting completion |
 | [teach](skills/teach/SKILL.md) | Remote | teach a skill or concept in a workspace |
 | [develop-amql](skills/develop-amql/SKILL.md) | Remote | develop Holistics AMQL assets |
 | [write-aql](skills/write-aql/SKILL.md) | Remote | write and run Holistics AQL queries |

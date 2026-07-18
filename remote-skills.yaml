@@ -265,6 +265,20 @@ skills:
       - mocking.md
       - tests.md
 
+  - name: systematic-debugging
+    url: https://raw.githubusercontent.com/obra/superpowers/d884ae04edebef577e82ff7c4e143debd0bbec99/skills/systematic-debugging/SKILL.md
+    enabled: true
+    files:
+      - root-cause-tracing.md
+      - defense-in-depth.md
+      - condition-based-waiting.md
+      - condition-based-waiting-example.ts
+      - find-polluter.sh
+
+  - name: verification-before-completion
+    url: https://raw.githubusercontent.com/obra/superpowers/d884ae04edebef577e82ff7c4e143debd0bbec99/skills/verification-before-completion/SKILL.md
+    enabled: true
+
   - name: teach
     url: https://raw.githubusercontent.com/mattpocock/skills/main/skills/productivity/teach/SKILL.md
     enabled: true
