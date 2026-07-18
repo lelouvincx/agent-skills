@@ -87,7 +87,7 @@ and this project does not currently use versioned releases.
 
 ### Fixed
 
-- Support Claude Fable 5 in Claude Code subagents and remove obsolete Claude Code tool names that prevented the read-only agent from launching.
+- Support Claude Fable 5 in Claude Code subagents and remove obsolete Claude Code tool names that prevented the read-only agent from launching. [#109](https://github.com/lelouvincx/agent-skills/pull/109)
 - Reconcile completed Logseq worker responses at the five-minute timeout boundary instead of reporting successful writes as failures. [#95](https://github.com/lelouvincx/agent-skills/pull/95)
 - Preserve Claude Design audit and opt-in raw transcript paths when the Claude Code proxy times out or fails, add deterministic regression coverage, and document the verified supervised design and response-mediated source handoff workflow. [#93](https://github.com/lelouvincx/agent-skills/pull/93)
 - Prevent `spawn_subagent` from launching `ultra` mode subagents. [#89](https://github.com/lelouvincx/agent-skills/pull/89)
