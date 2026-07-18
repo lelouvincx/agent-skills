@@ -63,7 +63,6 @@ safety:
     - "Worker can edit the configured Logseq graph."
     - "Malformed worker responses can leave the parent thread title unchanged."
 related:
-  - "logseq-log-current-task"
   - "spawn-subagent"
 tags:
   - "command"
@@ -76,7 +75,7 @@ tags:
 
 ## Summary
 
-`logseq-log-current-task` provides the command-palette action `logseq: Log current task`. It prompts for an optional hint, then runs the same Logseq logging flow exposed separately by the related agent tool.
+`logseq-log-current-task` provides the command-palette action `logseq: Log current task`. It prompts for an optional hint, then runs the Logseq logging flow.
 
 ## Invocation
 
@@ -110,4 +109,4 @@ Choose `logseq: Log current task` from the command palette, optionally enter `up
 
 ## Maintenance notes
 
-Update this document when the command ID, palette prompt, notifications, worker mode, startup timeout, context reconstruction, Oracle guard, or shared Logseq flow changes. Keep the related agent-tool document scoped to `amp.registerTool`.
+Update this document when the command ID, palette prompt, notifications, worker mode, startup timeout, context reconstruction, Oracle guard, or Logseq flow changes.

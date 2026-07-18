@@ -1,9 +1,8 @@
 // @i-know-the-amp-plugin-api-is-wip-and-very-experimental-right-now
 //
-// logseq-manual-log — command-palette action and agent-callable tool for
-// manually asking Amp to log the current thread/task into the user's Logseq
-// graph. This intentionally has no agent lifecycle hook: logging only happens
-// when the command is invoked or the tool is called from an Amp thread.
+// logseq-manual-log — command-palette action for manually asking Amp to log
+// the current thread/task into the user's Logseq graph. This intentionally has
+// no agent lifecycle hook: logging only happens when the command is invoked.
 
 import type {
 	BuiltinAgentMode,
@@ -21,7 +20,6 @@ const WORKER_STARTUP_TIMEOUT_MS = 15_000
 const WORKER_TIMEOUT_MS = 5 * 60 * 1000
 const WORKER_WAIT_RETRY_DELAY_MS = 1_000
 const WORKER_COMPLETION_GRACE_MS = 15_000
-const MAX_RESULT_CHARS = 500
 const MAX_NOTIFICATION_CHARS = 500
 const LOGSEQ_WORKER_PROMPT_PREFIX = '[logseq-manual-log]'
 
@@ -90,43 +88,16 @@ export default function (amp: PluginAPI) {
 				return
 			}
 
-			const result = await logCurrentTask(amp, ctx, hint.trim(), MAX_NOTIFICATION_CHARS, workerThreadIDs)
+			const result = await logCurrentTask(amp, ctx, hint.trim(), workerThreadIDs)
 			await ctx.ui.notify(result)
 		},
 	)
-
-	amp.registerTool({
-		name: 'logseq_log_current_task',
-		description: [
-			'Log the durable outcome of the current Amp thread into the configured Logseq graph.',
-			'Use this when the user asks to log the current task from inside the active Amp thread, without using the command palette.',
-			'The tool starts a hidden Logseq worker, waits for it, renames the parent thread from the Logseq task title, and archives the worker when successful.',
-		].join(' '),
-		inputSchema: {
-			type: 'object',
-			properties: {
-				hint: {
-					type: 'string',
-					description: 'Optional target, note, or source link, such as update DAT-594 or a Slack/PR/Notion URL.',
-				},
-			},
-		},
-
-		async execute(input, ctx) {
-			if (!ctx.thread) {
-				throw new Error('Open an Amp thread before running logseq_log_current_task.')
-			}
-
-			return logCurrentTask(amp, ctx, String(input.hint || '').trim(), MAX_RESULT_CHARS, workerThreadIDs)
-		},
-	})
 }
 
 async function logCurrentTask(
 	amp: PluginAPI,
 	ctx: LogContext,
 	hint: string,
-	maxResultChars: number,
 	workerThreadIDs: Set<string>,
 ): Promise<string> {
 	if (!ctx.thread) {
@@ -155,7 +126,7 @@ async function logCurrentTask(
 		const summary = extractAssistantText(response) || 'Logseq worker finished.'
 		const newTitle = extractThreadTitle(summary)
 		if (!newTitle) {
-			return `Logseq worker ${workerThread.id} finished, but did not return a valid thread title; leaving it unarchived for inspection.\n${truncate(summary, maxResultChars)}`
+			return `Logseq worker ${workerThread.id} finished, but did not return a valid thread title; leaving it unarchived for inspection.\n${truncate(summary, MAX_NOTIFICATION_CHARS)}`
 		}
 
 		try {
@@ -170,7 +141,7 @@ async function logCurrentTask(
 			return `Logseq worker ${workerThread.id} finished and renamed this thread to ${newTitle}, but archive failed; leaving it unarchived for inspection.\n${errorMessage(error)}`
 		}
 
-		return `Logseq worker ${workerThread.id} finished, renamed this thread to ${newTitle}, and was archived.\n${truncate(summary, maxResultChars)}`
+		return `Logseq worker ${workerThread.id} finished, renamed this thread to ${newTitle}, and was archived.\n${truncate(summary, MAX_NOTIFICATION_CHARS)}`
 	} catch (error) {
 		return `Logseq worker ${workerThread.id} failed or timed out; leaving it unarchived for inspection.\n${errorMessage(error)}`
 	} finally {
