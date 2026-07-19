@@ -134,22 +134,42 @@ Output is a JSON string with `ok`, mode/model metadata, the parsed structured re
 
 ## Behavior
 
-The tool normalizes inputs, validates filesystem paths, builds a strict JSON schema for the selected mode, then runs `claude -p` with JSON output, `dontAsk` permissions, an allowed read-only tool list, explicit disallowed write/shell tools, no filesystem setting sources, and strict MCP isolation. If MCP is configured, it adds `ToolSearch` so Claude can discover allowlisted tools after asynchronous server startup. It then merges default read-only MCP tools with caller-specified `allowedMcpTools`. Otherwise, no MCP configuration or tool discovery is loaded.
+Review mode does not start without a change set. Amp must provide one through:
 
-Review mode requires the actual change set. Amp must pass a non-empty `context` containing the relevant textual diff, set `useGitDiff: true`, or explicitly enable `mcp__sem__sem_diff` through `mcpConfigPath` and `allowedMcpTools`. The built-in Git MCP server runs fixed read-only Git commands without a shell. It disables external diff and text-conversion drivers, rejects free-form Git arguments, and bounds runtime and output. The model cannot choose the repository.
+- non-empty `context` containing the relevant textual diff
+- `useGitDiff: true` for the built-in Git tools
+- explicit `mcp__sem__sem_diff` access through `mcpConfigPath` and `allowedMcpTools`
 
-The built-in server exposes these tools:
+Claude must get the selected diff before it reads surrounding files. For large working-tree changes, Claude first calls `git_changed_files`. It then requests path-scoped `git_diff` results.
 
-- `mcp__amp_git__git_diff` returns tracked staged and unstaged working-tree changes against `HEAD`, plus untracked paths. It accepts up to 100 repository-relative paths so a large review can be split safely.
-- `mcp__amp_git__git_diff_refs` returns the committed diff from the merge base of 2 verified refs to the target ref. It accepts the same bounded path filter.
-- `mcp__amp_git__git_changed_files` returns separate staged, unstaged and untracked path summaries.
-- `mcp__amp_git__git_file_at_ref` returns one repository-relative file at a verified commit.
+If a diff tool fails, Claude does not start a general repository audit. It returns `needs_amp_judgment` with low confidence and no findings.
 
-Git refs must be non-empty, cannot start with `-`, and cannot use reflog syntax. The server resolves refs to commit object IDs before using them. Paths must stay inside the repository. The server does not expose Git configuration, remotes, reflogs, stashes, arbitrary objects, network operations or write commands. Semantic diff remains the lower-fidelity fallback because it is entity-level. The wrapper rejects review requests with no evidence source before spawning Claude.
+The built-in Git server gives Claude 4 read-only tools:
 
-Claude must obtain the selected diff before inspecting surrounding files. For a large working-tree diff, it can call `git_changed_files`, then request path-scoped `git_diff` results. If an MCP diff tool is unavailable, fails, or returns no change set when changes were expected, Claude returns `needs_amp_judgment` with low confidence and no findings instead of silently turning the request into a generic repository audit.
+- `mcp__amp_git__git_diff` returns working-tree changes against `HEAD` and lists untracked paths
+- `mcp__amp_git__git_diff_refs` returns committed changes from the merge base of 2 verified refs
+- `mcp__amp_git__git_changed_files` returns separate staged, unstaged and untracked path summaries
+- `mcp__amp_git__git_file_at_ref` returns one repository-relative file at a verified commit
 
-Claude receives a prompt that says Amp is the executor and Claude must provide structured advice only. The plugin parses Claude CLI JSON, validates the mode-specific payload, extracts token usage where possible, writes redacted audit logs, and returns a compact JSON envelope to Amp. The child is terminated and the call fails explicitly if combined stdout and stderr exceed 5 MiB.
+`git_diff` and `git_diff_refs` accept up to 100 repository-relative paths. This lets Claude split a large review without using free-form Git arguments.
+
+The Git server runs fixed commands directly, without a shell. It:
+
+- resolves refs to commit object IDs before using them
+- confines every path to the selected repository
+- disables external diff and text-conversion drivers
+- does not expose Git configuration, remotes, reflogs, stashes, network operations or write commands
+- limits each call by time and output size
+
+Git refs must not be empty. They cannot start with `-` or use reflog syntax. The model cannot choose the repository.
+
+Semantic diff remains lower fidelity because it only reports entity-level changes.
+
+The wrapper validates inputs and paths before it starts `claude -p`. It uses a strict output schema, `dontAsk` permissions and strict MCP isolation. It also denies shell and file-edit tools.
+
+When MCP is enabled, the wrapper adds `ToolSearch` for asynchronous tool discovery. It loads only the configured MCP tools. Without MCP, it does not load tool discovery or MCP configuration.
+
+Claude returns structured advice only. Amp remains the executor. The plugin validates Claude's response, records token use and writes redacted audit logs. It stops the child if combined output exceeds 5 MiB.
 
 ## Permissions and side effects
 
