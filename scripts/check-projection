@@ -20,6 +20,7 @@ for path in \
 	".config/amp/settings.json" \
 	".config/amp/plugins" \
 	".config/amp/docs" \
+	".config/amp/mcp-servers/git-diff-server.mjs" \
 	".config/amp/projects.yaml" \
 	".config/amp/PROJECTS.md"; do
 	if [ ! -e "$tmp_home/$path" ]; then

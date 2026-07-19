@@ -10,6 +10,7 @@ import { randomUUID } from 'node:crypto'
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import type { PluginAPI } from '@ampcode/plugin'
 
 type Mode = 'patch' | 'review' | 'research'
@@ -20,6 +21,7 @@ interface ToolInput {
 	mode: Mode
 	brief: string
 	context?: string
+	useGitDiff: boolean
 	githubProfile?: GithubProfile
 	model: Model
 	timeoutMinutes: number
@@ -59,6 +61,13 @@ const DEFAULT_TIMEOUT_MINUTES = 10
 const MAX_TIMEOUT_MINUTES = 30
 const MAX_CLAUDE_OUTPUT_BYTES = 5 * 1024 * 1024
 const DEFAULT_MODEL: Model = 'opus'
+const GIT_DIFF_MCP_TOOL = 'mcp__amp_git__git_diff'
+const GIT_DIFF_REFS_MCP_TOOL = 'mcp__amp_git__git_diff_refs'
+const GIT_CHANGED_FILES_MCP_TOOL = 'mcp__amp_git__git_changed_files'
+const GIT_FILE_AT_REF_MCP_TOOL = 'mcp__amp_git__git_file_at_ref'
+const GIT_MCP_TOOLS = [GIT_DIFF_MCP_TOOL, GIT_DIFF_REFS_MCP_TOOL, GIT_CHANGED_FILES_MCP_TOOL, GIT_FILE_AT_REF_MCP_TOOL]
+const SEM_DIFF_MCP_TOOL = 'mcp__sem__sem_diff'
+const GIT_DIFF_MCP_SERVER_PATH = fileURLToPath(new URL('../mcp-servers/git-diff-server.mjs', import.meta.url))
 const DEFAULT_MCP_CONFIG_PATH = join(homedir(), '.config', 'amp', 'claude-code-readonly-mcp.json')
 const DEFAULT_GITHUB_PROFILE_CONFIG_PATH = join(homedir(), '.config', 'amp', 'github-profiles.json')
 const AUDIT_DIR = process.env.AMP_CLAUDE_CODE_SUBAGENT_AUDIT_DIR ?? join(homedir(), '.config', 'amp', 'logs', 'claude-code-subagent')
@@ -116,6 +125,7 @@ export default function (amp: PluginAPI) {
 			'No MCP bridge is loaded by default so the default toolkit matches Pi Coding Agent. Pass mcpConfigPath/allowedMcpTools only for explicit read-only external context.',
 			'For GitHub profile routing, pass githubProfile explicitly as work, personal, or bot; do not pass natural-language profile phrases to this tool.',
 			'Use mode=review for reviewing a diff/implementation, mode=patch for a small-to-medium patch proposal, and mode=research for read-only investigation.',
+			'For mode=review, change-set evidence is required: pass the relevant textual diff in context, set useGitDiff=true for the built-in exact read-only working-tree diff, or explicitly enable mcp__sem__sem_diff through mcpConfigPath/allowedMcpTools.',
 			'Pass a pre-processed Amp summary in brief/context; do not dump the full raw Amp thread by default.',
 		].join(' '),
 		inputSchema: {
@@ -132,7 +142,11 @@ export default function (amp: PluginAPI) {
 				},
 				context: {
 					type: 'string',
-					description: 'Optional pre-processed context: file excerpts, git diff, external context summaries, or prior decisions.',
+					description: 'Optional pre-processed context: file excerpts, git diff, external context summaries, or prior decisions. Review mode requires a non-empty contextual diff unless useGitDiff or an explicit semantic diff MCP tool supplies it.',
+				},
+				useGitDiff: {
+					type: 'boolean',
+					description: 'For review mode, expose the isolated built-in read-only Git review MCP tools without exposing Bash.',
 				},
 				githubProfile: {
 					type: 'string',
@@ -475,22 +489,30 @@ function normalizeInput(raw: Record<string, unknown>): ToolInput | { error: stri
 	const workingDirectory = typeof raw.workingDirectory === 'string' && raw.workingDirectory.trim()
 		? expandHome(raw.workingDirectory.trim())
 		: process.cwd()
+	const context = typeof raw.context === 'string' && raw.context.trim() ? raw.context : undefined
+	const useGitDiff = raw.useGitDiff === true
+	const mcpConfigPath = typeof raw.mcpConfigPath === 'string' && raw.mcpConfigPath.trim()
+		? expandHome(raw.mcpConfigPath.trim())
+		: undefined
+	const allowedMcpTools = stringArray(raw.allowedMcpTools)
 
 	if (!existsSync(workingDirectory)) return { error: `workingDirectory does not exist: ${workingDirectory}` }
+	if (mode === 'review' && !context && !useGitDiff && !(mcpConfigPath && allowedMcpTools.includes(SEM_DIFF_MCP_TOOL))) {
+		return { error: `review mode requires change-set evidence: pass a non-empty context containing the textual diff, set useGitDiff=true, or explicitly allow ${SEM_DIFF_MCP_TOOL} with mcpConfigPath.` }
+	}
 
 	return {
 		mode,
 		brief: brief.trim(),
-		context: typeof raw.context === 'string' ? raw.context : undefined,
+		context,
+		useGitDiff,
 		githubProfile,
 		model,
 		timeoutMinutes,
 		workingDirectory,
 		safeRoots: stringArray(raw.safeRoots).map(expandHome),
-		mcpConfigPath: typeof raw.mcpConfigPath === 'string' && raw.mcpConfigPath.trim()
-			? expandHome(raw.mcpConfigPath.trim())
-			: undefined,
-		allowedMcpTools: stringArray(raw.allowedMcpTools),
+		mcpConfigPath,
+		allowedMcpTools,
 		includeRawTranscript: raw.includeRawTranscript === true || process.env.AMP_CLAUDE_CODE_SUBAGENT_DEBUG === '1',
 	}
 }
@@ -505,13 +527,40 @@ function buildClaudeCommand(input: ToolInput, schema: Record<string, unknown>): 
 	if (!configuredMcpPath && input.allowedMcpTools.length > 0) {
 		return { error: 'allowedMcpTools requires mcpConfigPath. MCP is explicit-only so the default Claude toolkit matches Pi.' }
 	}
+	if (input.useGitDiff && (configuredMcpPath || input.allowedMcpTools.length > 0)) {
+		return { error: 'useGitDiff cannot be combined with mcpConfigPath or allowedMcpTools; the built-in Git diff server runs in isolation.' }
+	}
+	if (input.useGitDiff && !existsSync(GIT_DIFF_MCP_SERVER_PATH)) {
+		return { error: `Git diff MCP server does not exist: ${GIT_DIFF_MCP_SERVER_PATH}. Run ./sync-skills.sh.` }
+	}
 
 	for (const root of input.safeRoots) {
 		if (!existsSync(root)) return { error: `safe root does not exist: ${root}` }
 	}
 
 	const defaultMcpTools = configuredMcpPath ? DEFAULT_ALLOWED_MCP_TOOLS : []
-	const allowedTools = [...new Set([...BUILTIN_ALLOWED_TOOLS, ...defaultMcpTools, ...input.allowedMcpTools])]
+	const builtinTools = input.useGitDiff || configuredMcpPath
+		? [...BUILTIN_ALLOWED_TOOLS, 'ToolSearch']
+		: BUILTIN_ALLOWED_TOOLS
+	const allowedTools = [...new Set([
+		...builtinTools,
+		...defaultMcpTools,
+		...input.allowedMcpTools,
+		...(input.useGitDiff ? GIT_MCP_TOOLS : []),
+	])]
+	const mcpConfigs = []
+	if (input.useGitDiff) {
+		mcpConfigs.push(JSON.stringify({
+			mcpServers: {
+				amp_git: {
+					command: 'node',
+					args: [GIT_DIFF_MCP_SERVER_PATH],
+					env: { AMP_GIT_DIFF_REPOSITORY: cwd },
+				},
+			},
+		}))
+	}
+	if (configuredMcpPath) mcpConfigs.push(configuredMcpPath)
 	const args = [
 		'-p',
 		'--model', input.model,
@@ -519,13 +568,13 @@ function buildClaudeCommand(input: ToolInput, schema: Record<string, unknown>): 
 		'--permission-mode', 'dontAsk',
 		'--setting-sources', '',
 		'--strict-mcp-config',
-		'--tools', BUILTIN_ALLOWED_TOOLS.join(','),
+		'--tools', builtinTools.join(','),
 		'--allowedTools', allowedTools.join(','),
 		'--disallowedTools', BUILTIN_DENIED_TOOLS.join(','),
 		'--json-schema', JSON.stringify(schema),
 	]
 
-	if (configuredMcpPath) args.push('--mcp-config', configuredMcpPath)
+	if (mcpConfigs.length > 0) args.push('--mcp-config', ...mcpConfigs)
 	for (const root of input.safeRoots) args.push('--add-dir', root)
 
 	return { args, cwd }
@@ -533,6 +582,22 @@ function buildClaudeCommand(input: ToolInput, schema: Record<string, unknown>): 
 
 function buildPrompt(input: ToolInput): string {
 	const schemaDescription = JSON.stringify(schemaForMode(input.mode), null, 2)
+	const reviewEvidenceInstructions = input.mode !== 'review'
+		? []
+		: input.context
+			? [
+				'- Use the supplied textual change set as the review scope before reading surrounding files.',
+			]
+			: input.useGitDiff
+				? [
+					`- Obtain the exact change set before reading surrounding files. Use ${GIT_DIFF_MCP_TOOL} for current working-tree changes or ${GIT_DIFF_REFS_MCP_TOOL} when the task names base and target refs. If a tool is not listed yet, use ToolSearch for its exact name first.`,
+					`- If the full working-tree diff exceeds its limit, call ${GIT_CHANGED_FILES_MCP_TOOL}, then call ${GIT_DIFF_MCP_TOOL} with only the relevant changed paths. Use ${GIT_FILE_AT_REF_MCP_TOOL} only when the previous committed contents are needed to verify a finding.`,
+					'- If no exact Git diff can be obtained, or the selected diff returns no change set when changes were expected, return needs_amp_judgment with low confidence and no findings instead of performing a generic repository audit.',
+				]
+				: [
+					`- Call ${SEM_DIFF_MCP_TOOL} before reading surrounding files. If it is not listed yet, use ToolSearch for that exact name first. Then inspect only the changed entities and code needed to verify findings.`,
+					'- Semantic diff is entity-level. If it is unavailable, fails, or returns no change set when changes were expected, return needs_amp_judgment with low confidence and no findings instead of performing a generic repository audit.',
+				]
 	return [
 		'You are Claude Code running as a read-only subagent for Amp.',
 		'You must not modify files. Do not attempt to use Bash, Edit, Write, or NotebookEdit.',
@@ -545,6 +610,7 @@ function buildPrompt(input: ToolInput): string {
 		'- If reviewing, include concise findings with evidence and suggested fixes.',
 		'- If researching, include citations/links when available.',
 		'- Be explicit about risks and tests Amp should run.',
+		...reviewEvidenceInstructions,
 		'',
 		'JSON schema:',
 		schemaDescription,
