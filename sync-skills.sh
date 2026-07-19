@@ -242,6 +242,12 @@ sync_amp_artifacts() {
 		echo "synced: amp/docs/ -> $AMP_CONFIG_DIR/docs/"
 	fi
 
+	if [ -d "$AMP_DIR/mcp-servers" ]; then
+		mkdir -p "$AMP_CONFIG_DIR/mcp-servers"
+		rsync -a --delete "$AMP_DIR/mcp-servers/" "$AMP_CONFIG_DIR/mcp-servers/"
+		echo "synced: amp/mcp-servers/ -> $AMP_CONFIG_DIR/mcp-servers/"
+	fi
+
 	if [ -f "$REPO_DIR/projects.yaml" ]; then
 		mkdir -p "$AMP_CONFIG_DIR"
 		cp "$REPO_DIR/projects.yaml" "$AMP_CONFIG_DIR/projects.yaml"

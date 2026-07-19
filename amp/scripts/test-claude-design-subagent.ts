@@ -36,9 +36,12 @@ else if (scenario === 'invalid') process.stdout.write('not json')
 else if (scenario === 'output-limit') process.stdout.write('x'.repeat(5 * 1024 * 1024 + 1))
 else {
   const isCode = args.includes('--json-schema')
+  const isReview = args.at(-1)?.includes('Mode: review')
   process.stdout.write(JSON.stringify(isCode ? {
     type: 'result',
-    result: JSON.stringify({ summary: 'summary', answer: 'answer', confidence: 'high', citations: [], risks: [] }),
+    result: JSON.stringify(isReview
+      ? { summary: 'summary', recommendation: 'apply', confidence: 'high', findings: [], tests: [], risks: [] }
+      : { summary: 'summary', answer: 'answer', confidence: 'high', citations: [], risks: [] }),
     session_id: effectiveSessionId,
   } : {
     type: 'result',
@@ -72,6 +75,51 @@ else {
 	assert(!existsSync(capturePath), 'invalid session ID must fail before spawning Claude')
 
 	process.env.AMP_DESIGN_TEST_SCENARIO = 'success'
+	const missingReviewDiff = await invokeCode({ mode: 'review', brief: 'test', workingDirectory: root }, 'missing-review-diff')
+	assert(!missingReviewDiff.ok && String(missingReviewDiff.error).includes('requires change-set evidence'), 'review must require a change-set source')
+	assert(!existsSync(capturePath), 'missing review evidence must fail before spawning Claude')
+	const blankReviewDiff = await invokeCode({ mode: 'review', brief: 'test', context: '   ', workingDirectory: root }, 'blank-review-diff')
+	assert(!blankReviewDiff.ok && !existsSync(capturePath), 'blank review context must fail before spawning Claude')
+
+	const reviewWithContext = await invokeCode({ mode: 'review', brief: 'test', context: 'diff --git a/a.ts b/a.ts', workingDirectory: root }, 'review-context')
+	assert(reviewWithContext.ok, 'review with a supplied textual diff must succeed')
+	const contextCapture = readCapture()
+	assert(!contextCapture.args.includes('--mcp-config'), 'supplied review context must not load an MCP server')
+	assert(contextCapture.args.at(-1)?.includes('Use the supplied textual change set as the review scope'), 'review prompt must prioritize the supplied diff')
+
+	const reviewWithGitDiff = await invokeCode({ mode: 'review', brief: 'test', useGitDiff: true, workingDirectory: root }, 'review-git-diff')
+	assert(reviewWithGitDiff.ok, 'review with the built-in Git diff MCP tool must succeed')
+	const gitDiffCapture = readCapture()
+	assert(argumentValue(gitDiffCapture.args, '--tools') === 'Read,Grep,Glob,ToolSearch', 'Git diff review must expose read-only MCP tool discovery')
+	const gitAllowedTools = String(argumentValue(gitDiffCapture.args, '--allowedTools'))
+	for (const tool of ['git_diff', 'git_diff_refs', 'git_changed_files', 'git_file_at_ref']) {
+		assert(gitAllowedTools.includes(`mcp__amp_git__${tool}`), `${tool} must be explicitly allowlisted`)
+	}
+	const gitDiffConfig = JSON.parse(String(argumentValue(gitDiffCapture.args, '--mcp-config'))) as { mcpServers?: { amp_git?: { env?: Record<string, string> } } }
+	assert(gitDiffConfig.mcpServers?.amp_git?.env?.AMP_GIT_DIFF_REPOSITORY === root, 'Git diff MCP server must be pinned to the review working directory')
+	assert(gitDiffCapture.args.at(-1)?.includes('Obtain the exact change set before reading surrounding files'), 'review prompt must obtain an exact Git diff before inspecting files')
+
+	const semConfigPath = join(temp, 'sem-mcp.json')
+	writeFileSync(semConfigPath, JSON.stringify({ mcpServers: { sem: { command: 'sem', args: ['mcp'] } } }))
+	const combinedGitAndCallerMcp = await invokeCode({
+		mode: 'review',
+		brief: 'test',
+		useGitDiff: true,
+		mcpConfigPath: semConfigPath,
+		workingDirectory: root,
+	}, 'review-combined-mcp')
+	assert(!combinedGitAndCallerMcp.ok && String(combinedGitAndCallerMcp.error).includes('cannot be combined'), 'built-in Git diff must reject caller MCP configuration')
+	const reviewWithSemDiff = await invokeCode({
+		mode: 'review',
+		brief: 'test',
+		mcpConfigPath: semConfigPath,
+		allowedMcpTools: ['mcp__sem__sem_diff'],
+		workingDirectory: root,
+	}, 'review-sem-diff')
+	assert(reviewWithSemDiff.ok, 'review with an explicitly configured semantic diff must succeed')
+	assert(argumentValue(readCapture().args, '--tools') === 'Read,Grep,Glob,ToolSearch', 'semantic diff review must expose read-only MCP tool discovery')
+	assert(readCapture().args.at(-1)?.includes('Semantic diff is entity-level'), 'semantic diff review prompt must retain the fidelity warning')
+
 	const codeSuccess = await invokeCode({ mode: 'research', brief: 'test', model: 'fable', workingDirectory: root }, 'code-success')
 	assert(codeSuccess.ok, 'code subagent success scenario must succeed')
 	const codeCapture = readCapture()
@@ -79,7 +127,7 @@ else {
 	assert(argumentValue(codeCapture.args, '--setting-sources') === '', 'code subagent must disable filesystem setting sources')
 	assert(codeCapture.args.includes('--strict-mcp-config'), 'code subagent must always use strict MCP isolation')
 	assert(!codeCapture.args.includes('--mcp-config'), 'code subagent must not load MCP config by default')
-	assert(codeCapture.args.includes('Read,Grep,Glob'), 'code subagent built-in allowlist must use current Claude Code tools')
+	assert(argumentValue(codeCapture.args, '--tools') === 'Read,Grep,Glob', 'code subagent must omit ToolSearch when MCP is disabled')
 	assert(codeCapture.args.includes('Bash,Edit,Write,NotebookEdit'), 'code subagent denylist must use current Claude Code tools')
 	assert(!codeCapture.args.some((arg) => arg.includes('MultiEdit') || arg.includes('LS')), 'obsolete Claude Code tools must not be passed')
 

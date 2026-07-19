@@ -39,7 +39,9 @@ jobs:
           filters: |
             amp:
               - "amp/docs/**"
+              - "amp/mcp-servers/**"
               - "amp/plugins/**"
+              - "amp/scripts/git-diff-mcp.test.ts"
               - "amp/scripts/logseq-manual-log.test.ts"
               - "amp/scripts/test-claude-design-subagent.ts"
               - "amp/scripts/validate-plugin-docs.py"
@@ -66,7 +68,9 @@ jobs:
               - ".pre-commit-config.yaml"
               - ".github/workflows/ci.yml"
             plugins:
+              - "amp/mcp-servers/**"
               - "amp/plugins/**"
+              - "amp/scripts/git-diff-mcp.test.ts"
               - "amp/scripts/logseq-manual-log.test.ts"
               - "amp/scripts/test-claude-design-subagent.ts"
               - "scripts/check-plugin-builds"

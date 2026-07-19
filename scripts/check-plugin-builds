@@ -33,6 +33,7 @@ trap 'rm -rf "$out_dir"' EXIT
 		--external=@ampcode/plugin \
 		--outdir="$out_dir"
 	bun amp/scripts/test-claude-design-subagent.ts
+	bun test amp/scripts/git-diff-mcp.test.ts
 	bun test amp/scripts/spawn-subagent.test.ts
 	bun test amp/scripts/logseq-manual-log.test.ts
 )
