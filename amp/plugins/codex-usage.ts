@@ -53,9 +53,9 @@ export default function (amp: PluginAPI) {
 	amp.registerCommand(
 		'codex_usage_command',
 		{
-			title: 'Codex usage',
-			category: 'codex',
-			description: 'Show current Codex 5-hour and weekly usage limits.',
+			title: 'Usage',
+			category: 'ChatGPT',
+			description: 'Show current ChatGPT Subscription 5-hour and weekly usage limits.',
 		},
 		async (ctx) => {
 			const authPath = codexAuthPath()

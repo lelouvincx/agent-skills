@@ -110,8 +110,8 @@ export default function (amp: PluginAPI) {
 	amp.registerCommand(
 		'logseq-log-current-task',
 		{
-			title: 'Log current task',
-			category: 'logseq',
+			title: 'Log Current Task',
+			category: 'Logseq',
 			description: 'Manually ask Amp to log this thread/task into Logseq.',
 		},
 		async (ctx) => {

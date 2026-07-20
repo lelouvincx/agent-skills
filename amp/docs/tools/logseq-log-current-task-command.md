@@ -91,7 +91,7 @@ tags:
 
 ## Summary
 
-`logseq-log-current-task` adds the command-palette action `logseq: Log current task`. It asks for an optional hint, then logs the task through one coordinated worker operation.
+`logseq-log-current-task` adds the command-palette action `Logseq: Log Current Task`. It asks for an optional hint, then logs the task through one coordinated worker operation.
 
 [ISSUE-0001: Logseq logging reliability](../issues/issue-0001-logseq-logging-reliability.md) preserves the original incident, revised command-only intent and reliability decisions.
 
@@ -100,7 +100,7 @@ tags:
 - Surface: command palette
 - Registered with: `amp.registerCommand`
 - Command ID: `logseq-log-current-task`
-- Palette label: `logseq: Log current task`
+- Palette label: `Logseq: Log Current Task`
 - Plugin file: `plugins/logseq-manual-log.ts`
 
 ## Contract
@@ -199,7 +199,7 @@ The command does not run from an agent message or lifecycle event. You must sele
 
 ## Examples
 
-1. Choose `logseq: Log current task` from the command palette.
+1. Choose `Logseq: Log Current Task` from the command palette.
 2. Enter an optional hint, such as `update DAT-594`.
 3. Select `Log to Logseq`.
 
