@@ -69,7 +69,7 @@ The original design tried to support an in-thread request and a command-palette 
 
 ### Revised intent after PR #108
 
-The command palette is now the only supported entry point. Selecting `logseq: Log current task` should start one reliable, inspectable workflow. A chat request does not start logging or route the agent to a tool.
+The command palette is now the only supported entry point. Selecting `Logseq: Log Current Task` should start one reliable, inspectable workflow. A chat request does not start logging or route the agent to a tool.
 
 The workflow must:
 

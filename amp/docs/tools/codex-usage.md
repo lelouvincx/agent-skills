@@ -3,7 +3,7 @@ doc_schema: "amp-artifact/v2"
 title: "Codex Usage Command"
 slug: "codex-usage-command"
 status: "active"
-summary: "Adds a command-palette action that shows current Codex 5-hour and weekly usage limits as an Amp notification."
+summary: "Adds a ChatGPT command-palette action that shows current Codex 5-hour and weekly usage limits as an Amp notification."
 artifact:
   id: "codex_usage_command"
   type: "command"
@@ -22,7 +22,7 @@ amp:
   docs_sources:
     api_docs: "amp plugins show-docs"
     agent_options: "amp plugins show-agent-options --json"
-  last_verified: "2026-07-01"
+  last_verified: "2026-07-20"
 contract:
   input_kind: "none"
   output_kind: "ui_notification"
@@ -71,7 +71,7 @@ tags:
 
 ## Summary
 
-`codex_usage_command` adds a command-palette action named `Codex usage` that shows the live Codex quota state for the account currently logged in through the local Codex CLI. It is intended for manually checking quota as an Amp notification without asking the agent.
+`codex_usage_command` adds the command-palette action `ChatGPT: Usage`. It shows the live Codex quota state for the account currently logged in through the local Codex CLI. It is intended for manually checking quota as an Amp notification without asking the agent.
 
 The command reads local Codex CLI auth and calls the same usage endpoint used by Codex status surfaces. It does not inspect Amp-hosted credentials and cannot report Amp server-side subscription usage unless that subscription is also the local Codex login.
 
@@ -80,7 +80,7 @@ The command reads local Codex CLI auth and calls the same usage endpoint used by
 - Surface: command palette
 - Registered with: `amp.registerCommand`
 - Command ID: `codex_usage_command`
-- Palette label: `codex: Codex usage`
+- Palette label: `ChatGPT: Usage`
 - Plugin file: `plugins/codex-usage.ts`
 
 ## Contract
@@ -112,7 +112,7 @@ This is read-mostly. It reads local Codex auth, makes HTTPS requests to ChatGPT/
 Run from the command palette:
 
 ```text
-Codex usage
+ChatGPT: Usage
 ```
 
 Example output:
