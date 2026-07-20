@@ -164,6 +164,8 @@ The result also includes:
 - `threadTitle` in the format `[Project] task title`
 - `threadLabels` for the Backlog project, working project and customer when present
 
+If the hint, parent thread or matching Backlog task contains a Linear issue ID, the worker keeps that ID unchanged after the project prefix in `threadTitle`. For example, it uses `[Internal] DAT-745 Support Quality Overview PR #111` rather than dropping `DAT-745`.
+
 The coordinator normalises and removes duplicate labels. A verified Backlog task needs at least one usable label. An unverified Backlog result must return an empty label list.
 
 The coordinator rejects extra keys, prose, code fences, invalid field types and contradictory verification results. Malformed output remains `unverified`. It never counts as complete or as a terminal failure.

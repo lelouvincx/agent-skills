@@ -36,6 +36,7 @@ and this project does not currently use versioned releases.
 
 ### Changed
 
+- Preserve Linear issue IDs immediately after the project prefix in Logseq-generated Amp thread titles.
 - Use consistent product names and title case for the ChatGPT usage and Logseq command-palette actions. [#114](https://github.com/lelouvincx/agent-skills/pull/114)
 - Include the Claude Code, Claude Design, and Pi specialist tools in `delegating-subagents` guidance. [#112](https://github.com/lelouvincx/agent-skills/pull/112)
 - Label parent Amp threads from their Logseq backlog project, working project, and customer before archiving logging workers. [#111](https://github.com/lelouvincx/agent-skills/pull/111)
