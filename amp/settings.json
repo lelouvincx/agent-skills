@@ -7,7 +7,7 @@
   "amp.remoteThreadCreation.enabled": true,
   "amp.mcpServers": {
     "ffmpeg-mcp": {
-      "args": ["-y", "@bitscorp-mcp/mcp-ffmpeg"],
+      "args": ["-y", "mcp-ffmpeg@1.0.5"],
       "command": "npx"
     },
     "sem": {
