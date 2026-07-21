@@ -149,6 +149,24 @@ The worker reconstructs original user intent and latest coherent outcome. It the
 
 The worker reads `pages/Canonical Pages.md` and relevant rule pages before writing. It stores parent Amp thread and useful source links in the Backlog task's `input::` property.
 
+New Backlog tasks must follow the Logseq task contract from RFC-0008 in the Logseq graph.
+
+Each new task must have direct `id::`, `project::`, `priority::`, `input::` and `updated-at::` properties.
+
+The worker must preserve a Linear issue ID in `linear::` when one exists.
+
+An active task with remaining work must have a direct `next-action::` property.
+
+The worker adds `blocker::` only when there is a known blocker or waiting condition.
+
+A `DONE` task must have `completed:: [[YYYY-MM-DD]]` and must not have a stale `next-action::` or `blocker::`.
+
+The worker records a dated work result as a directly nested activity bullet with its own stable `id::`, `observed-at::` and `outcome::` properties.
+
+It may add `decision::` and `input::` to the activity when the parent thread provides them.
+
+The worker must repair missing contract fields when it updates an existing parent-linked task.
+
 ### The worker returns strict JSON
 
 After editing, the worker re-reads both files. It returns one unfenced JSON object with this exact key set:

@@ -252,6 +252,11 @@ describe('operation coordinator', () => {
 		expect(output).toContain('Archive: complete')
 		expect(harness.createCalls).toBe(1)
 		expect(appended).toHaveLength(1)
+		expect(appended[0]).toContain('Every newly created backlog task must follow the RFC-0008 task contract')
+		expect(appended[0]).toContain('id:: <uuid>')
+		expect(appended[0]).toContain('next-action::')
+		expect(appended[0]).toContain('observed-at::')
+		expect(appended[0]).toContain('outcome::')
 		expect(operations.size).toBe(0)
 	})
 
@@ -410,6 +415,8 @@ describe('operation coordinator', () => {
 		expect(harness.createCalls).toBe(1)
 		expect(appended).toHaveLength(2)
 		expect(appended[1]).toContain('do not create a duplicate task')
+		expect(appended[1]).toContain('RFC-0008 task contract')
+		expect(appended[1]).toContain('observed-at::')
 	})
 
 	test('preserves prior partial verification when a repair result is malformed', async () => {
