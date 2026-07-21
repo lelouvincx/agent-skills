@@ -14,6 +14,7 @@ import type {
 	ThreadMessageID,
 	ThreadState,
 } from '@ampcode/plugin'
+import { readFile } from 'node:fs/promises'
 
 const LOGSEQ_REPO = process.env.AMP_LOGSEQ_GRAPH_DIR ?? '/Users/lelouvincx/Developer/second-brain-logseq'
 const WORKER_MODE = 'high' as BuiltinAgentMode
@@ -39,7 +40,9 @@ type WorkerStatus = 'creating' | 'starting' | 'running' | 'pending' | 'result-re
 type LogseqStatus = 'unverified' | 'partial' | 'complete' | 'failed'
 type DownstreamStatus = 'not-attempted' | 'running' | 'complete' | 'failed'
 type AppendStatus = 'none' | 'pending' | 'accepted' | 'unknown'
-type Timing = { startupTimeoutMs: number; workerTimeoutMs: number }
+type LogseqValidation = { backlogVerified: boolean; journalVerified: boolean; error?: string }
+type LogseqVerifier = (parentThreadID: string) => Promise<LogseqValidation>
+type Timing = { startupTimeoutMs: number; workerTimeoutMs: number; verifyLogseqWrite?: LogseqVerifier }
 type WorkerResult = {
 	version: 1
 	backlogVerified: boolean
@@ -317,7 +320,7 @@ async function consumeCurrentTurn(operation: LogseqOperation, timing: Timing): P
 		return
 	}
 
-	consumeWorkerResponse(operation, outcome.response)
+	await consumeWorkerResponse(operation, outcome.response, timing.verifyLogseqWrite ?? verifyLogseqGraph)
 }
 
 export async function waitForWorkerOutcome(
@@ -426,7 +429,11 @@ export function classifyWorkerCompatibilityError(error: unknown): CompatibilityE
 	return null
 }
 
-function consumeWorkerResponse(operation: LogseqOperation, response: ThreadAssistantMessage): void {
+async function consumeWorkerResponse(
+	operation: LogseqOperation,
+	response: ThreadAssistantMessage,
+	verifyLogseqWrite: LogseqVerifier,
+): Promise<void> {
 	operation.lastConsumedAssistantMessageID = response.id
 	operation.turnInFlight = false
 	operation.appendPromise = undefined
@@ -443,9 +450,153 @@ function consumeWorkerResponse(operation: LogseqOperation, response: ThreadAssis
 	operation.threadTitle = parsed.result.threadTitle || undefined
 	operation.threadLabels = parsed.result.threadLabels
 	operation.workerError = parsed.result.error || undefined
-	if (parsed.result.backlogVerified && parsed.result.journalVerified) operation.logseqStatus = 'complete'
-	else if (parsed.result.backlogVerified) operation.logseqStatus = 'partial'
+	if (!parsed.result.backlogVerified) {
+		operation.logseqStatus = 'failed'
+		return
+	}
+
+	const validation = await verifyLogseqWrite(operation.parentThreadID)
+	const backlogVerified = parsed.result.backlogVerified && validation.backlogVerified
+	const journalVerified = parsed.result.journalVerified && validation.journalVerified
+	if (backlogVerified && journalVerified) operation.logseqStatus = 'complete'
+	else if (backlogVerified) operation.logseqStatus = 'partial'
 	else operation.logseqStatus = 'failed'
+	if (validation.error) operation.workerError = validation.error
+}
+
+type LogseqBlock = {
+	indent: number
+	parent?: number
+	marker?: string
+	headline: string
+	properties: Map<string, string[]>
+}
+
+const ACTIONABLE_MARKERS = new Set(['TODO', 'DOING', 'DONE', 'WAITING', 'NOW', 'BLOCKED', 'CANCELLED'])
+const ACTIVE_MARKERS = new Set(['TODO', 'DOING', 'WAITING', 'NOW', 'BLOCKED'])
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+
+export function validateLogseqWrite(
+	backlogText: string,
+	journalText: string,
+	parentThreadID: string,
+	today: string,
+): LogseqValidation {
+	const blocks = parseLogseqBlocks(backlogText)
+	const tasks = blocks.filter((block) =>
+		block.marker
+		&& ACTIONABLE_MARKERS.has(block.marker)
+		&& propertyValues(block, 'input').some((value) => value.includes(parentThreadID)),
+	)
+	if (tasks.length !== 1) {
+		return {
+			backlogVerified: false,
+			journalVerified: false,
+			error: `Independent Logseq validation found ${tasks.length} parent-linked Backlog tasks; expected exactly 1.`,
+		}
+	}
+
+	const task = tasks[0]
+	const taskIndex = blocks.indexOf(task)
+	const errors: string[] = []
+	const taskID = singleProperty(task, 'id')
+	if (!taskID || !UUID_PATTERN.test(taskID)) errors.push('task id:: must be one UUID')
+	else if (blocks.filter((block) => propertyValues(block, 'id').includes(taskID)).length !== 1) errors.push('task id:: must be unique')
+	if (!/^\[\[[^\]]+\]\]$/.test(singleProperty(task, 'project') ?? '')) errors.push('project:: must be one page reference')
+	if (!/^#P\d+$/.test(singleProperty(task, 'priority') ?? '')) errors.push('priority:: must be one #P value')
+	if (singleProperty(task, 'updated-at') !== today) errors.push(`updated-at:: must be ${today}`)
+	if (task.marker && ACTIVE_MARKERS.has(task.marker) && !singleProperty(task, 'next-action')?.trim()) {
+		errors.push('active task must have next-action::')
+	}
+	if (task.marker === 'DONE') {
+		if (!/^\[\[\d{4}-\d{2}-\d{2}\]\]$/.test(singleProperty(task, 'completed') ?? '')) errors.push('DONE task must have completed:: [[YYYY-MM-DD]]')
+		if (propertyValues(task, 'next-action').length || propertyValues(task, 'blocker').length) errors.push('DONE task must not have next-action:: or blocker::')
+	}
+
+	const linearIDs = new Set(`${task.headline} ${propertyValues(task, 'input').join(' ')}`.match(/\b[A-Z]{2,10}-\d+\b/g) ?? [])
+	if (linearIDs.size && !linearIDs.has(singleProperty(task, 'linear') ?? '')) errors.push('linear:: must match a Linear issue ID in the task title or input')
+
+	const activities = blocks.filter((block) =>
+		block.parent === taskIndex
+		&& propertyValues(block, 'observed-at').includes(today)
+		&& propertyValues(block, 'outcome').some((value) => value.trim())
+		&& propertyValues(block, 'id').some((value) => UUID_PATTERN.test(value)),
+	)
+	if (!activities.length) errors.push(`direct activity for ${today} must have id::, observed-at::, and outcome::`)
+	if (errors.length) {
+		return {
+			backlogVerified: false,
+			journalVerified: false,
+			error: `Independent Logseq validation failed: ${errors.join('; ')}.`,
+		}
+	}
+
+	const journalVerified = Boolean(taskID && journalText.includes(`((${taskID}))`))
+	return {
+		backlogVerified: true,
+		journalVerified,
+		error: journalVerified ? undefined : 'Independent Logseq validation found no journal block reference to the parent-linked task.',
+	}
+}
+
+async function verifyLogseqGraph(parentThreadID: string): Promise<LogseqValidation> {
+	const today = localDateParts()
+	let backlogText: string
+	try {
+		backlogText = await readFile(`${LOGSEQ_REPO}/pages/Backlog.md`, 'utf8')
+	} catch (error) {
+		return { backlogVerified: false, journalVerified: false, error: `Independent Logseq validation could not read Backlog.md: ${errorMessage(error)}` }
+	}
+	let journalText = ''
+	try {
+		journalText = await readFile(`${LOGSEQ_REPO}/journals/${today.journalFile}`, 'utf8')
+	} catch (error) {
+		return { backlogVerified: validateLogseqWrite(backlogText, '', parentThreadID, today.isoDate).backlogVerified, journalVerified: false, error: `Independent Logseq validation could not read today's journal: ${errorMessage(error)}` }
+	}
+	return validateLogseqWrite(backlogText, journalText, parentThreadID, today.isoDate)
+}
+
+function parseLogseqBlocks(text: string): LogseqBlock[] {
+	const blocks: LogseqBlock[] = []
+	const stack: number[] = []
+	for (const line of text.split(/\r?\n/)) {
+		const bullet = line.match(/^([ \t]*)-\s+(.*)$/)
+		if (bullet) {
+			const indent = indentationWidth(bullet[1])
+			while (stack.length && blocks[stack[stack.length - 1]].indent >= indent) stack.pop()
+			const markerMatch = bullet[2].match(/^(TODO|DOING|DONE|WAITING|NOW|BLOCKED|CANCELLED)\b\s*(.*)$/)
+			blocks.push({
+				indent,
+				parent: stack[stack.length - 1],
+				marker: markerMatch?.[1],
+				headline: markerMatch?.[2] ?? bullet[2],
+				properties: new Map(),
+			})
+			stack.push(blocks.length - 1)
+			continue
+		}
+		const property = line.match(/^([ \t]*)([a-z][a-z0-9_-]*)::\s*(.*)$/)
+		if (!property || !stack.length) continue
+		const current = blocks[stack[stack.length - 1]]
+		if (indentationWidth(property[1]) <= current.indent) continue
+		const values = current.properties.get(property[2]) ?? []
+		values.push(property[3])
+		current.properties.set(property[2], values)
+	}
+	return blocks
+}
+
+function indentationWidth(value: string): number {
+	return [...value].reduce((width, character) => width + (character === '\t' ? 4 : 1), 0)
+}
+
+function propertyValues(block: LogseqBlock, key: string): string[] {
+	return block.properties.get(key) ?? []
+}
+
+function singleProperty(block: LogseqBlock, key: string): string | undefined {
+	const values = propertyValues(block, key)
+	return values.length === 1 ? values[0] : undefined
 }
 
 export function parseWorkerResult(text: string): { ok: true; result: WorkerResult } | { ok: false; error: string } {

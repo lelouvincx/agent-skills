@@ -4,13 +4,18 @@ import plugin, {
 	classifyWorkerCompatibilityError,
 	logCurrentTask,
 	parseWorkerResult,
+	validateLogseqWrite,
 	waitForWorkerOutcome,
 	type LogseqOperationStore,
 } from '../plugins/logseq-manual-log'
 
 const parentID = 'T-parent'
 const workerID = 'T-worker'
-const timing = { startupTimeoutMs: 20, workerTimeoutMs: 20 }
+const timing = {
+	startupTimeoutMs: 20,
+	workerTimeoutMs: 20,
+	verifyLogseqWrite: async () => ({ backlogVerified: true, journalVerified: true }),
+}
 const completeResult = {
 	version: 1,
 	backlogVerified: true,
@@ -175,6 +180,63 @@ describe('worker result protocol', () => {
 	})
 })
 
+describe('independent Logseq validation', () => {
+	const taskID = '14ad357e-9b55-414e-8de1-607ef93c72ea'
+	const activityID = '19c65474-045a-4ed2-a222-21c71dcd6249'
+	const today = '2026-07-21'
+	const backlog = `- ## Internal
+	- TODO DAT-745 Make the report reliable
+	  id:: ${taskID}
+	  updated-at:: ${today}
+	  project:: [[Internal]]
+	  priority:: #P1
+	  linear:: DAT-745
+	  input:: [1-Ampcode](${parentID}) [2-Linear](https://linear.app/holistics/issue/DAT-745/task)
+	  next-action:: Reconcile the unknown cohort
+		- Reviewed the current output
+		  id:: ${activityID}
+		  observed-at:: ${today}
+		  outcome:: Confirmed the report still needs correction
+`
+
+	test('accepts one complete parent-linked task and matching journal pointer', () => {
+		expect(validateLogseqWrite(backlog, `- TODO ((${taskID}))`, parentID, today)).toEqual({
+			backlogVerified: true,
+			journalVerified: true,
+			error: undefined,
+		})
+	})
+
+	test.each([
+		['task UUID', `\t  id:: ${taskID}\n`, ''],
+		['project', '\t  project:: [[Internal]]\n', ''],
+		['priority', '\t  priority:: #P1\n', ''],
+		['updated date', `\t  updated-at:: ${today}\n`, ''],
+		['next action', '\t  next-action:: Reconcile the unknown cohort\n', ''],
+		['matching Linear property', '\t  linear:: DAT-745\n', ''],
+		['dated activity', `\t\t- Reviewed the current output\n\t\t  id:: ${activityID}\n\t\t  observed-at:: ${today}\n\t\t  outcome:: Confirmed the report still needs correction\n`, ''],
+	])('rejects a task missing %s', (_label, remove, replacement) => {
+		const result = validateLogseqWrite(backlog.replace(remove, replacement), `- TODO ((${taskID}))`, parentID, today)
+		expect(result.backlogVerified).toBe(false)
+		expect(result.journalVerified).toBe(false)
+		expect(result.error).toContain('Independent Logseq validation failed')
+	})
+
+	test('keeps a valid task partial when the journal does not reference its UUID', () => {
+		expect(validateLogseqWrite(backlog, '- TODO unrelated', parentID, today)).toEqual({
+			backlogVerified: true,
+			journalVerified: false,
+			error: 'Independent Logseq validation found no journal block reference to the parent-linked task.',
+		})
+	})
+
+	test('rejects duplicate parent-linked tasks', () => {
+		const result = validateLogseqWrite(`${backlog}\n${backlog}`, `- TODO ((${taskID}))`, parentID, today)
+		expect(result.backlogVerified).toBe(false)
+		expect(result.error).toContain('found 2 parent-linked Backlog tasks')
+	})
+})
+
 describe('worker wait outcomes', () => {
 	test('consumes a fresh stored response', async () => {
 		const response = assistantResponse('stored')
@@ -258,6 +320,27 @@ describe('operation coordinator', () => {
 		expect(appended[0]).toContain('observed-at::')
 		expect(appended[0]).toContain('outcome::')
 		expect(operations.size).toBe(0)
+	})
+
+	test('does not complete downstream stages when independent validation fails', async () => {
+		const { worker } = fakeWorker()
+		const harness = fakeAmp({ createThread: () => worker })
+		const operations: LogseqOperationStore = new Map()
+		const output = await logCurrentTask(harness.amp as never, context() as never, '', 500, operations, {
+			...timing,
+			verifyLogseqWrite: async () => ({
+				backlogVerified: false,
+				journalVerified: false,
+				error: 'Independent Logseq validation failed: missing task id::.',
+			}),
+		})
+
+		expect(output).toContain('Logseq: failed')
+		expect(output).toContain('Rename: not-attempted')
+		expect(output).toContain('Labels: not-attempted')
+		expect(output).toContain('Archive: not-attempted')
+		expect(output).toContain('missing task id::')
+		expect(operations.size).toBe(1)
 	})
 
 	test('returns pending and reuses one running worker', async () => {

@@ -72,11 +72,12 @@ safety:
     - "Does not run automatically from lifecycle events."
     - "Worker must reconstruct parent context with read_thread before editing Logseq."
     - "Worker must re-read and verify both Logseq files before reporting completion."
+    - "Coordinator must independently validate the parent-linked task schema and journal block reference before reporting completion."
     - "Worker must return the exact versioned JSON result."
     - "Oracle calls from the worker are rejected."
   risks:
     - "Worker can edit the configured Logseq graph."
-    - "Write verification is worker-attested; the coordinator validates the result but does not independently parse Logseq semantics."
+    - "The coordinator validates the documented task fields and journal pointer, but it does not judge whether the worker summary is semantically complete."
     - "Operation state is in memory and cannot prevent duplicate workers after plugin reload or process restart."
 related:
   - "spawn-subagent"
@@ -167,6 +168,37 @@ It may add `decision::` and `input::` to the activity when the parent thread pro
 
 The worker must repair missing contract fields when it updates an existing parent-linked task.
 
+### The coordinator validates the write
+
+The worker result is not enough to mark Logseq complete.
+
+The TypeScript coordinator independently reads `pages/Backlog.md` and today's journal.
+
+It finds exactly one actionable Backlog task whose direct `input::` property contains the parent thread ID.
+
+It validates these direct task properties:
+
+- a unique UUID in `id::`
+- a page reference in `project::`
+- a `#P` value in `priority::`
+- the parent thread in `input::`
+- today's date in `updated-at::`
+- a matching `linear::` value when the task title or input contains a Linear issue ID
+- a non-empty `next-action::` for active tasks
+- a valid `completed::` date and no stale next action or blocker for `DONE` tasks
+
+It also requires a directly nested activity for today.
+
+That activity must have its own UUID in `id::`, today's date in `observed-at::` and a non-empty `outcome::`.
+
+The journal must contain a block reference to the validated task UUID.
+
+Missing or duplicate tasks fail Backlog verification.
+
+A valid task with a missing journal reference remains partial.
+
+The coordinator does not rename, label or archive from worker claims that fail this validation.
+
 ### The worker returns strict JSON
 
 After editing, the worker re-reads both files. It returns one unfenced JSON object with this exact key set:
@@ -188,7 +220,7 @@ The coordinator normalises and removes duplicate labels. A verified Backlog task
 
 The coordinator rejects extra keys, prose, code fences, invalid field types and contradictory verification results. Malformed output remains `unverified`. It never counts as complete or as a terminal failure.
 
-Completion is worker-attested and read-back-verified. The coordinator validates the result but does not independently inspect the meaning of graph files.
+Completion requires both worker-attested verification and independent TypeScript validation of the graph files.
 
 ### The same worker repairs incomplete state
 
