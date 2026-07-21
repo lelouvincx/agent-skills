@@ -38,6 +38,7 @@ See [PROJECTS.md](PROJECTS.md) for the generated project list.
 | --- | --- | --- |
 | [slackcli](skills/slackcli/SKILL.md) | Local | read, send, and manage Slack messages from the CLI |
 | [bigquery-query](skills/bigquery-query/SKILL.md) | Local | query Google BigQuery with the `bq` CLI |
+| [reading-social-posts](skills/reading-social-posts/SKILL.md) | Local | read social posts and inspect all attached media through TikHub |
 | [resolving-projects](skills/resolving-projects/SKILL.md) | Local | resolve spoken project names to paths and GitHub repositories |
 | [delegating-subagents](skills/delegating-subagents/SKILL.md) | Local | choose direct work, named Claude or Pi specialists, built-in `Task`, or `spawn_subagent` |
 | [notion](skills/notion/SKILL.md) | Remote | manage Notion pages, databases, and comments |
