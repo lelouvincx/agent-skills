@@ -37,6 +37,7 @@ and this project does not currently use versioned releases.
 
 ### Changed
 
+- Notify users as soon as the Logseq command creates its Amp worker thread without blocking logging.
 - Make Logseq command workers create, independently validate and repair Backlog tasks using the RFC-0008 Markdown task contract. [#118](https://github.com/lelouvincx/agent-skills/pull/118)
 - Preserve Linear issue IDs immediately after the project prefix in Logseq-generated Amp thread titles. [#115](https://github.com/lelouvincx/agent-skills/pull/115)
 - Use consistent product names and title case for the ChatGPT usage and Logseq command-palette actions. [#114](https://github.com/lelouvincx/agent-skills/pull/114)
