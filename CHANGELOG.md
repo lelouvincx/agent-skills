@@ -9,6 +9,7 @@ and this project does not currently use versioned releases.
 
 ### Added
 
+- Add `presales` as the parent workspace for Holistics presales repositories.
 - Add `reading-social-posts` for low-latency TikHub retrieval and complete inspection of attached social media. [#117](https://github.com/lelouvincx/agent-skills/pull/117)
 - Add exact-diff evidence requirements and an isolated read-only Git MCP toolset for Claude Code subagent reviews. [#113](https://github.com/lelouvincx/agent-skills/pull/113)
 - Add an experimental Inkling-backed Amp agent mode. [#106](https://github.com/lelouvincx/agent-skills/pull/106)
