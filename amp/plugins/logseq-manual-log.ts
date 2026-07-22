@@ -42,7 +42,12 @@ type DownstreamStatus = 'not-attempted' | 'running' | 'complete' | 'failed'
 type AppendStatus = 'none' | 'pending' | 'accepted' | 'unknown'
 type LogseqValidation = { backlogVerified: boolean; journalVerified: boolean; error?: string }
 type LogseqVerifier = (parentThreadID: string) => Promise<LogseqValidation>
-type Timing = { startupTimeoutMs: number; workerTimeoutMs: number; verifyLogseqWrite?: LogseqVerifier }
+type Timing = {
+	startupTimeoutMs: number
+	workerTimeoutMs: number
+	verifyLogseqWrite?: LogseqVerifier
+	onWorkerCreated?: (workerID: ThreadID) => void | Promise<void>
+}
 type WorkerResult = {
 	version: 1
 	backlogVerified: boolean
@@ -135,7 +140,10 @@ export default function (amp: PluginAPI) {
 				await ctx.ui.notify('Logseq logging cancelled.')
 				return
 			}
-			const result = await logCurrentTask(amp, ctx, hint.trim(), MAX_NOTIFICATION_CHARS, operations)
+			const result = await logCurrentTask(amp, ctx, hint.trim(), MAX_NOTIFICATION_CHARS, operations, {
+				...DEFAULT_TIMING,
+				onWorkerCreated: (workerID) => ctx.ui.notify(`Logseq Amp thread created: ${workerID}`),
+			})
 			await ctx.ui.notify(result)
 		},
 	)
@@ -216,10 +224,15 @@ async function ensureWorker(amp: PluginAPI, operation: LogseqOperation, timing: 
 		operation.workerStatus = 'creating'
 		try {
 			const workerAgent = amp.getBuiltinAgent(WORKER_MODE)
-			operation.creationPromise = workerAgent.createThread({
+			const creationPromise = workerAgent.createThread({
 				parentThreadID: operation.parentThreadID,
 				show: false,
 			}) as Promise<WorkerThread>
+			operation.creationPromise = creationPromise
+			void creationPromise.then(
+				(worker) => notifyWorkerCreated(amp, timing, worker.id),
+				() => {},
+			)
 		} catch (error) {
 			operation.workerStatus = 'failed'
 			operation.workerError = errorMessage(error)
@@ -245,6 +258,18 @@ async function ensureWorker(amp: PluginAPI, operation: LogseqOperation, timing: 
 	operation.worker = outcome.value
 	operation.workerID = outcome.value.id
 	operation.workerStatus = 'starting'
+}
+
+function notifyWorkerCreated(amp: PluginAPI, timing: Timing, workerID: ThreadID): void {
+	if (!timing.onWorkerCreated) return
+	try {
+		const notification = timing.onWorkerCreated(workerID)
+		void Promise.resolve(notification).catch((error) => {
+			amp.logger.log(`[logseq-manual-log] worker creation notification failed: ${errorMessage(error)}`)
+		})
+	} catch (error) {
+		amp.logger.log(`[logseq-manual-log] worker creation notification failed: ${errorMessage(error)}`)
+	}
 }
 
 async function startWorkerTurn(operation: LogseqOperation, timing: Timing): Promise<void> {

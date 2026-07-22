@@ -322,6 +322,36 @@ describe('operation coordinator', () => {
 		expect(operations.size).toBe(0)
 	})
 
+	test('does not wait for an unresolved worker creation notification', async () => {
+		const events: string[] = []
+		const { worker } = fakeWorker({ appendUserMessage: () => { events.push('append') } })
+		const harness = fakeAmp({ createThread: () => worker })
+		const operations: LogseqOperationStore = new Map()
+		const output = await logCurrentTask(harness.amp as never, context() as never, '', 500, operations, {
+			...timing,
+			onWorkerCreated: () => {
+				events.push('notify')
+				return new Promise(() => {})
+			},
+		})
+
+		expect(output).toContain('Logseq: complete')
+		expect(events).toEqual(['notify', 'append'])
+	})
+
+	test('continues when the worker creation notification rejects', async () => {
+		const { worker, appended } = fakeWorker()
+		const harness = fakeAmp({ createThread: () => worker })
+		const operations: LogseqOperationStore = new Map()
+		const output = await logCurrentTask(harness.amp as never, context() as never, '', 500, operations, {
+			...timing,
+			onWorkerCreated: async () => { throw new Error('notification failed') },
+		})
+
+		expect(output).toContain('Logseq: complete')
+		expect(appended).toHaveLength(1)
+	})
+
 	test('does not complete downstream stages when independent validation fails', async () => {
 		const { worker } = fakeWorker()
 		const harness = fakeAmp({ createThread: () => worker })
@@ -637,24 +667,35 @@ describe('operation coordinator', () => {
 		const { worker } = fakeWorker()
 		const harness = fakeAmp({ createThread: () => creation.promise })
 		const operations: LogseqOperationStore = new Map()
-		const shortTiming = { startupTimeoutMs: 1, workerTimeoutMs: 20 }
+		const notifications: string[] = []
+		const shortTiming = {
+			startupTimeoutMs: 1,
+			workerTimeoutMs: 20,
+			onWorkerCreated: (id: string) => { notifications.push(id) },
+		}
 
 		const first = await logCurrentTask(harness.amp as never, context() as never, '', 500, operations, shortTiming)
 		expect(first).toContain('Worker: pending (ID not assigned yet)')
 		creation.resolve(worker)
+		await Promise.resolve()
+		expect(notifications).toEqual([workerID])
 		const second = await logCurrentTask(harness.amp as never, context() as never, '', 500, operations, timing)
 		expect(second).toContain('Logseq: complete')
 		expect(harness.createCalls).toBe(1)
+		expect(notifications).toEqual([workerID])
 	})
 
 	test('keeps rejected creation owned because remote acceptance is unknown', async () => {
 		const harness = fakeAmp({ createThread: () => Promise.reject(new Error('transport rejected')) })
 		const operations: LogseqOperationStore = new Map()
-		const first = await logCurrentTask(harness.amp as never, context() as never, '', 500, operations, timing)
-		const second = await logCurrentTask(harness.amp as never, context() as never, '', 500, operations, timing)
+		const notifications: string[] = []
+		const rejectionTiming = { ...timing, onWorkerCreated: (id: string) => { notifications.push(id) } }
+		const first = await logCurrentTask(harness.amp as never, context() as never, '', 500, operations, rejectionTiming)
+		const second = await logCurrentTask(harness.amp as never, context() as never, '', 500, operations, rejectionTiming)
 		expect(first).toContain('Worker: pending (ID not assigned yet)')
 		expect(second).toContain('Worker: pending (ID not assigned yet)')
 		expect(harness.createCalls).toBe(1)
+		expect(notifications).toEqual([])
 	})
 
 	test('releases a definite synchronous creation failure', async () => {
@@ -726,6 +767,32 @@ describe('command-only plugin surface', () => {
 		expect(harness.command).toBeFunction()
 		expect(harness.tool).toBeUndefined()
 		expect([...harness.hooks.keys()]).toEqual(['tool.call'])
+	})
+
+	test('notifies when the Logseq worker thread is created', async () => {
+		const events: string[] = []
+		const { worker } = fakeWorker({ waitForResponse: () => {
+			events.push('wait')
+			return assistantResponse('response-1')
+		} })
+		const harness = fakeAmp({ createThread: () => worker })
+		const notifications: string[] = []
+		plugin(harness.amp as never)
+
+		await harness.command!({
+			thread: { id: parentID },
+			ui: {
+				input: async () => '',
+				notify: async (message: string) => {
+					notifications.push(message)
+					events.push(message.startsWith('Logseq Amp thread created:') ? 'notify-created' : 'notify-result')
+				},
+			},
+		} as never)
+
+		expect(notifications[0]).toBe(`Logseq Amp thread created: ${workerID}`)
+		expect(notifications[1]).toContain('Worker: result-received')
+		expect(events).toEqual(['notify-created', 'wait', 'notify-result'])
 	})
 
 	test('keeps the Oracle guard for active command workers', async () => {

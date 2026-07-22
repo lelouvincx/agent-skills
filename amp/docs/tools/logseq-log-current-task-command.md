@@ -22,7 +22,7 @@ amp:
   docs_sources:
     api_docs: "amp plugins show-docs"
     agent_options: "amp plugins show-agent-options --json"
-  last_verified: "2026-07-18"
+  last_verified: "2026-07-22"
 contract:
   input_kind: "ui_prompt"
   output_kind: "ui_notification"
@@ -131,6 +131,8 @@ Select `Log to Logseq` to start the operation. The notification reports these st
 The command records one in-memory operation for each parent thread before it creates a worker. It handles each create, append, response, rename, label and archive state change in order. A concurrent invocation returns the current status instead of starting duplicate work.
 
 The first invocation starts one hidden built-in `high` worker without copying recent parent messages. Later invocations use the same worker and retry only unfinished stages.
+
+As soon as Amp confirms that the worker thread was created, the command starts a notification containing the worker thread ID. It starts this creation notification once per worker, before waiting for the worker response. The command does not wait for the notification to finish. A failed or unresolved notification does not interrupt Logseq logging.
 
 This guarantee lasts for one plugin process. Amp does not provide an operation store or a way to list child threads. A plugin reload can therefore lose ownership of pending work.
 
