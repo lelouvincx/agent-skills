@@ -50,6 +50,9 @@ AGENTS_REGISTRY_ENV=vps project-resolve prefect --path
 | `dotfiles` | `lelouvincx` | `~/Developer/dotfiles` | `lelouvincx/dotfiles` |
 | `nvim` | `lelouvincx` | `~/Developer/dotfiles/nvim` | `lelouvincx/dotfiles` |
 | `data` | `holistics` | `~/Developer/holistics/data` | `null` |
+| `presales` | `holistics` | `~/Developer/holistics/presales` | `null` |
+| `demo-amql-sl-benchmark` | `holistics` | `~/Developer/holistics/presales/demo-amql-sl-benchmark` | `holistics/demo-amql-sl-benchmark` |
+| `open-semantic-layer-sheets-demo` | `holistics` | `~/Developer/holistics/presales/open-semantic-layer-sheets-demo` | `null` |
 | `data-internal` | `holistics` | `~/Developer/holistics/data/data-internal` | `holistics/data-internal` |
 | `data-eu` | `holistics` | `~/Developer/holistics/data/data-eu` | `holistics/data-eu` |
 | `data-sg` | `holistics` | `~/Developer/holistics/data/data-sg` | `holistics/data-sg` |

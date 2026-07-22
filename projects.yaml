@@ -86,6 +86,33 @@ projects:
       - data workspace
     description: Parent Holistics data workspace containing data-related repositories.
 
+  presales:
+    github: null
+    owner: holistics
+    dir: holistics/presales
+    aliases:
+      - holistics presales
+      - presales workspace
+    description: Parent Holistics presales workspace containing presales-related repositories.
+
+  demo-amql-sl-benchmark:
+    github: holistics/demo-amql-sl-benchmark
+    owner: holistics
+    dir: holistics/presales/demo-amql-sl-benchmark
+    aliases:
+      - amql semantic layer benchmark
+      - semantic layer benchmark
+    description: AMQL and open-source semantic layer AI analytics benchmark.
+
+  open-semantic-layer-sheets-demo:
+    github: null
+    owner: holistics
+    dir: holistics/presales/open-semantic-layer-sheets-demo
+    aliases:
+      - semantic layer sheets demo
+      - google sheets semantic layer demo
+    description: Holistics Semantic Layer for Google Sheets presales demo.
+
   data-internal:
     github: holistics/data-internal
     owner: holistics
