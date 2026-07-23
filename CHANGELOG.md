@@ -38,7 +38,7 @@ and this project does not currently use versioned releases.
 
 ### Changed
 
-- Make Logseq logging workers check that recorded task context is safe for a fresh agent to continue.
+- Make Logseq logging workers check that recorded task context is safe for a fresh agent to continue. [#122](https://github.com/lelouvincx/agent-skills/pull/122)
 - Resolve DealOps and demo projects from their new locations under the `presales` workspace. [#121](https://github.com/lelouvincx/agent-skills/pull/121)
 - Notify users as soon as the Logseq command creates its Amp worker thread without blocking logging. [#119](https://github.com/lelouvincx/agent-skills/pull/119)
 - Make Logseq command workers create, independently validate and repair Backlog tasks using the RFC-0008 Markdown task contract. [#118](https://github.com/lelouvincx/agent-skills/pull/118)
