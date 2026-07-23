@@ -33,7 +33,7 @@ Additionally, when the user introduces a side question with `btw` or triggers `|
 
 ## Constraints
 
-- Give every delegated task a bounded brief with scope, constraints and non-goals, success criteria, required context, validation, and a completion contract.
+- Give every delegated task a bounded brief with scope, constraints and non-goals, success criteria, validation, and a completion contract.
 - The completion contract requires a done report with evidence or a blocked report naming the smallest parent input needed.
 - Treat Task workers as isolated: include the context they need because they start without the parent conversation.
 - Do not wait for or poll `spawn_subagent`; continue useful parent work.
