@@ -33,12 +33,13 @@ Additionally, when the user introduces a side question with `btw` or triggers `|
 
 ## Constraints
 
-- Delegate only a bounded task with scope, constraints, expected output, and validation.
+- Give every delegated task a bounded brief with scope, constraints and non-goals, success criteria, required context, validation, and a completion contract.
+- The completion contract requires a done report with evidence or a blocked report naming the smallest parent input needed.
 - Treat Task workers as isolated: include the context they need because they start without the parent conversation.
 - Do not wait for or poll `spawn_subagent`; continue useful parent work.
 - Use `subagent_control` for explicit inspection, diagnosis, or cancellation, not routine completion checks.
 - Use parallel subagents only for independent work. Avoid concurrent edits to overlapping files.
-- The parent owns synthesis, integration, and final verification.
+- The parent owns synthesis, integration, and final verification. Check each result against its success criteria, then integrate it, close gaps directly, or use a focused follow-up supported by the mechanism.
 
 ## Quick test
 

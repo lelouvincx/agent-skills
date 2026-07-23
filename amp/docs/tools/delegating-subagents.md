@@ -57,6 +57,8 @@ safety:
   constraints:
     - "Before non-trivial work, consider whether independent bounded workstreams make delegation worthwhile."
     - "Prefer direct or specialist tools when delegation overhead exceeds the task."
+    - "Give every delegated task a bounded brief with scope, constraints and non-goals, success criteria, validation, and a completion contract."
+    - "Require a done report with evidence or a blocked report naming the smallest parent input needed; verify the result and close gaps directly or through a focused follow-up."
     - "Use Claude Code, Claude Design, and Pi subagents only when the user explicitly requests the named specialist."
     - "Treat Claude Code and Pi as read-only advisers; Amp applies and verifies any proposed changes."
     - "Treat Claude Design as a cloud design write tool, not a read-only adviser or local implementation worker."
@@ -157,7 +159,9 @@ Repository instructions contain the stable delegation rules that agents need bef
 
 The skill contains the detailed routing rules. It first checks for an explicit named-specialist request. Otherwise, it checks whether delegation is worthwhile. It then separates concurrent work within one parent turn from work that needs an addressable cross-turn thread.
 
-It applies the same safety rules to both mechanisms. Briefs must be bounded, concurrent work must be independent, and the parent owns integration and final checks.
+It applies the same safety rules to every mechanism. Each brief defines its scope, constraints and non-goals, success criteria, validation, and completion contract. The completion contract requires either a done report with evidence or a blocked report naming the smallest parent input needed.
+
+The parent checks the result against the success criteria. If a criterion is not met, the parent closes the gap directly or uses a focused follow-up supported by the mechanism. This feedback is event-driven: agents do not poll spawned children for completion.
 
 ### Delegate side questions
 
