@@ -95,6 +95,31 @@ projects:
       - presales workspace
     description: Parent Holistics presales workspace containing presales-related repositories.
 
+  presales-calls:
+    github: null
+    owner: holistics
+    dir: holistics/presales/presales-calls
+    aliases:
+      - presales calls
+    description: Holistics presales call transcripts.
+
+  demo-ai:
+    github: holistics/demo-ai
+    owner: holistics
+    dir: holistics/presales/demo-ai
+    aliases:
+      - demo ai
+    description: Holistics AI demo project.
+
+  holistics-embed-demo:
+    github: holistics/holistics-embed-demo
+    owner: holistics
+    dir: holistics/presales/holistics-embed-demo
+    aliases:
+      - embed demo
+      - holistics embed demo
+    description: Holistics embedded analytics demo project.
+
   demo-amql-sl-benchmark:
     github: holistics/demo-amql-sl-benchmark
     owner: holistics
@@ -177,7 +202,7 @@ projects:
   demo4:
     github: holistics/data-demo4
     owner: holistics
-    dir: holistics/demo4
+    dir: holistics/presales/demo4
     aliases:
       - data demo4
       - demo 4
@@ -239,7 +264,7 @@ projects:
   dealops:
     github: holistics/dealops
     owner: holistics
-    dir: holistics/dealops
+    dir: holistics/presales/dealops
     aliases:
       - deal ops
       - holistics dealops

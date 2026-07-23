@@ -51,6 +51,9 @@ AGENTS_REGISTRY_ENV=vps project-resolve prefect --path
 | `nvim` | `lelouvincx` | `~/Developer/dotfiles/nvim` | `lelouvincx/dotfiles` |
 | `data` | `holistics` | `~/Developer/holistics/data` | `null` |
 | `presales` | `holistics` | `~/Developer/holistics/presales` | `null` |
+| `presales-calls` | `holistics` | `~/Developer/holistics/presales/presales-calls` | `null` |
+| `demo-ai` | `holistics` | `~/Developer/holistics/presales/demo-ai` | `holistics/demo-ai` |
+| `holistics-embed-demo` | `holistics` | `~/Developer/holistics/presales/holistics-embed-demo` | `holistics/holistics-embed-demo` |
 | `demo-amql-sl-benchmark` | `holistics` | `~/Developer/holistics/presales/demo-amql-sl-benchmark` | `holistics/demo-amql-sl-benchmark` |
 | `open-semantic-layer-sheets-demo` | `holistics` | `~/Developer/holistics/presales/open-semantic-layer-sheets-demo` | `null` |
 | `data-internal` | `holistics` | `~/Developer/holistics/data/data-internal` | `holistics/data-internal` |
@@ -59,14 +62,14 @@ AGENTS_REGISTRY_ENV=vps project-resolve prefect --path
 | `data-us` | `holistics` | `~/Developer/holistics/data/data-us` | `holistics/data-us` |
 | `dbt` | `holistics` | `~/Developer/holistics/data/dbt` | `holistics/dbt` |
 | `prefect` | `holistics` | `~/Developer/holistics/data/prefect` | `holistics/prefect` |
-| `demo4` | `holistics` | `~/Developer/holistics/demo4` | `holistics/data-demo4` |
+| `demo4` | `holistics` | `~/Developer/holistics/presales/demo4` | `holistics/data-demo4` |
 | `testing4` | `holistics` | `~/Developer/holistics/testing4` | `holistics/data-testing4` |
 | `duty-support` | `lelouvincx` | `~/Developer/holistics/duty-support` | `lelouvincx/duty-support` |
 | `holistics-docs` | `holistics` | `~/Developer/holistics/docs` | `holistics/docs` |
 | `holistics-skills` | `holistics` | `~/Developer/holistics/skills` | `holistics/skills` |
 | `internal-skills` | `holistics` | `~/Developer/holistics/internal-skills` | `holistics/internal-skills` |
 | `marketing` | `holistics` | `~/Developer/holistics/marketing` | `holistics/marketing` |
-| `dealops` | `holistics` | `~/Developer/holistics/dealops` | `holistics/dealops` |
+| `dealops` | `holistics` | `~/Developer/holistics/presales/dealops` | `holistics/dealops` |
 | `add2cart` | `holistics` | `~/Developer/holistics/add2cart` | `holistics/add2cart` |
 | `holistics-remotion` | `holistics` | `~/Developer/holistics/remotion` | `holistics/holistics-remotion` |
 | `personal-finance` | `lelouvincx` | `~/Developer/personal-finance` | `lelouvincx/personal-finance` |
