@@ -3,7 +3,7 @@ doc_schema: "amp-artifact/v2"
 title: "Spawn Subagent"
 slug: "spawn-subagent"
 status: "active"
-summary: "Launches a bounded independent Amp subagent thread locally, in an Orb, or on a stable runner target."
+summary: "Starts an addressable child thread for bounded cross-turn work locally, in an Orb, or on a stable runner target."
 artifact:
   id: "spawn_subagent"
   type: "agent_tool"
@@ -22,7 +22,7 @@ amp:
   docs_sources:
     api_docs: "amp plugins show-docs"
     agent_options: "amp plugins show-agent-options --json"
-  last_verified: "2026-07-18"
+  last_verified: "2026-07-23"
 contract:
   input_kind: "json_schema"
   output_kind: "text"
@@ -93,7 +93,7 @@ tags:
 
 ## Summary
 
-`spawn_subagent` starts an independent Amp subagent thread for one bounded task.
+`spawn_subagent` returns an exposed child thread ID immediately for one bounded task. Use it when work must remain addressable across turns.
 
 Choose where the subagent runs with the `executor` field:
 
@@ -103,21 +103,25 @@ Choose where the subagent runs with the `executor` field:
 
 Only local execution accepts `cwd`. Orb and runner execution reject `cwd` and use their remote workspace.
 
-The parent can keep working while the child reports back through `send_to_thread`. The child archives itself after a terminal report when it needs no follow-up.
+The parent can keep working while the child reports back through `send_to_thread`. The parent can inspect, control or message the exposed thread later. The child archives itself after a terminal report when it needs no follow-up.
 
 ### Choose Task or spawn_subagent
 
-Use built-in `Task` when the parent needs the result in its current turn. Use `spawn_subagent` when the work needs a durable child thread, asynchronous execution or later follow-up.
+Use built-in `Task` for ordinary bounded one-shot delegation. This includes independent concurrent calls. The parent turn waits for each final tool result.
+
+Use `spawn_subagent` when the child must be addressable across turns. Choose it for later messaging, required follow-up, visible history or control, or custom local, Orb or runner execution. Parallelism alone does not select `spawn_subagent`.
 
 Both tools give the subagent a separate context window and tool access. Their lifecycle and coordination models differ:
 
 | Use | Built-in `Task` | `spawn_subagent` |
 | --- | --- | --- |
-| Parent flow | Receives the subagent's final summary through the current tool call | Returns a child thread ID immediately; the parent must not wait or poll |
+| Parent flow | Waits in the parent turn and receives the final summary through each tool call | Returns an exposed child thread ID immediately; the parent must not wait or poll |
 | Context | Starts fresh with the task brief supplied by the parent | Starts fresh, then uses `read_thread` to reconstruct parent intent |
 | Follow-up | The user and parent cannot guide it mid-task | The child can remain open for required parent input |
 | Reporting | Returns one final summary | Reports through `send_to_thread`, then archives itself when no follow-up is required |
-| Best fit | Ordinary bounded delegation whose result is needed in the current turn | Work needing durable asynchronous execution, visible child-thread history, or possible parent follow-up |
+| Parallel work | Supports independent concurrent calls; the parent turn waits for every final result | Supports concurrent work, but parallelism alone is not a reason to use it |
+| Execution | Uses the built-in Task execution path | Selects local, Orb or a stable runner target |
+| Best fit | Ordinary bounded one-shot delegation | Addressable cross-turn execution, later messaging, required follow-up, or visible history and control |
 
 Use a direct or specialist tool when it already covers the job. For example, prefer exact reads, direct searches, `finder`, `librarian` or `oracle` over a generic subagent.
 
@@ -135,7 +139,7 @@ The related `subagent_control` tool can list, inspect or cancel children created
 - Registered with: `amp.registerTool`
 - Tool name: `spawn_subagent`
 - Plugin file: `plugins/spawn-subagent.ts`
-- Trigger keywords: `/subagent`, `|subagent`, `spawn subagent`, `parallel subagent`, `run this in parallel`
+- Explicit trigger phrases: `/subagent`, `|subagent`, `spawn a subagent`
 
 When invoking from the start of a prompt, prefer `|subagent` because Amp reserves `/` for the command palette.
 
@@ -227,6 +231,8 @@ The prompt gives the subagent two phases:
 
 ## Examples
 
+Use built-in `Task`, including concurrent calls, when each bounded task only needs to return one final result to the waiting parent turn. The examples below need an exposed child thread or a custom execution target.
+
 ### Local examples
 
 Spawn a default medium subagent:
@@ -286,7 +292,7 @@ Use a known live runner by stable ID:
 | `read_thread` is unavailable or fails | Do not execute or inspect partial parent context. Send a `blocked` report, ask the parent to restore access or re-scope the task, and remain unarchived. |
 | The reconstructed parent intent conflicts with the bounded instructions and no explicit redirect resolves it | Do not guess. Send a `blocked` report naming the conflict and remain unarchived. |
 | The parent redirected the work before the child's initial `read_thread` call | Follow the latest coherent redirect and explain how the bounded task still supports it. |
-| The parent redirects only in the parent thread after the child's initial intent reconstruction | The child may finish the bounded task it already understood. As with any asynchronous work, the parent integrates the result only if it still supports the current direction. |
+| The parent redirects only in the parent thread after the child's initial intent reconstruction | The child may finish the bounded task it already understood. Because the child runs independently across turns, the parent integrates the result only if it still supports the current direction. |
 | The child needs a product decision, missing permission, or required context | Send a `blocked` report with one smallest question in `## Next`, then remain open for the parent's reply. |
 | The child finishes follow-up requested by the parent | Send a new terminal `done` report, then archive after that report succeeds. |
 | Optional review would be useful but no decision is required | Report `done` and `No follow-up needed`. Optional review is part of the parent's normal integration responsibility. |
@@ -294,7 +300,7 @@ Use a known live runner by stable ID:
 | The child discovers unrelated cleanup or a nearby non-blocking issue | Do not broaden scope. Mention it briefly as evidence only if it materially affects integration. |
 | `send_to_thread` fails | Do not archive. Retry only after diagnosing the failure; preserve the report for a later successful send. |
 
-Asynchronous delegation gives the child a point-in-time understanding of the parent task. The child must not poll to remove this limit. The parent owns integration with the current direction.
+Cross-turn delegation gives the child a point-in-time understanding of the parent task. The child must not poll to remove this limit. The parent owns integration with the current direction.
 
 ## Troubleshooting
 
@@ -304,6 +310,7 @@ Asynchronous delegation gives the child a point-in-time understanding of the par
 - `cwd is only supported for local execution`: omit `cwd` for Orb and runner execution; the Orb or selected runner supplies the workspace.
 - `cwd does not exist` or `cwd is not a directory`: pass an existing directory accessible to the parent Amp process.
 - Initial message append failed: use the child thread ID included in the error to inspect or archive the empty thread manually.
+- No exposed child thread is needed: use built-in `Task`, including for independent concurrent calls. The parent turn waits for each final result.
 - Subagent does not report back: inspect the child thread ID from the return value and check whether `send_to_thread` is available.
 - Subagent reports back but remains visible: check whether `archive_current_thread` is available to the subagent, then archive the child thread manually if needed.
 
@@ -317,4 +324,4 @@ Asynchronous delegation gives the child a point-in-time understanding of the par
 - Update this doc when the relationship with `send_to_thread` changes.
 - Re-check the comparison with built-in `Task` when Amp changes its documented subagent lifecycle.
 - Re-check `subagent_control` transcript discovery when the spawn result format changes.
-- Keep examples bounded; this tool is for parallel slices, not broad delegation.
+- Keep examples bounded and cross-turn. Use built-in `Task` when one-shot delegation is enough, including for independent concurrent calls.
