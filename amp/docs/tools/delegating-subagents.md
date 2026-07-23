@@ -53,8 +53,9 @@ runtime:
   logs: []
 safety:
   permission_level: "guidance-only"
-  user_gate: "description match, explicit skill load, or repository instruction before delegation"
+  user_gate: "description match, explicit skill load, or repository instruction to evaluate delegation"
   constraints:
+    - "Before non-trivial work, consider whether independent bounded workstreams make delegation worthwhile."
     - "Prefer direct or specialist tools when delegation overhead exceeds the task."
     - "Use Claude Code, Claude Design, and Pi subagents only when the user explicitly requests the named specialist."
     - "Treat Claude Code and Pi as read-only advisers; Amp applies and verifies any proposed changes."
@@ -103,7 +104,7 @@ Task difficulty does not decide between `Task` and `spawn_subagent`. The lifecyc
 - Invocation: description match or explicit skill load
 - ID: `delegating-subagents`
 
-Repository instructions require loading this skill before delegating work.
+Repository instructions require agents to consider delegation before non-trivial work. Agents load this skill when delegation could reduce latency or preserve the parent thread's focus.
 
 ## Contract
 
@@ -152,7 +153,9 @@ Normal completion arrives through `send_to_thread`. Do not poll while waiting.
 
 ## Behavior
 
-The skill first checks for an explicit named-specialist request. Otherwise, it checks whether delegation is worthwhile. It then separates concurrent work within one parent turn from work that needs an addressable cross-turn thread.
+Repository instructions contain the stable delegation rules that agents need before loading this skill. Agents consider independent, bounded workstreams before non-trivial work. They keep simple reads, searches, localised edits and unresolved design decisions in the parent. They also recognise explicit subagent and side-question triggers.
+
+The skill contains the detailed routing rules. It first checks for an explicit named-specialist request. Otherwise, it checks whether delegation is worthwhile. It then separates concurrent work within one parent turn from work that needs an addressable cross-turn thread.
 
 It applies the same safety rules to both mechanisms. Briefs must be bounded, concurrent work must be independent, and the parent owns integration and final checks.
 
@@ -220,4 +223,4 @@ Keep these rules:
 
 ## Maintenance notes
 
-This document is the source of truth for the skill artifact. Keep downstream guidance aligned with the distinction between concurrent Task calls within a turn and addressable cross-turn child threads. Also keep it aligned with the named specialist subagent contracts, the `spawn-subagent` and `subagent-control` capability documents, and repository instructions that require loading the skill before delegation.
+This document is the source of truth for the skill artifact. Keep detailed routing rules in the skill and only the stable delegation rules in repository instructions. Keep both aligned with the distinction between concurrent Task calls within a turn and addressable cross-turn child threads. Also keep them aligned with the named specialist subagent contracts and the `spawn-subagent` and `subagent-control` capability documents.
