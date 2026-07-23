@@ -21,7 +21,7 @@ amp:
   docs_sources:
     api_docs: null
     agent_options: null
-  last_verified: "2026-07-12"
+  last_verified: "2026-07-23"
 contract:
   input_kind: "natural_language"
   output_kind: "instructions"
@@ -60,12 +60,12 @@ safety:
     - "Treat Claude Code and Pi as read-only advisers; Amp applies and verifies any proposed changes."
     - "Treat Claude Design as a cloud design write tool, not a read-only adviser or local implementation worker."
     - "Treat side questions introduced with 'btw' or triggered with '|btw' as delegation requests so the parent can preserve its current task."
-    - "Use built-in Task for bounded work whose result is needed in the current turn."
-    - "Use spawn_subagent only for durable asynchronous work, visible child-thread history, or possible parent follow-up."
+    - "Use built-in Task by default for bounded one-shot work, including independent Task calls that run concurrently within one parent turn."
+    - "Use spawn_subagent only for an addressable child thread, cross-turn execution or reporting, later messaging or required follow-up, visible control and diagnosis, explicit spawn requests, or custom execution targets."
     - "Use subagent_control only for explicit inspection, diagnosis, or cancellation; do not poll spawned children for completion."
     - "The parent remains responsible for synthesis, integration, and final verification."
   risks:
-    - "Choosing asynchronous delegation for ordinary in-turn work adds unnecessary coordination overhead."
+    - "Choosing a cross-turn child thread for ordinary in-turn work adds unnecessary coordination overhead."
     - "Concurrent agents editing overlapping files can create conflicting changes."
 related:
   - "claude-code-subagent"
@@ -91,8 +91,8 @@ Choose the delegation mechanism from what the parent needs next:
 | The user explicitly asks for Claude or Claude Code advice | use `claude_code_subagent` |
 | The user explicitly asks to use Claude Design | use `claude_design_subagent` |
 | The user explicitly asks for Pi, pi.dev or Pi Coding Agent advice | use `pi_code_subagent` |
-| The parent needs the delegated result in this turn | use built-in `Task` |
-| The work needs an addressable child thread, asynchronous execution or later follow-up | use `spawn_subagent` |
+| The parent needs bounded one-shot work, including concurrent independent calls within this turn | use built-in `Task` |
+| The work needs an addressable child thread, cross-turn reporting, later messaging, visible control or a custom execution target | use `spawn_subagent` |
 
 Task difficulty does not decide between `Task` and `spawn_subagent`. The lifecycle does.
 
@@ -111,8 +111,8 @@ The skill receives the current task and its coordination needs from conversation
 
 1. Work directly or use a specialist tool when it already covers the task.
 2. Use the named Claude Code, Claude Design or Pi subagent when the user explicitly requests it.
-3. Use built-in `Task` when bounded delegated work must return during the current turn.
-4. Use `spawn_subagent` when work needs durable asynchronous execution, visible child-thread history, or possible parent follow-up.
+3. Use built-in `Task` by default for bounded one-shot delegation. The parent turn stays open until each Task returns one final summary. This includes multiple independent Task calls running concurrently.
+4. Use `spawn_subagent` for an exposed, addressable child thread. Choose it for execution or reporting across parent turns, later parent-child messaging, required follow-up, visible history, status, cancellation or diagnosis, explicit spawn requests, or custom local, Orb or runner selection.
 
 The skill declares no tool allowlist.
 
@@ -152,15 +152,15 @@ Normal completion arrives through `send_to_thread`. Do not poll while waiting.
 
 ## Behavior
 
-The skill first checks for an explicit named-specialist request. Otherwise, it checks whether delegation is worthwhile. It then separates in-turn work from durable asynchronous work.
+The skill first checks for an explicit named-specialist request. Otherwise, it checks whether delegation is worthwhile. It then separates concurrent work within one parent turn from work that needs an addressable cross-turn thread.
 
-It applies the same safety rules to both mechanisms. Briefs must be bounded, parallel work must be independent, and the parent owns integration and final checks.
+It applies the same safety rules to both mechanisms. Briefs must be bounded, concurrent work must be independent, and the parent owns integration and final checks.
 
 ### Delegate side questions
 
 A side question introduced with `btw` or `|btw` always makes delegation worthwhile. Delegating it lets the parent preserve its current task.
 
-Remove the trigger from the delegated brief. Use built-in `Task` when the answer is needed now. Use `spawn_subagent` when the question can report later or may need follow-up.
+Remove the trigger from the delegated brief. Use built-in `Task` by default, including when the parent continues useful work in the same turn. Use `spawn_subagent` when the question must report across parent turns or needs later messaging or follow-up.
 
 ## Permissions and side effects
 
@@ -182,14 +182,14 @@ Side effects start only when the agent invokes a delegation mechanism.
 | "Use Claude Design to create this design" | `claude_design_subagent` | The user explicitly authorised the cloud design workflow and its possible cloud writes. |
 | "Ask Pi to propose a patch" | `pi_code_subagent` | The user explicitly selected the read-only Pi adviser. |
 | Investigate a bounded failure whose result determines the current response | Built-in `Task` | The parent needs the result before this turn can finish. |
-| Run two independent checks whose results are both needed now | Parallel built-in `Task` calls | The work is independent and remains in-turn. |
-| Implement an independent slice while the parent continues shaping the design | `spawn_subagent` | The work benefits from a durable child thread and asynchronous reporting. |
+| Run two independent checks while the parent does other useful work in the same turn | Concurrent built-in `Task` calls | Each Task returns one final summary before the parent turn ends. |
+| Implement a bounded independent slice while the parent continues shaping the design in the same turn | Built-in `Task` | Concurrent work within a turn does not need an addressable child thread. |
 | Run durable delegated work in an Amp Orb or on a known live runner | `spawn_subagent` with `executor` | Select `orb` or pass the runner's stable ID; do not pass a local `cwd` to remote execution. |
 | Investigate a slice that may require a later product or architecture decision from the parent | `spawn_subagent` | The child can remain open for required follow-up. |
-| "Ask an agent to check this" with no asynchronous or durable-thread requirement | Built-in `Task` | Generic requests for an agent do not imply `spawn_subagent`. |
+| "Ask an agent to check this" or "run this in parallel" | Built-in `Task` | Generic agent wording and concurrency alone do not imply `spawn_subagent`. |
 | “Btw, why does this test use a fake clock?” or `\|btw why does this test use a fake clock?` | Built-in `Task` by default | The aside must not displace the parent's current task; delegate the question after removing the trigger. |
 | A `btw` aside that can report later or may need parent follow-up | `spawn_subagent` | The aside is delegated, and its lifecycle benefits from a durable child thread. |
-| "Spawn a subagent", "run this in parallel", `/subagent`, or `\|subagent` | `spawn_subagent` | The user explicitly selected the durable asynchronous mechanism. Bound the brief before invoking it. |
+| "Spawn a subagent", `/subagent`, or `\|subagent` | `spawn_subagent` | The user explicitly selected an addressable child thread. Bound the brief before invoking it. |
 | "Which subagents are running?" | `subagent_control` with `list` | Return a point-in-time view of child states and report statuses without waiting. |
 | "Check that subagent" | `subagent_control` with `status` | Return that child's point-in-time state, report status, and report summary without waiting. |
 | "Stop that subagent" | `subagent_control` with `cancel` | Stop the owned child's active turn without archiving or deleting its thread. |
@@ -206,18 +206,18 @@ Keep these rules:
 - Claude Code and Pi stay read-only; Claude Design may write only to its cloud-hosted projects
 - lifecycle decides between built-in `Task` and `spawn_subagent`, not task difficulty alone
 - natural `btw` side questions and the `|btw` trigger mark work for delegation; they do not select a delegation mechanism
-- generic “agent” wording selects built-in `Task`; explicit spawn or parallel-thread wording selects `spawn_subagent`
-- parallelism requires independent work and non-overlapping writes
+- generic “agent” wording and “run this in parallel” select built-in `Task`; explicit `/subagent`, `|subagent` or “spawn a subagent” wording selects `spawn_subagent`
+- concurrent work requires independent tasks and non-overlapping writes
 - the parent always owns decisions, synthesis, integration, and final verification
 
 ## Troubleshooting
 
 - Skill unavailable: confirm `skills/delegating-subagents/SKILL.md` exists and run `./sync-skills.sh`.
 - Named specialist not selected: confirm the user explicitly requested Claude Code, Claude Design or Pi. Generic agent wording does not qualify.
-- Wrong delegation mechanism selected: compare whether the result is needed in the current turn or requires a durable child thread.
+- Wrong delegation mechanism selected: use `Task` for ordinary one-shot work, including concurrent calls within a turn. Use `spawn_subagent` only when the work needs an addressable cross-turn thread or custom execution target.
 - Spawned child needs inspection or cancellation: use `subagent_control`; do not repeatedly query it for completion.
 - Parallel edits conflict: delegate only independent slices with non-overlapping write targets.
 
 ## Maintenance notes
 
-This document is the source of truth for the skill artifact. Keep it aligned with `skills/delegating-subagents/SKILL.md`, the named specialist subagent contracts, the `spawn-subagent` and `subagent-control` capability documents, and repository instructions that require loading the skill before delegation.
+This document is the source of truth for the skill artifact. Keep downstream guidance aligned with the distinction between concurrent Task calls within a turn and addressable cross-turn child threads. Also keep it aligned with the named specialist subagent contracts, the `spawn-subagent` and `subagent-control` capability documents, and repository instructions that require loading the skill before delegation.
