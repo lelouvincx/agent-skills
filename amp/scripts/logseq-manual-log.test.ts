@@ -319,6 +319,7 @@ describe('operation coordinator', () => {
 		expect(appended[0]).toContain('next-action::')
 		expect(appended[0]).toContain('observed-at::')
 		expect(appended[0]).toContain('outcome::')
+		expect(appended[0]).toContain('can a fresh agent safely act on every recorded fact')
 		expect(operations.size).toBe(0)
 	})
 
@@ -530,6 +531,7 @@ describe('operation coordinator', () => {
 		expect(appended[1]).toContain('do not create a duplicate task')
 		expect(appended[1]).toContain('RFC-0008 task contract')
 		expect(appended[1]).toContain('observed-at::')
+		expect(appended[1]).toContain('can a fresh agent safely act on every recorded fact')
 	})
 
 	test('preserves prior partial verification when a repair result is malformed', async () => {
