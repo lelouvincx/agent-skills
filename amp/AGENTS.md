@@ -8,8 +8,15 @@
 - When planning/devising, tell what to do from your side and my side, and what the expected output is
 - Save visual artifacts (screenshots, recordings, and similar media) under `.amp/in/artifacts/`.
 - When `AMP_NO_TUI=1`, recognize this is an Amp remote control thread.
+
+## Delegation
+
+- Before starting non-trivial work, consider whether it contains independent, bounded workstreams that can run concurrently.
+- If delegation would materially reduce latency or preserve the parent thread's focus, load the `delegating-subagents` skill and choose the appropriate mechanism.
+- Do not delegate simple reads, searches, localized edits, or unresolved product or design decisions. The parent remains responsible for synthesis, integration, and final verification.
+- Every delegated task needs a bounded brief with scope, constraints and non-goals, success criteria, validation, and a completion contract. Require a done report with evidence or a blocked report naming the smallest parent input needed. The parent verifies the result and closes any gap directly or through a focused follow-up.
 - When a user message starts with `|subagent` or `/subagent`, call `spawn_subagent` with the remaining message as the bounded subagent instructions.
-- Before delegating work, load the `delegating-subagents` skill to choose between built-in `Task`, `spawn_subagent`, or doing the work directly.
+- Treat side questions introduced with `btw` or triggered with `|btw` as delegation requests so they do not displace the parent's current task. Load the `delegating-subagents` skill to choose the mechanism.
 
 ## Holistics
 
