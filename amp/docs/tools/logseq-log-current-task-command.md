@@ -170,6 +170,15 @@ It may add `decision::` and `input::` to the activity when the parent thread pro
 
 The worker must repair missing contract fields when it updates an existing parent-linked task.
 
+Before final read-back, the worker checks whether a fresh agent could safely:
+
+- act on every recorded fact about the task
+- answer status and history questions
+- take the recorded next action without asking the user to repeat known context
+- identify a change in intent or missing authority precisely instead of guessing
+
+The worker repairs the task or activity when this check finds missing durable context.
+
 ### The coordinator validates the write
 
 The worker result is not enough to mark Logseq complete.
