@@ -38,7 +38,7 @@ and this project does not currently use versioned releases.
 
 ### Changed
 
-- Distinguish concurrent one-turn Task delegation from addressable cross-turn subagent coordination.
+- Distinguish concurrent one-turn Task delegation from addressable cross-turn subagent coordination. [#123](https://github.com/lelouvincx/agent-skills/pull/123)
 - Make Logseq logging workers check that recorded task context is safe for a fresh agent to continue. [#122](https://github.com/lelouvincx/agent-skills/pull/122)
 - Resolve DealOps and demo projects from their new locations under the `presales` workspace. [#121](https://github.com/lelouvincx/agent-skills/pull/121)
 - Notify users as soon as the Logseq command creates its Amp worker thread without blocking logging. [#119](https://github.com/lelouvincx/agent-skills/pull/119)
