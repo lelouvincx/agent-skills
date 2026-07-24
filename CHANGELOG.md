@@ -38,7 +38,7 @@ and this project does not currently use versioned releases.
 
 ### Changed
 
-- Require agents to apply the GOV.UK style skill when drafting messages or emails.
+- Require agents to apply the GOV.UK style skill when drafting messages or emails. [#125](https://github.com/lelouvincx/agent-skills/pull/125)
 - Make agents evaluate delegation before non-trivial work, define completion contracts for delegated tasks, and keep detailed routing rules in the `delegating-subagents` skill. [#124](https://github.com/lelouvincx/agent-skills/pull/124)
 - Distinguish concurrent one-turn Task delegation from addressable cross-turn subagent coordination. [#123](https://github.com/lelouvincx/agent-skills/pull/123)
 - Make Logseq logging workers check that recorded task context is safe for a fresh agent to continue. [#122](https://github.com/lelouvincx/agent-skills/pull/122)
