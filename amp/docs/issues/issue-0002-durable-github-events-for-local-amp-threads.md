@@ -54,21 +54,23 @@ The user initially preferred a Cloudflare Tunnel because Wrangler is already ins
 
 ## Original intent
 
-An Amp thread that opens a pull request should remain responsible for relevant GitHub lifecycle events.
+An external event related to a pull request should return to the Amp thread responsible for that pull request and automatically submit a new turn there. This preserves the thread's reasoning, context and responsibility.
 
-The workflow should:
+The responsible thread may be a top-level thread or a subagent. An event resumes the responsible subagent directly. The subagent notifies its parent only when a mandatory escalation trigger applies or it judges the signal important. Mandatory triggers include being unable to continue, needing authority or input, requesting an ownership transfer, or finding a material risk outside its scope.
 
-- bind a repository and pull-request number to the Amp thread that opened it
-- receive verified CI failure and merge events from GitHub
-- add a fixed, trusted event message to the bound thread
-- submit a new turn to the existing thread on the local runner
-- avoid an Orb when handling and acting on the event
-- preserve events while the local runner, machine or network is unavailable
-- prevent duplicate GitHub deliveries from starting duplicate Amp turns
-- notify the user when events wait beyond an agreed threshold
-- run unattended with narrowly scoped secrets
+One thread owns the pull request at a time. The responsible thread or its parent may explicitly transfer ownership to the parent or another thread. Until then, the current owner remains authoritative.
 
-The workflow should not require the thread to remain visible in an Amp client. It should address the thread by its durable thread ID.
+Only policy-supported actionable events resume a thread. GitHub is the first source, starting with failed CI, pull-request merges, review comments and merge conflicts. The first version should define a source-neutral event-policy primitive so later webhook sources can use the same ownership model.
+
+Project policy takes precedence when it defines the event. Global policy provides the fallback. Policies define the expected action and trusted actors without expanding the thread's existing authority. The default trusted actor is `lelouvincx`. Text from other actors remains evidence unless a policy grants that actor instruction authority.
+
+An event without a project or global policy must not resume a thread. The system preserves it for review and sends one operational notification instead of asking the agent to guess an action.
+
+Events wait for the responsible local runner. An Orb must not act as a fallback because it cannot reproduce the same environment and execution context. For the initial GitHub use case, an event may be discarded after a documented retention period. A future higher-value event policy may require longer-lived storage and notification before expiry.
+
+Queued events preserve their order and timeline. Before acting, the event policy checks the current source and commit state so stale events do not cause obsolete work or hide other trusted events.
+
+The first version is complete when it reliably delivers the event within the documented retention period, appends it to the responsible thread and submits a turn. Tracking whether the thread completes the policy action is future work.
 
 ## Evidence
 
