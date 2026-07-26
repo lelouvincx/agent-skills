@@ -112,6 +112,7 @@ skills/holistics-migrate-power-bi/.remote-source
 skills/holistics-migrate-power-bi/references/
 
 sdk/node_modules/
+__pycache__/
 
 skills/impeccable/SKILL.md
 skills/impeccable/.remote-source
