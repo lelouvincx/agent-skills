@@ -4,9 +4,9 @@ code: "ISSUE-0002"
 title: "Durable GitHub events for local Amp threads"
 slug: "durable-github-events-for-local-amp-threads"
 file: "issue-0002-durable-github-events-for-local-amp-threads.md"
-status: "Open"
+status: "In progress"
 priority: "P1"
-summary: "GitHub events cannot reliably return to the local Amp thread that opened a pull request when its runner is offline."
+summary: "Local pull-request ownership is implemented, but GitHub events cannot yet return reliably to the responsible Amp thread."
 created: "2026-07-26"
 updated: "2026-07-26"
 amp_thread_id:
@@ -22,6 +22,8 @@ implementation:
   - path: "../tools/bind-pr-to-thread.md"
   - path: "../tools/register-thread-event-recipient.md"
   - path: "../tools/transfer-pr-thread-owner.md"
+  - path: "../../plugins/github-thread-events.ts"
+  - path: "../../scripts/github-thread-events.test.ts"
 pull_requests:
   - "https://github.com/lelouvincx/agent-skills/pull/126"
 related: []
@@ -41,7 +43,7 @@ GitHub events cannot yet return reliably to the local Amp thread that opened a p
 
 The desired workflow uses an always-on local Amp runner when available. It must queue events while the runner or machine is unavailable. When the runner returns, it must append each event to the existing pull-request thread and submit a new turn without creating an Orb.
 
-[RFC-0009](../rfcs/rfc-0009-durable-github-events-for-local-amp-threads.md) is accepted. Disposable experiments passed its stable-runner reattachment, single-poller and merge-conflict Draft gates. The local ownership capability contracts are documented. No production plugin or Cloudflare infrastructure has been implemented.
+[RFC-0009](../rfcs/rfc-0009-durable-github-events-for-local-amp-threads.md) is accepted. Disposable experiments passed its stable-runner reattachment, single-poller and merge-conflict Draft gates. The production-projected local plugin now implements and tests the 3 ownership tools and their SQLite state. Event policy, queue pulling, GitHub preflight, thread delivery, cloud infrastructure and deployment remain unimplemented.
 
 ## Trigger
 
@@ -147,6 +149,12 @@ Cleanup closed pull request 128 without merging it. Both temporary remote refs w
 
 This passes the merge-conflict Draft gate for one controlled pull request at the repository's observed scale. It does not prove production latency, larger-repository fan-out or deployed delivery.
 
+### Local ownership implementation
+
+`amp/plugins/github-thread-events.ts` now registers exactly `bind_pr_to_thread`, `register_thread_event_recipient` and `transfer_pr_thread_owner` behind the exact `AMP_GITHUB_THREAD_EVENTS_ENABLED=1` opt-in. It stores recipients and bindings in the documented Bun SQLite database with foreign keys, immediate transactions and owner-only transfer.
+
+`amp/scripts/github-thread-events.test.ts` has 11 passing tests and 72 expectations. The tracked plugin build passed for all 15 plugins, and an independent review found no blocker. These checks cover local ownership only. They do not establish event policy, queue consumption, GitHub preflight, thread append, reconciliation, cloud infrastructure or deployment.
+
 ## Findings
 
 ### P1: the Amp webhook path requires an Orb
@@ -244,7 +252,7 @@ Cloudflare Tunnel remains acceptable for local development and manual testing. I
 | --- | --- | --- | --- |
 | Orb required for Amp-managed webhook ingress | P1 | Design selected | RFC-0009 replaces this path with Cloudflare Queues and local pull consumption |
 | Direct Tunnel loses offline deliveries | P1 | Design selected | RFC-0009 places a durable queue before the local runner |
-| Missing pull-request-to-thread binding | P1 | Capability contract accepted | implement the 3 documented local ownership tools and SQLite mapping |
+| Missing pull-request-to-thread binding | P1 | Implemented locally | the 3 documented ownership tools and SQLite mapping are implemented and tested in the production-projected plugin |
 | Cross-system acknowledgement gap | P1 | Open | implement delivery markers, local reconciliation and at-least-once handling |
 | Retry exhaustion deletes events | P1 | Design selected | configure 100 retries and a monitored dead-letter queue |
 | Runner-created eligibility | P1 | Design selected | accept only threads created on and running in the configured stable-runner consumer process; reject arbitrary attach or migration in v1 |
@@ -258,17 +266,11 @@ Cloudflare Tunnel remains acceptable for local development and manual testing. I
 | Service-account bootstrap | P2 | In progress | Amp thread T-019f4f39 is resolving the same failure class for separate automation; RFC-0009 retains the runner-specific design |
 | Runner supervision | P3 | Open | add and test a `launchd` service for the local runner |
 
-No production plugin or cloud resource exists yet. The issue remains open until the local ownership tools and end-to-end workflow pass their implementation and offline recovery tests.
+The local ownership boundary is implemented, but no event-delivery or cloud resource exists yet. The issue remains unresolved until the end-to-end workflow passes its implementation and offline recovery tests.
 
 ## Follow-up
 
-Implement the accepted local ownership boundary from these source-of-truth capability contracts:
-
-1. [`bind_pr_to_thread`](../tools/bind-pr-to-thread.md)
-2. [`register_thread_event_recipient`](../tools/register-thread-event-recipient.md)
-3. [`transfer_pr_thread_owner`](../tools/transfer-pr-thread-owner.md)
-
-Keep queue pulling, event policies, ordering, GitHub preflight, thread append and reconciliation deferred until their capability boundaries are documented. Cloudflare, Slack, `launchd`, 1Password and deployment remain separate later work.
+Define source-neutral, source-of-truth capability boundaries before implementing queue pulling, event policies, ordering, GitHub preflight, thread append and reconciliation. Cloudflare, Slack, `launchd`, 1Password and deployment remain separate later work.
 
 ## Validation
 

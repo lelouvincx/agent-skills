@@ -52,7 +52,7 @@ runtime:
     - "recipients and bindings in ${AMP_CONFIG_DIR:-~/.config/amp}/state/github-thread-events.sqlite"
   network: []
   logs:
-    - "plugin enablement and SQLite failures without secret values"
+    - "plugin enablement and resolved SQLite state path"
 safety:
   permission_level: "local-state-write"
   user_gate: "agent decision in the explicitly opted-in process"
@@ -161,6 +161,8 @@ After validation, the tool starts one write transaction before it reads ownershi
 6. rejects a different owner and rolls back the recipient insert and every other change.
 
 The unique primary key allows one active binding for each normalized repository and pull-request number. The same owner may call the tool repeatedly. A different thread must receive ownership through `transfer_pr_thread_owner` after it registers itself.
+
+The plugin keeps the database open for the worker-process lifetime. Amp exposes no supported cleanup callback, so process exit closes the runtime database. SQLite failures surface to the caller as errors rather than separate plugin log entries.
 
 ## Permissions and side effects
 

@@ -53,7 +53,7 @@ runtime:
     - "owner_thread_id and updated_at for one binding in ${AMP_CONFIG_DIR:-~/.config/amp}/state/github-thread-events.sqlite"
   network: []
   logs:
-    - "plugin enablement and SQLite failures without secret values"
+    - "plugin enablement and resolved SQLite state path"
 safety:
   permission_level: "local-state-write"
   user_gate: "current owner tool call in the explicitly opted-in process"
