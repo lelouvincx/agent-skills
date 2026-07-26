@@ -9,6 +9,7 @@ and this project does not currently use versioned releases.
 
 ### Added
 
+- Add fail-closed runtime loading for projected GitHub event policy, exact project-over-global lookup, and an injected adaptive scheduler and operation budget model.
 - Add source-controlled, schema-validated GitHub thread event configuration and policies with exact project-over-global precedence and isolated runtime projection. [#130](https://github.com/lelouvincx/agent-skills/pull/130)
 - Add ISSUE-0002, accepted RFC-0009 and its implemented local pull-request ownership tools for durable GitHub event delivery to local Amp threads. [#126](https://github.com/lelouvincx/agent-skills/pull/126)
 - Add `presales` as the parent workspace and register its child presales projects. [#120](https://github.com/lelouvincx/agent-skills/pull/120)
