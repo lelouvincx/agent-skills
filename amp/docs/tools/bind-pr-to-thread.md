@@ -211,6 +211,6 @@ Calling from another thread returns an ownership error. It does not register tha
 
 ## Maintenance notes
 
-This document is the source of truth for `bind_pr_to_thread`. Keep it aligned with [RFC-0009](../rfcs/rfc-0009-durable-github-events-for-local-amp-threads.md), [ISSUE-0002](../issues/issue-0002-durable-github-events-for-local-amp-threads.md) and `plugins/github-thread-events.ts`.
+This document is the source of truth for `bind_pr_to_thread`. Keep it aligned with [`register_thread_event_recipient`](./register-thread-event-recipient.md), [`transfer_pr_thread_owner`](./transfer-pr-thread-owner.md), [RFC-0009](../rfcs/rfc-0009-durable-github-events-for-local-amp-threads.md), [ISSUE-0002](../issues/issue-0002-durable-github-events-for-local-amp-threads.md) and `plugins/github-thread-events.ts`.
 
 Update this contract before changing inputs, outputs, normalization, transaction behavior, database path or ownership rules. Keep event pulling, policy resolution, GitHub preflight, append and reconciliation out of this tool.

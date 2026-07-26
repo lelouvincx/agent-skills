@@ -185,6 +185,6 @@ The destination cannot call the transfer on its own behalf before it owns the bi
 
 ## Maintenance notes
 
-This document is the source of truth for `transfer_pr_thread_owner`. Keep it aligned with [RFC-0009](../rfcs/rfc-0009-durable-github-events-for-local-amp-threads.md), [ISSUE-0002](../issues/issue-0002-durable-github-events-for-local-amp-threads.md) and `plugins/github-thread-events.ts`.
+This document is the source of truth for `transfer_pr_thread_owner`. Keep it aligned with [`bind_pr_to_thread`](./bind-pr-to-thread.md), [`register_thread_event_recipient`](./register-thread-event-recipient.md), [RFC-0009](../rfcs/rfc-0009-durable-github-events-for-local-amp-threads.md), [ISSUE-0002](../issues/issue-0002-durable-github-events-for-local-amp-threads.md) and `plugins/github-thread-events.ts`.
 
 Update this contract before changing inputs, outputs, validation, owner checks, destination registration or transaction behavior. Keep parent-authorized transfer deferred until Amp exposes a supported parent query and RFC-0009 accepts a new contract.

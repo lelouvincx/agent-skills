@@ -160,6 +160,6 @@ Neither result means the thread owns a pull request. The existing owner must nam
 
 ## Maintenance notes
 
-This document is the source of truth for `register_thread_event_recipient`. Keep it aligned with [RFC-0009](../rfcs/rfc-0009-durable-github-events-for-local-amp-threads.md), [ISSUE-0002](../issues/issue-0002-durable-github-events-for-local-amp-threads.md) and `plugins/github-thread-events.ts`.
+This document is the source of truth for `register_thread_event_recipient`. Keep it aligned with [`bind_pr_to_thread`](./bind-pr-to-thread.md), [`transfer_pr_thread_owner`](./transfer-pr-thread-owner.md), [RFC-0009](../rfcs/rfc-0009-durable-github-events-for-local-amp-threads.md), [ISSUE-0002](../issues/issue-0002-durable-github-events-for-local-amp-threads.md) and `plugins/github-thread-events.ts`.
 
 Do not add repository or ownership inputs. Update this contract before changing output, idempotence, process gating or the recipient table. Keep registration separate from binding and transfer.
