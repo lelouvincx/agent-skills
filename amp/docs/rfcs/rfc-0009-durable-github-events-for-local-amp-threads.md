@@ -216,13 +216,31 @@ An event policy is a structured rule. The local consumer resolves it without usi
 - any actor trust rule
 - the expiry behavior within the deployment's bounded retention
 
-The consumer first looks for an exact project policy for the bound repository and policy ID. It then uses the global policy with the same ID. Project policy overrides the global fallback. The final capability document must define the structured file locations and schema before implementation.
+The consumer first looks for an exact project policy for the bound repository and policy ID. It then uses the global policy with the same ID. Project policy overrides the global fallback. The repository configuration below fixes the file locations. The final capability document must define the schema before implementation.
 
 Policies do not expand the owner thread's existing authority. The default trusted actor is `lelouvincx`. Text from another actor remains untrusted evidence unless the selected policy grants that actor instruction authority. The plugin never turns a comment body into an instruction. It appends a fixed policy action and a canonical URL from which the thread can inspect current evidence.
 
 If neither project nor global policy exists, the consumer does not append to the thread. It copies the event to the dead-letter queue with reason `missing-event-policy` and acknowledges the primary lease only after that copy succeeds. The dead-letter monitor provides one latched operational notification while that queue remains nonempty. The dead-letter record preserves the envelope for review until its documented retention expires.
 
 The first version uses the primary queue's configured retention for all accepted events. Dead-letter records may use a separately configured Queue retention. A future higher-value policy that must survive longer than Cloudflare Queue retention needs a separate durable storage design before it can be enabled.
+
+### Repository configuration and projection
+
+This repository is the source of truth for non-secret GitHub event configuration and policies. `sync-skills.sh` must project the complete `amp/github-thread-events/` directory to `${AMP_CONFIG_DIR}/github-thread-events/` without projecting the local SQLite state back into the repository.
+
+| Purpose | Repository source | Runtime projection |
+| --- | --- | --- |
+| monitored repositories and base branches | `amp/github-thread-events/config.json` | `${AMP_CONFIG_DIR}/github-thread-events/config.json` |
+| global event policies | `amp/github-thread-events/policies/global.json` | `${AMP_CONFIG_DIR}/github-thread-events/policies/global.json` |
+| project event policies | `amp/github-thread-events/policies/projects/<owner>/<repository>.json` | `${AMP_CONFIG_DIR}/github-thread-events/policies/projects/<owner>/<repository>.json` |
+
+The first monitored target is repository `lelouvincx/agent-skills` on base branch `main`. The first deployment uses the Cloudflare Free plan. Adaptive polling must remain within that plan's Queue operation budget.
+
+The stale-backlog notification destination is Slack channel `#chinh-amp-experiment`, channel ID `C0BKVJXBH98`. Configuration stores the channel ID, not a Slack credential.
+
+The selected global or project policy decides how to handle a merged pull request. A policy may only report the merge, or report it and ask the owner thread to archive itself after required cleanup. Project policy overrides the global fallback.
+
+These files contain no secrets or runtime ownership state. Credentials stay in the approved 1Password and macOS Keychain path. Recipient and binding state stays in `${AMP_CONFIG_DIR}/state/github-thread-events.sqlite`.
 
 ### Pull-request thread binding
 
@@ -579,12 +597,13 @@ Implement in this order:
 3. The merge-conflict experiment passed on 26 July 2026. It proved bounded convergence for one controlled pull request and one-page upper bounds for both measured bases.
 4. RFC-0009 passed acceptance review on 26 July 2026 after all 3 Draft gates passed. Its status is `Accepted`, not `Implemented`.
 5. The documented local ownership slice and its tests are implemented in `plugins/github-thread-events.ts` and `scripts/github-thread-events.test.ts`. Event-policy, pull-loop and delivery contracts remain deferred until before their implementation.
-6. Implement and test the Cloudflare Worker, primary queue, dead-letter queue, metrics check and Workers KV latches.
-7. Implement and test policy resolution, adaptive pull consumption, full-history reconciliation and thread append.
-8. Create the dedicated 1Password automation vault and read-only service account after reviewing the related findings in [Amp thread T-019f4f39](https://ampcode.com/threads/T-019f4f39-34b7-7169-9005-a5d36a49c642).
-9. Store the service-account token in macOS Keychain and add the supervised runner startup path.
-10. Deploy Cloudflare resources and register the GitHub webhook after Chinh's explicit approval.
-11. Test all 4 initial event policies, online and offline delivery, recipient registration, owner-only transfer, duplicates, ready-batch sorting, current-state preflight, missing policy, retry exhaustion and missing binding.
+6. Add capability documents and schemas for repository configuration, global and project policies, queue consumption and notifications. Add their repository source files and project the `amp/github-thread-events/` directory to `${AMP_CONFIG_DIR}/github-thread-events/` through `sync-skills.sh`.
+7. Implement and test the Cloudflare Worker, primary queue, dead-letter queue, metrics check and Workers KV latches on the Cloudflare Free plan.
+8. Implement and test policy resolution, adaptive pull consumption, full-history reconciliation and thread append.
+9. Create the dedicated 1Password automation vault and read-only service account after reviewing the related findings in [Amp thread T-019f4f39](https://ampcode.com/threads/T-019f4f39-34b7-7169-9005-a5d36a49c642).
+10. Store the service-account token in macOS Keychain and add the supervised runner startup path.
+11. Deploy Cloudflare resources and register the GitHub webhook after Chinh's explicit approval.
+12. Test all 4 initial event policies, online and offline delivery, recipient registration, owner-only transfer, duplicates, ready-batch sorting, current-state preflight, missing policy, retry exhaustion and missing binding.
 
 - Keep [ISSUE-0002](../issues/issue-0002-durable-github-events-for-local-amp-threads.md) as the evidence and resolution record.
 - Add the capability documents before implementing the plugin.
@@ -593,7 +612,7 @@ Implement in this order:
 - Keep GitHub event conditions aligned with current webhook payload documentation.
 - Keep Queue pull, acknowledgement, metrics and retention behavior aligned with current Cloudflare documentation.
 - Keep `@ampcode/plugin` types aligned with the Amp CLI version used to load the plugin.
-- Store local configuration outside projected repository artifacts.
+- Keep non-secret configuration and policies under `amp/github-thread-events/`, project them through `sync-skills.sh` and keep runtime state outside projected repository artifacts.
 - Test plugin reload, process restart, machine downtime, duplicate delivery, missing policy, missing binding, retry exhaustion, dead-letter routing and retention expiry.
 - Test that reconciliation searches beyond the default message page and across compacted history.
 - Test that each event policy appends only its minimum required identifiers and source references.
@@ -606,7 +625,4 @@ Implement in this order:
 
 ## Open questions
 
-- Which Slack destination should receive stale-backlog notifications?
-- Is the Cloudflare Workers plan free or paid, and what polling latency fits its retention and daily Queue operation budget?
-- Which structured files hold project and global event policies, and what tool manages them?
-- Should a merge event ask the thread to archive itself after any required cleanup, or only report the merge?
+The next implementation phase must define the configuration and policy schemas in capability documents. It must measure an adaptive polling schedule against the Cloudflare Free plan before deployment. These are implementation tasks, not outstanding product decisions.
