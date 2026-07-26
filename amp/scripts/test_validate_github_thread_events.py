@@ -97,6 +97,30 @@ class GitHubThreadEventValidationTests(unittest.TestCase):
         self.assertTrue(any("Additional properties" in error for error in errors))
         self.assertTrue(any("forbidden secret" in error for error in errors))
 
+    def test_invalid_top_level_instances_return_errors_instead_of_crashing(self):
+        self.write_json("config.json", [])
+        self.write_json("policies/global.json", [])
+        errors = validator.validate_tree(self.root)
+        self.assertTrue(any("config.json" in error and "not of type 'object'" in error for error in errors))
+        self.assertTrue(any("global.json" in error and "not of type 'object'" in error for error in errors))
+
+    def test_invalid_schema_returns_an_error_instead_of_crashing(self):
+        schema = self.read_json("config.schema.json")
+        schema["type"] = "invalid-type"
+        self.write_json("config.schema.json", schema)
+        errors = validator.validate_tree(self.root)
+        self.assertEqual(1, len(errors))
+        self.assertIn("invalid Draft 2020-12 schema", errors[0])
+
+    def test_policy_requires_minimum_source_pointers_for_its_preflight(self):
+        global_set = self.read_json("policies/global.json")
+        global_set["policies"][0]["sourcePointers"].remove("head-sha")
+        global_set["policies"][2]["sourcePointers"].remove("actor")
+        self.write_json("policies/global.json", global_set)
+        errors = validator.validate_tree(self.root)
+        self.assertTrue(any("missing required source pointers: head-sha" in error for error in errors))
+        self.assertTrue(any("missing required source pointers: actor" in error for error in errors))
+
     def test_project_policy_path_and_repository_must_match_invariants(self):
         project = self.read_json("policies/projects/lelouvincx/agent-skills.json")
         self.write_json("policies/projects/Other/Repo.json", project)

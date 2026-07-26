@@ -13,6 +13,8 @@ trap 'rm -rf "$tmp_home"' EXIT
 
 mkdir -p "$tmp_home/.config/amp/github-thread-events/policies"
 touch "$tmp_home/.config/amp/github-thread-events/policies/stale.json"
+mkdir -p "$tmp_home/.config/amp/state"
+printf '%s\n' 'pre-existing runtime state' > "$tmp_home/.config/amp/state/github-thread-events.sqlite"
 
 HOME="$tmp_home" \
 	AMP_CONFIG_DIR="$tmp_home/.config/amp" \
@@ -52,8 +54,8 @@ if find "$REPO_DIR/amp/github-thread-events" "$tmp_home/.config/amp/github-threa
 	exit 1
 fi
 
-if [ -e "$tmp_home/.config/amp/state/github-thread-events.sqlite" ]; then
-	echo "error: projection created runtime GitHub thread event state" >&2
+if [ "$(cat "$tmp_home/.config/amp/state/github-thread-events.sqlite")" != "pre-existing runtime state" ]; then
+	echo "error: projection changed runtime GitHub thread event state" >&2
 	exit 1
 fi
 

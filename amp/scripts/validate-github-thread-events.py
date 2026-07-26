@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Validate and resolve source-controlled GitHub thread event policy."""
 
 import json
@@ -6,7 +5,7 @@ import re
 import sys
 from pathlib import Path
 
-from jsonschema import Draft202012Validator
+from jsonschema import Draft202012Validator, SchemaError
 
 
 ROOT = Path(__file__).resolve().parents[1] / "github-thread-events"
@@ -16,6 +15,12 @@ REQUIRED_GLOBAL_POLICIES = {
     "github.pull-request.merged",
     "github.pull-request.review-feedback",
     "github.pull-request.merge-conflict",
+}
+BASE_SOURCE_POINTERS = {"delivery-id", "repository", "pull-request", "canonical-url"}
+PREFLIGHT_SOURCE_POINTERS = {
+    "failed-run-still-matches-current-head": {"head-sha"},
+    "current-unresolved-review-feedback": {"actor"},
+    "pull-request-currently-conflicting": {"head-sha"},
 }
 FORBIDDEN_KEYS = {
     "accountid",
@@ -43,7 +48,10 @@ def read_json(path):
 
 def schema_validator(path):
     schema = read_json(path)
-    Draft202012Validator.check_schema(schema)
+    try:
+        Draft202012Validator.check_schema(schema)
+    except SchemaError as error:
+        raise PolicyConfigurationError(f"{path}: invalid Draft 2020-12 schema: {error.message}") from error
     return Draft202012Validator(schema)
 
 
@@ -81,6 +89,17 @@ def validate_policy_set(path, validator):
     for index, policy in enumerate(policies):
         if isinstance(policy, dict) and policy.get("id") != policy.get("sourceCandidate"):
             errors.append(f"{path}: $.policies[{index}]: id must equal sourceCandidate")
+        if isinstance(policy, dict):
+            required_pointers = BASE_SOURCE_POINTERS | PREFLIGHT_SOURCE_POINTERS.get(
+                policy.get("currentStatePreflight"), set()
+            )
+            pointers = set(policy.get("sourcePointers", []))
+            missing_pointers = sorted(required_pointers - pointers)
+            if missing_pointers:
+                errors.append(
+                    f"{path}: $.policies[{index}]: missing required source pointers: "
+                    f"{', '.join(missing_pointers)}"
+                )
     return data, errors
 
 
@@ -93,7 +112,8 @@ def validate_tree(root=ROOT):
         config, config_errors = validate_instance(root / "config.json", config_validator)
         errors.extend(config_errors)
 
-        repositories = [item.get("repository") for item in config.get("repositories", []) if isinstance(item, dict)]
+        config_repositories = config.get("repositories", []) if isinstance(config, dict) else []
+        repositories = [item.get("repository") for item in config_repositories if isinstance(item, dict)]
         duplicates = sorted({repository for repository in repositories if repositories.count(repository) > 1})
         if duplicates:
             errors.append(f"{root / 'config.json'}: duplicate repositories: {', '.join(duplicates)}")
@@ -101,7 +121,8 @@ def validate_tree(root=ROOT):
         global_path = root / "policies" / "global.json"
         global_set, global_errors = validate_policy_set(global_path, policy_validator)
         errors.extend(global_errors)
-        global_ids = {policy.get("id") for policy in global_set.get("policies", []) if isinstance(policy, dict)}
+        global_policies = global_set.get("policies", []) if isinstance(global_set, dict) else []
+        global_ids = {policy.get("id") for policy in global_policies if isinstance(policy, dict)}
         missing = sorted(REQUIRED_GLOBAL_POLICIES - global_ids)
         if missing:
             errors.append(f"{global_path}: missing required global policies: {', '.join(missing)}")
