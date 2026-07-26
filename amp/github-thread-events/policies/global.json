@@ -17,7 +17,9 @@
       "actorTrust": {
         "instructionAuthority": "fixed-action-only",
         "trustedActors": [
-          "lelouvincx"
+          "lelouvincx",
+          "lelouvincx-bot",
+          "chinh-dm-holistics"
         ]
       },
       "expiry": {
@@ -39,7 +41,9 @@
       "actorTrust": {
         "instructionAuthority": "fixed-action-only",
         "trustedActors": [
-          "lelouvincx"
+          "lelouvincx",
+          "lelouvincx-bot",
+          "chinh-dm-holistics"
         ]
       },
       "expiry": {
@@ -62,7 +66,9 @@
       "actorTrust": {
         "instructionAuthority": "fixed-action-only",
         "trustedActors": [
-          "lelouvincx"
+          "lelouvincx",
+          "lelouvincx-bot",
+          "chinh-dm-holistics"
         ]
       },
       "expiry": {
@@ -85,7 +91,9 @@
       "actorTrust": {
         "instructionAuthority": "fixed-action-only",
         "trustedActors": [
-          "lelouvincx"
+          "lelouvincx",
+          "lelouvincx-bot",
+          "chinh-dm-holistics"
         ]
       },
       "expiry": {

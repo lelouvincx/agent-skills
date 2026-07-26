@@ -7,6 +7,18 @@
       "baseBranches": [
         "main"
       ]
+    },
+    {
+      "repository": "lelouvincx/second-brain-logseq",
+      "baseBranches": [
+        "master"
+      ]
+    },
+    {
+      "repository": "lelouvincx/dotfiles",
+      "baseBranches": [
+        "main"
+      ]
     }
   ],
   "queueAssumptions": {

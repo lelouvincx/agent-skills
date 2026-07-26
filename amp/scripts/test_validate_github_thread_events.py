@@ -36,6 +36,32 @@ class GitHubThreadEventValidationTests(unittest.TestCase):
     def test_checked_in_configuration_is_valid(self):
         self.assertEqual([], validator.validate_tree(SOURCE))
 
+    def test_checked_in_configuration_has_reviewed_targets_and_trusted_actors(self):
+        config = self.read_json("config.json")
+        self.assertEqual(
+            {
+                "lelouvincx/agent-skills": ["main"],
+                "lelouvincx/second-brain-logseq": ["master"],
+                "lelouvincx/dotfiles": ["main"],
+            },
+            {item["repository"]: item["baseBranches"] for item in config["repositories"]},
+        )
+
+        expected_actors = {"lelouvincx", "lelouvincx-bot", "chinh-dm-holistics"}
+        policy_files = [
+            "policies/global.json",
+            "policies/projects/lelouvincx/agent-skills.json",
+        ]
+        for policy_file in policy_files:
+            with self.subTest(policy_file=policy_file):
+                for policy in self.read_json(policy_file)["policies"]:
+                    self.assertEqual(expected_actors, set(policy["actorTrust"]["trustedActors"]))
+
+        schema = self.read_json("config.schema.json")
+        channel = schema["properties"]["staleNotification"]["properties"]["slackChannelID"]
+        self.assertEqual("C0BKVJXBH98", channel["const"])
+        self.assertIn("#chinh-amp-experiment", channel["description"])
+
     def test_project_policy_completely_replaces_global_policy(self):
         scope, policy = validator.resolve_policy(
             self.root, "lelouvincx/agent-skills", "github.pull-request.merged"

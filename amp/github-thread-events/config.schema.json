@@ -94,6 +94,7 @@
           "const": 300
         },
         "slackChannelID": {
+          "description": "Slack channel #chinh-amp-experiment",
           "const": "C0BKVJXBH98"
         }
       }

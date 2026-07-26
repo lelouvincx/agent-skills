@@ -223,7 +223,7 @@ An event policy is a structured rule. The local consumer resolves it without usi
 
 The consumer first looks for an exact project policy for the bound repository and policy ID. It then uses the global policy with the same ID. Project policy overrides the global fallback. The repository configuration below fixes the file locations. The final capability document must define the schema before implementation.
 
-Policies do not expand the owner thread's existing authority. The default trusted actor is `lelouvincx`. Text from another actor remains untrusted evidence unless the selected policy grants that actor instruction authority. The plugin never turns a comment body into an instruction. It appends a fixed policy action and a canonical URL from which the thread can inspect current evidence.
+Policies do not expand the owner thread's existing authority. The trusted actors are `lelouvincx`, `lelouvincx-bot` and `chinh-dm-holistics`. Text from another actor remains untrusted evidence unless the selected policy grants that actor instruction authority. The plugin never turns a comment body into an instruction. It appends a fixed policy action and a canonical URL from which the thread can inspect current evidence.
 
 If neither project nor global policy exists, the consumer does not append to the thread. It copies the event to the dead-letter queue with reason `missing-event-policy` and acknowledges the primary lease only after that copy succeeds. The dead-letter monitor provides one latched operational notification while that queue remains nonempty. The dead-letter record preserves the envelope for review until its documented retention expires.
 
@@ -239,7 +239,7 @@ This repository is the source of truth for non-secret GitHub event configuration
 | global event policies | `amp/github-thread-events/policies/global.json` | `${AMP_CONFIG_DIR}/github-thread-events/policies/global.json` |
 | project event policies | `amp/github-thread-events/policies/projects/<owner>/<repository>.json` | `${AMP_CONFIG_DIR}/github-thread-events/policies/projects/<owner>/<repository>.json` |
 
-The first monitored target is repository `lelouvincx/agent-skills` on base branch `main`. The first deployment uses the Cloudflare Free plan. Adaptive polling must remain within that plan's Queue operation budget.
+The monitored targets are `lelouvincx/agent-skills` on `main`, `lelouvincx/second-brain-logseq` on `master` and `lelouvincx/dotfiles` on `main`. The first deployment uses the Cloudflare Free plan. Adaptive polling must remain within that plan's Queue operation budget.
 
 The stale-backlog notification destination is Slack channel `#chinh-amp-experiment`, channel ID `C0BKVJXBH98`. Configuration stores the channel ID, not a Slack credential.
 
@@ -450,7 +450,7 @@ Adding a policy later does not silently replay preserved events. Chinh must appr
 
 ### Review feedback and actor trust
 
-The review-feedback policy checks current unresolved review state. A project policy can decide which review states are actionable and which actors may give instructions. The global fallback trusts `lelouvincx` by default.
+The review-feedback policy checks current unresolved review state. A project policy can decide which review states are actionable and which actors may give instructions. The global fallback trusts `lelouvincx`, `lelouvincx-bot` and `chinh-dm-holistics` by default.
 
 Feedback from another actor can still resume the owner when the policy treats it as evidence to assess. The appended message contains the fixed policy action, actor identity and canonical review URL. It does not contain the review text or grant that actor more authority.
 
