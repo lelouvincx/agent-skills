@@ -42,7 +42,7 @@ The initial question was whether `amp.createWebhook` could spawn a local runner 
 
 The user rejected that bridge and described the required workflow:
 
-- receive GitHub events such as CI failure and pull-request merge
+- receive GitHub events for CI failure, pull-request merge, code review and code conflict
 - identify the Amp thread that opened the affected pull request
 - append the event to that existing thread
 - run the resumed work on an always-on local runner
