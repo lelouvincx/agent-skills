@@ -5,12 +5,13 @@ title: "Durable GitHub events for local Amp threads"
 slug: "durable-github-events-for-local-amp-threads"
 file: "rfc-0009-durable-github-events-for-local-amp-threads.md"
 status: "Draft"
-summary: "Queue verified GitHub events in Cloudflare and let a local Amp plugin return them to the thread that opened each pull request."
+summary: "Queue verified GitHub events in Cloudflare and use source-neutral policies to return actionable events to the thread that owns each pull request."
 created: "2026-07-26"
 updated: "2026-07-26"
 amp_thread_id:
   T-019f9241-c27f-7395-8fd1-f6284344d869: "defined the local runner, offline queue, thread routing and unattended secret requirements"
   T-019f4f39-34b7-7169-9005-a5d36a49c642: "provided related unattended 1Password service-account design evidence"
+  T-019f9d13-530a-7613-b1a0-32a2ff10c740: "aligned the RFC contract with ISSUE-0002's policy, ownership, trust and completion intent"
 dependency:
   - type: "issue"
     code: "ISSUE-0002"
@@ -20,10 +21,13 @@ implementation: []
 inputs:
   - name: "GitHub webhook delivery"
     kind: "signed HTTP request"
-    purpose: "Report a failed CI run or merged pull request."
+    purpose: "Report a candidate CI, merge, review or merge-conflict event."
+  - name: "event policy"
+    kind: "source-neutral project or global policy"
+    purpose: "Decide whether an event is actionable, which source state to verify and what fixed instruction to submit."
   - name: "pull-request thread binding"
-    kind: "repository, pull-request number and Amp thread ID"
-    purpose: "Identify the existing thread responsible for the pull request."
+    kind: "repository, pull-request number, owner thread and execution prerequisite"
+    purpose: "Identify the one existing thread responsible for the pull request and control explicit ownership transfer."
   - name: "Cloudflare Queue message"
     kind: "leased normalized event"
     purpose: "Preserve an accepted event until a local consumer handles it."
@@ -33,7 +37,10 @@ outputs:
     purpose: "Decouple webhook acceptance from local runner availability."
   - name: "resumed Amp thread"
     kind: "user message appended to an existing thread"
-    purpose: "Return CI or merge work to the thread that opened the pull request."
+    purpose: "Return a policy-supported event to the thread that owns the pull request."
+  - name: "preserved review event"
+    kind: "dead-letter record and operational notification"
+    purpose: "Retain a valid event that has no applicable policy instead of asking a thread to guess an action."
   - name: "stale backlog notification"
     kind: "cloud-side notification for Chinh"
     purpose: "Report events that wait while the runner is unavailable."
@@ -52,9 +59,11 @@ tags:
 
 ## Summary
 
-Receive selected GitHub webhook events through a Cloudflare Worker and store them in Cloudflare Queues. A plugin on a local Amp runner pulls each event and appends it to the existing Amp thread that opened the affected pull request.
+Receive selected GitHub webhook events through a Cloudflare Worker and store them in Cloudflare Queues. A plugin on a local Amp runner resolves each event against a source-neutral event policy and the pull request's current owner. It appends only policy-supported, currently actionable events to that existing Amp thread.
 
-This design does not use an Orb. It also does not expose the local machine through a production Tunnel. The queue accepts events while the runner is offline. A dead-letter queue preserves messages that exhaust their retries. The configured retention period remains the final expiry boundary for both queues.
+GitHub is the first source. The initial policy set covers failed CI, pull-request merges, review feedback and merge conflicts. Project policy takes precedence over global fallback policy. An event without either policy does not resume a thread. The system preserves it for review and sends one operational notification.
+
+This design does not use an Orb or expose the local machine through a production Tunnel. The queue accepts events while the runner is offline. A dead-letter queue preserves messages that need review or exhaust their retries. The configured retention period remains the final expiry boundary for both queues.
 
 ## Context
 
@@ -69,13 +78,17 @@ The design must also correlate 2 durable identities:
 - GitHub identifies work by repository and pull-request number
 - Amp identifies the responsible conversation by thread ID
 
-The plugin must record that binding when a thread opens or adopts a pull request.
+The plugin must record that binding when a thread opens or adopts a pull request. One thread owns the pull request at a time. The owner may be a top-level thread or a subagent, and ownership changes only through an explicit transfer.
+
+Transport routing alone is not enough. A policy must decide whether an event is actionable, which source state to verify and what fixed instruction to submit. This policy contract must not depend on GitHub so that later source adapters can use the same ownership, trust and delivery rules.
 
 The design also depends on the bound thread being executable by the always-on runner. `appendUserMessage` submits a turn to an existing thread, but it does not select or migrate that thread's executor. A spike must prove the executor-assignment path before this RFC can leave `Draft`.
 
+The current Plugin API also exposes the invoking thread ID but not its parent relationship. A second spike must prove how a parent can authorize an ownership transfer without allowing another thread to take ownership. The RFC must remain `Draft` until this authority check has a supported implementation.
+
 ## Decision
 
-Use a Cloudflare Worker and Cloudflare Queue as the durable ingress. Use an Amp plugin running on the local runner as an HTTP pull consumer.
+Use a Cloudflare Worker and Cloudflare Queue as the durable ingress. Use an Amp plugin running on the local runner as an HTTP pull consumer, owner resolver and policy evaluator.
 
 The production flow is:
 
@@ -88,13 +101,14 @@ The production flow is:
                                                   ▼
                                          ┌──────────────────┐
                                          │ local Amp plugin │
-                                         │ route and append │
-                                         └────────┬─────────┘
-                                                  ▼
-                                         ┌──────────────────┐
-                                         │ existing PR      │
-                                         │ Amp thread       │
-                                         └──────────────────┘
+                                         │ owner and policy │
+                                         └──────┬──────┬────┘
+                                                │      │ no policy
+                                                ▼      ▼
+                                     ┌──────────────┐  ┌─────────────┐
+                                     │ existing PR  │  │ dead-letter │
+                                     │ Amp thread   │  │ and notify  │
+                                     └──────────────┘  └─────────────┘
 ```
 
 Do not use `amp.createWebhook` because its durable endpoint belongs to an Orb. Do not use a direct Tunnel as the production endpoint because it cannot accept events while the connector is offline.
@@ -103,40 +117,74 @@ A Tunnel may be used for local Worker or webhook testing. It is outside the prod
 
 ## Contract
 
-### Accepted GitHub events
+### GitHub source adapter
 
-The first version accepts only these events:
+The first source adapter recognizes candidate signals for these policy families:
 
-| GitHub event | Condition | Result |
+| Policy ID | GitHub candidate signal | Actionable check |
 | --- | --- | --- |
-| `workflow_run` | `action` is `completed` and `conclusion` is `failure` | ask the bound thread to inspect the failed workflow |
-| `pull_request` | `action` is `closed` and `pull_request.merged` is `true` | tell the bound thread that its pull request merged |
+| `github.workflow-run.failure` | `workflow_run` is `completed` with conclusion `failure` | the failed run still belongs to the bound pull request and relevant head commit |
+| `github.pull-request.merged` | `pull_request` is `closed` and `merged` is `true` | the pull request is still merged |
+| `github.pull-request.review-feedback` | `pull_request_review` is `submitted`, or `pull_request_review_comment` is `created` or `edited` | current unresolved review state contains feedback covered by policy |
+| `github.pull-request.merge-conflict` | `pull_request` is `synchronize`, `reopened`, `ready_for_review` or `edited`, or a configured base branch receives a `push` | the current pull request is not mergeable because of a conflict |
 
-The Worker rejects unsupported methods, invalid signatures and oversized bodies. It acknowledges valid but irrelevant GitHub events without enqueuing them.
+GitHub does not publish a dedicated merge-conflict webhook action. The conflict policy therefore treats pull-request changes and configured base-branch pushes as candidate signals. Worker configuration lists the repositories and base branches that can emit this candidate. The local evaluator must query current pull-request state before it resumes any thread. A base-branch push may fan out to every active binding for that repository and branch. The implementation spike must prove this signal is reliable and affordable before the conflict policy ships.
 
-### Normalized queue event
+The Worker rejects unsupported methods, invalid signatures and oversized bodies. It acknowledges valid source events outside the supported candidate set without enqueuing them. It enqueues a supported candidate even when no policy is configured locally, because policy resolution happens after the local consumer finds the project.
 
-The Worker enqueues a small versioned event instead of the complete GitHub payload:
+### Source-neutral queue event
+
+The Worker enqueues a small source-neutral envelope instead of the complete GitHub payload:
 
 ```json
 {
-  "schema": "amp-github-thread-event/v1",
-  "deliveryID": "github-delivery-guid",
-  "event": "workflow_run",
-  "action": "completed",
-  "repository": "owner/repository",
-  "pullRequest": 123,
-  "headSHA": "full-commit-sha",
-  "occurredAt": "2026-07-26T00:00:00Z",
-  "summary": {
-    "kind": "ci-failure",
-    "workflow": "CI",
+  "schema": "amp-thread-event/v1",
+  "policyCandidate": "github.workflow-run.failure",
+  "source": {
+    "kind": "github",
+    "deliveryID": "github-delivery-guid",
+    "event": "workflow_run",
+    "action": "completed",
+    "occurredAt": "2026-07-26T00:00:00Z",
+    "receivedAt": "2026-07-26T00:00:01Z",
     "url": "https://github.com/owner/repository/actions/runs/123"
+  },
+  "target": {
+    "kind": "pull-request",
+    "repository": "owner/repository",
+    "pullRequest": 123,
+    "headSHA": "full-commit-sha"
   }
 }
 ```
 
-The schema may add fields compatibly. A breaking change requires a new schema version. Each event policy defines its required normalized fields. Omit fields that the policy does not need. Do not include pull-request bodies, comments, commit messages, logs or other free-form text.
+The source adapter owns the fields inside `source`. The shared envelope owns `schema`, `policyCandidate` and `target`. A target may identify one pull request or a repository branch that the local consumer expands through active bindings.
+
+The schema may add fields compatibly. A breaking change requires a new schema version. The source adapter defines the minimum envelope fields for each policy-candidate family before local policy resolution. Review candidates include actor identity because their policies may need a trust decision. Candidate families that do not need actor identity omit it. Do not include pull-request bodies, comments, commit messages, logs or other free-form text.
+
+The selected local policy defines the smaller set of fields used in the appended message. It omits every envelope field that the policy action does not need.
+
+Do not coalesce separate deliveries. Preserve the source occurrence time, ingress time and delivery ID so the receiving thread can reconstruct the timeline. Cloudflare retries may make an older delivery visible after a newer one, so the current Queue-only design does not yet prove strict processing order. The consumer processes ready events for one owner in timeline order when possible, and every policy checks current source and commit state before it submits a turn. This RFC must remain `Draft` until the ordering spike either proves that this meets the original intent or adds a per-target sequencer.
+
+### Event policy
+
+An event policy is a structured rule. The local consumer resolves it without using an LLM. Each policy defines:
+
+- a stable, source-qualified policy ID
+- the source candidate it accepts
+- the target identity and current-state preflight
+- the fixed action submitted to the owner thread
+- the minimum source pointers required by that action
+- any actor trust rule
+- the expiry behavior within the deployment's bounded retention
+
+The consumer first looks for an exact project policy for the bound repository and policy ID. It then uses the global policy with the same ID. Project policy overrides the global fallback. The final capability document must define the structured file locations and schema before implementation.
+
+Policies do not expand the owner thread's existing authority. The default trusted actor is `lelouvincx`. Text from another actor remains untrusted evidence unless the selected policy grants that actor instruction authority. The plugin never turns a comment body into an instruction. It appends a fixed policy action and a canonical URL from which the thread can inspect current evidence.
+
+If neither project nor global policy exists, the consumer does not append to the thread. It copies the event to the dead-letter queue with reason `missing-event-policy` and acknowledges the primary lease only after that copy succeeds. The dead-letter monitor provides one latched operational notification while that queue remains nonempty. The dead-letter record preserves the envelope for review until its documented retention expires.
+
+The first version uses one deployment retention for all accepted events. A future higher-value policy that must survive longer needs a separate durable storage design before it can be enabled.
 
 ### Pull-request thread binding
 
@@ -145,17 +193,22 @@ The local plugin exposes a binding operation with these logical inputs:
 ```json
 {
   "repository": "owner/repository",
-  "pullRequest": 123
+  "pullRequest": 123,
+  "baseRef": "main"
 }
 ```
 
-The plugin takes the thread ID from the invocation context. It stores one active binding for each repository and pull-request number. Rebinding the same pull request replaces the previous thread only after an explicit invocation from the new thread.
+The plugin takes the owner thread ID from the invocation context. It stores one active binding for each repository and pull-request number, including the base branch needed to evaluate conflict candidates. The first binding assigns ownership to the invoking thread.
 
 The intended agent-facing tool name is `bind_pr_to_thread`. Its capability document must define the final name, schema and output before implementation.
 
 After a thread opens a pull request, repository guidance should require it to bind that pull request before declaring the PR workflow complete. A dedicated tool is preferred over parsing `gh pr create` commands or output.
 
+The plugin must also expose an explicit ownership-transfer operation. Only the current owner or its verified parent may transfer a binding. The transfer names the destination thread and replaces the owner atomically. An invocation from the destination or any unrelated thread must not take ownership. The current Plugin API does not expose parent relationships, so parent-authorized transfer remains a blocking design prerequisite rather than an assumed capability.
+
 The first version may bind only a thread that is attached to, or otherwise executable by, the configured stable runner. An interactive client must use a supported attach or assignment operation before binding. The implementation spike must define that operation. Binding must fail clearly if Amp provides no supported way to satisfy this prerequisite.
+
+A bound subagent remains the direct event recipient. It follows its existing parent-reporting contract after the turn starts. The delivery system must not notify the parent automatically unless a mandatory escalation rule applies. Those rules include inability to continue, need for authority or input, an ownership-transfer request, or a material risk outside the subagent's scope.
 
 ### Local pull consumer
 
@@ -166,16 +219,21 @@ Amp documents plugins as long-lived processes. Before implementation, a spike mu
 For each leased message, the plugin:
 
 1. validates the normalized schema;
-2. checks the GitHub delivery ID against local reconciliation state;
-3. resolves the repository and pull request to an Amp thread ID;
-4. records the thread ID and `append-pending` timestamp;
-5. appends a fixed user message with `steer: true`;
-6. records the completed delivery locally; and
-7. acknowledges the queue lease.
+2. expands a repository-branch target into active pull-request bindings when required;
+3. checks the source delivery and target identity against local reconciliation state;
+4. resolves the active owner and project or global event policy;
+5. checks the current source, commit and trust state required by that policy;
+6. preserves a missing-policy event for review, or records a stale or non-actionable event without resuming a thread;
+7. records the owner thread ID and `append-pending` timestamp for an actionable event;
+8. appends the fixed policy message with `steer: true`;
+9. records the completed target delivery locally; and
+10. acknowledges the queue lease after every expanded target has reached a terminal stage.
 
 `appendUserMessage` submits a turn to the existing thread. The `steer` option only gives that message priority when the thread is busy. It does not wake a runner, choose an executor or migrate the thread.
 
-If no binding exists, the plugin retries with a delay for a binding grace period of no more than 3 minutes from the first lease. When the grace period ends, it copies the event to the dead-letter queue with reason `missing-thread-binding`. It acknowledges the primary lease only after that copy succeeds. A repeated dead-letter copy remains identifiable by the same GitHub delivery ID.
+If no binding exists, the plugin retries with a delay for a binding grace period of no more than 3 minutes from the first lease. When the grace period ends, it copies the event to the dead-letter queue with reason `missing-thread-binding`. It acknowledges the primary lease only after that copy succeeds. A repeated dead-letter copy remains identifiable by the source delivery ID and target identity.
+
+A repository-branch target that expands to no active bindings is not a missing pull-request binding. The plugin records it as `stale-or-non-actionable` and acknowledges it without dead-lettering or notification. This prevents routine base-branch pushes from creating false backlog alerts.
 
 ### Existing-thread message
 
@@ -192,29 +250,35 @@ The plugin omits every field that the matching policy does not need. For example
 
 ```text
 [verified GitHub event: <delivery ID>]
-Policy: github.workflow_run.failure
+Policy: github.workflow-run.failure
 Target: owner/repository#123@<full SHA>
 Source: https://github.com/owner/repository/actions/runs/123
 
-Apply the matching project policy, or the global fallback. Check current source and commit state before acting.
+Inspect the failed workflow and repair it if it still applies to the current pull-request head. Check current source and commit state before acting.
 ```
 
-The delivery marker lets the plugin and thread identify a repeated event. The plugin must not paste the raw webhook payload, event body, review comment or log into the thread. The responsible thread fetches current details from the canonical source only when its policy needs them.
+The delivery marker and target identity let the plugin and thread identify a repeated event. The plugin must not paste the raw webhook payload, event body, review comment or log into the thread. The responsible thread fetches current details from the canonical source only when its policy needs them.
+
+### Delivery completion boundary
+
+The first version completes delivery when Amp accepts the append and submits the new turn to the owner thread. The plugin does not track whether the thread completes the policy action. Action completion, escalation outcomes and end-to-end workflow state are future work.
 
 ### Queue acknowledgement and reconciliation
 
 The system provides at-least-once processing, not exactly-once delivery. Cloudflare acknowledgement and Amp thread append cannot share one transaction.
 
-The local state records these stages for each GitHub delivery ID:
+The local state records these stages for each source delivery and expanded target:
 
 ```text
 leased
-→ append-pending
-→ appended
+→ evaluated
+  ├─→ stale-or-non-actionable
+  ├─→ preserved-for-review
+  └─→ append-pending → appended
 → acknowledged
 ```
 
-On restart, an `append-pending` delivery is uncertain. The plugin checks the target thread for its verified delivery marker. If the marker exists, it records `appended` and acknowledges the redelivery. If the marker does not exist, it appends the message.
+On restart, an `append-pending` target delivery is uncertain. The plugin checks the target thread for its verified delivery marker and target identity. If the marker exists, it records `appended`. If the marker does not exist, it appends the message. It acknowledges the source lease only when every expanded target is appended, intentionally non-actionable or preserved in the dead-letter queue.
 
 The reconciliation search must not rely on the default recent-message window. It requests full messages and uses offsets to paginate backwards to the start of the transcript. Only then may it conclude that the marker is absent. The plugin API does not expose message timestamps, so the recorded `append-pending` timestamp is for recovery diagnostics rather than a search boundary.
 
@@ -222,7 +286,7 @@ This closes the normal crash window but does not claim mathematical exactly-once
 
 Configure the primary queue with `max_retries` set to 100 and a dead-letter queue. Each redelivery increments the message's `attempts` count. Cloudflare permanently deletes a message that reaches `max_retries` when no dead-letter queue is configured. This deployment must never run the primary queue without its dead-letter queue.
 
-The dead-letter queue holds malformed events, exhausted processing failures and events that remain unbound after the grace period. It has the same retention and stale-backlog monitoring requirements as the primary queue. Retry exhaustion must move an event to this queue rather than delete it.
+The dead-letter queue holds malformed events, exhausted processing failures, missing-policy events and events that remain unbound after the grace period. It has the same retention and stale-backlog monitoring requirements as the primary queue. Retry exhaustion must move an event to this queue rather than delete it.
 
 ### Offline retention and notification
 
@@ -243,7 +307,7 @@ Slack through an incoming webhook is the preferred first notification destinatio
 
 Cloudflare stores the GitHub webhook signing secret as a Worker secret. The repository stores no secret value.
 
-The local consumer needs a Cloudflare API token with Queue read and write permission. A dedicated 1Password service account resolves this token from one dedicated automation vault. The service account has read-only vault access and no vault-creation permission.
+The local consumer needs a Cloudflare API token with Queue read and write permission. It also needs read access to current GitHub pull-request, review, workflow and branch state. Public repositories may not need GitHub authentication. Private repositories require a least-privilege GitHub credential. A dedicated 1Password service account resolves these credentials from one dedicated automation vault. The service account has read-only vault access and no vault-creation permission.
 
 The scheduled Worker uses Queue and Workers KV bindings for metrics and alert-latch state. These bindings do not require a Cloudflare API token in the Worker. If Slack notifications are enabled, Cloudflare stores the incoming webhook URL as a Worker secret.
 
@@ -251,7 +315,7 @@ The 1Password service-account token is a bootstrap credential. On macOS, store i
 
 [Amp thread T-019f4f39](https://ampcode.com/threads/T-019f4f39-34b7-7169-9005-a5d36a49c642) is resolving the same unattended authentication failure class for separate weekly-report automation. Review its service-account findings before implementation, but keep this runner's bootstrap choice independent unless Chinh explicitly aligns them.
 
-The implementation must not store the service-account token, Cloudflare token, GitHub signing secret or Slack webhook in the repository or a plaintext local env file.
+The implementation must not store the service-account token, Cloudflare token, GitHub credential, GitHub signing secret or Slack webhook in the repository or a plaintext local env file.
 
 ## Behavior
 
@@ -261,10 +325,12 @@ The implementation must not store the service-account token, Cloudflare token, G
 2. The Worker validates the signature and event conditions.
 3. The Worker normalizes and enqueues the event.
 4. The local plugin leases the event within the polling interval.
-5. The plugin finds the bound thread and appends the fixed message.
-6. `appendUserMessage` submits a turn in that existing thread.
-7. Amp runs the turn on the stable runner established by the binding prerequisite.
-8. The plugin records completion and acknowledges the lease.
+5. The plugin resolves the owner and project or global policy.
+6. The plugin checks current source, commit and trust state.
+7. For an actionable event, the plugin appends the fixed policy message to the owner thread.
+8. `appendUserMessage` submits a turn in that existing thread.
+9. Amp runs the turn on the stable runner established by the binding prerequisite.
+10. The plugin records delivery and acknowledges the lease.
 
 ### Runner offline
 
@@ -274,19 +340,44 @@ The implementation must not store the service-account token, Cloudflare token, G
 4. The message remains in the queue.
 5. The stale-backlog check notifies Chinh after 5 minutes.
 6. When the runner starts, the plugin immediately polls and processes the backlog.
-7. The plugin submits a turn to the bound thread.
-8. Amp runs the turn on the stable runner established by the binding prerequisite.
-9. The primary queue alert latch clears after the primary queue drains.
+7. The plugin evaluates the event against current policy and source state.
+8. The plugin submits an actionable turn to the owner thread.
+9. Amp runs the turn on the stable runner established by the binding prerequisite.
+10. The primary queue alert latch clears after the primary queue drains.
 
 No manual thread resurrection is required after the executor prerequisite has been implemented and verified. The durable thread ID and local binding identify the thread after the runner returns.
 
 ### Duplicate delivery
 
-Cloudflare may deliver one GitHub delivery more than once. The plugin uses GitHub's delivery ID, not Cloudflare's ephemeral message ID, as the deduplication key.
+Cloudflare may deliver one GitHub delivery more than once. The plugin uses the source kind, source delivery ID, policy ID and expanded target identity as the deduplication key. It does not use Cloudflare's ephemeral message ID.
 
-If local state already records `appended` or `acknowledged`, the plugin acknowledges the lease without appending another message.
+If local state already records one target as `appended`, the plugin skips that target without appending another message. It acknowledges the source lease only after every expanded target has reached a terminal stage.
 
 This key does not deduplicate a separate GitHub delivery with a new delivery ID. If GitHub assigns a new ID to a manual redelivery, the plugin treats it as a new, safe-to-repeat event message.
+
+### Missing event policy
+
+If neither project nor global policy defines the candidate, the plugin does not resume the owner thread. It preserves the event in the dead-letter queue with reason `missing-event-policy`. The dead-letter monitor sends one latched operational notification if the queue remains nonempty for 5 minutes. No LLM selects or invents an action.
+
+Adding a policy later does not silently replay preserved events. Chinh must approve replay from the dead-letter queue because the source state may have changed.
+
+### Review feedback and actor trust
+
+The review-feedback policy checks current unresolved review state. A project policy can decide which review states are actionable and which actors may give instructions. The global fallback trusts `lelouvincx` by default.
+
+Feedback from another actor can still resume the owner when the policy treats it as evidence to assess. The appended message contains the fixed policy action, actor identity and canonical review URL. It does not contain the review text or grant that actor more authority.
+
+### Merge conflict candidate
+
+A pull-request change targets one binding. A base-branch push can target several active bindings. The plugin expands the candidate, checks each pull request's current mergeability and resumes only owners whose pull request is currently blocked by a merge conflict.
+
+If GitHub reports an indeterminate mergeability state, the plugin returns the lease for bounded retry. It does not resume the thread until the state is confirmed. The implementation must define the retry limit and dead-letter reason before this policy ships.
+
+### Ownership transfer
+
+The current owner or its verified parent explicitly transfers ownership to a destination thread. Events leased after the atomic transfer go only to the new owner. An event already in `append-pending` completes against the owner recorded for that target delivery, which prevents one event from reaching both threads.
+
+A subagent owner receives the event directly. It reports to its parent only under its normal escalation contract. Transport delivery alone is not an escalation trigger.
 
 ### Missing pull-request identity
 
@@ -319,10 +410,12 @@ The Cloudflare Worker may:
 
 The local Amp plugin may:
 
-- register the pull-request binding tool
+- register pull-request binding and ownership-transfer tools
 - read Cloudflare account, queue and polling configuration
 - make outbound Cloudflare Queue pull, publish and acknowledgement requests
-- read and write local thread bindings, delivery stages and deduplication state
+- read structured project and global event policies
+- read current GitHub pull-request, review, workflow and branch state
+- read and write local thread ownership bindings, delivery stages and deduplication state
 - read paginated full messages from a bound Amp thread during uncertain reconciliation
 - append a user message to a bound Amp thread with `steer: true`
 - log delivery IDs, event types and outcomes without secret values or raw payloads
@@ -343,7 +436,18 @@ Bind a pull request to the current thread:
 ```json
 {
   "repository": "lelouvincx/agent-skills",
-  "pullRequest": 126
+  "pullRequest": 126,
+  "baseRef": "main"
+}
+```
+
+Transfer ownership from the current thread to another thread:
+
+```json
+{
+  "repository": "lelouvincx/agent-skills",
+  "pullRequest": 126,
+  "destinationThreadID": "T-..."
 }
 ```
 
@@ -352,11 +456,23 @@ Route a failed workflow:
 ```text
 workflow_run.completed + failure
   → verify GitHub signature
-  → queue amp-github-thread-event/v1
+  → queue amp-thread-event/v1
   → resolve lelouvincx/agent-skills#126
+  → select project policy or global fallback
+  → verify current workflow and head SHA
   → append to T-...
   → submit turn on the thread's assigned runner
   → acknowledge queue lease
+```
+
+Preserve a candidate without a policy:
+
+```text
+verified candidate
+  → resolve no project or global policy
+  → copy to dead-letter queue as missing-event-policy
+  → dead-letter monitor sends one latched notification after 5 minutes
+  → do not append or submit a turn
 ```
 
 Recover after an offline period:
@@ -383,36 +499,45 @@ launchd
 
 Implement in this order:
 
-1. Spike executor assignment for a thread created in another client and process-lifetime plugin polling.
-2. Review and accept RFC-0009 only after both spikes pass.
-3. Document the plugin capability before adding plugin code.
-4. Implement and test the Cloudflare Worker, primary queue, dead-letter queue, metrics check and Workers KV latch.
-5. Implement and test the local binding tool, adaptive pull consumer, full-history reconciliation and thread append.
-6. Create the dedicated 1Password automation vault and read-only service account after reviewing the related findings in [Amp thread T-019f4f39](https://ampcode.com/threads/T-019f4f39-34b7-7169-9005-a5d36a49c642).
-7. Store the service-account token in macOS Keychain and add the supervised runner startup path.
-8. Deploy Cloudflare resources and register the GitHub webhook after Chinh's explicit approval.
-9. Test online delivery, runner downtime, restart recovery, duplicate delivery, retry exhaustion and missing binding.
+1. Spike executor assignment, process-lifetime plugin polling and secure parent-authorized ownership transfer.
+2. Spike the merge-conflict candidate, current-state check and event ordering, including base-branch push volume, fan-out cost, indeterminate mergeability and retry reordering.
+3. Review and accept RFC-0009 only after these prerequisites pass.
+4. Document the event-policy, binding, transfer and delivery capabilities before adding plugin code.
+5. Implement and test the Cloudflare Worker, primary queue, dead-letter queue, metrics check and Workers KV latches.
+6. Implement and test policy resolution, ownership binding and transfer, adaptive pull consumption, full-history reconciliation and thread append.
+7. Create the dedicated 1Password automation vault and read-only service account after reviewing the related findings in [Amp thread T-019f4f39](https://ampcode.com/threads/T-019f4f39-34b7-7169-9005-a5d36a49c642).
+8. Store the service-account token in macOS Keychain and add the supervised runner startup path.
+9. Deploy Cloudflare resources and register the GitHub webhook after Chinh's explicit approval.
+10. Test all 4 initial event policies, online and offline delivery, ownership transfer, duplicates, ordering, missing policy, retry exhaustion and missing binding.
 
 - Keep [ISSUE-0002](../issues/issue-0002-durable-github-events-for-local-amp-threads.md) as the evidence and resolution record.
-- Add the plugin capability document before implementing the plugin.
-- Keep the Worker event schema and local parser versioned together.
+- Add the capability documents before implementing the plugin.
+- Keep the source-neutral event envelope, GitHub adapter and local parser versioned together.
+- Keep project and global policy schemas aligned and test project precedence.
 - Keep GitHub event conditions aligned with current webhook payload documentation.
 - Keep Queue pull, acknowledgement, metrics and retention behavior aligned with current Cloudflare documentation.
 - Keep `@ampcode/plugin` types aligned with the Amp CLI version used to load the plugin.
 - Store local configuration outside projected repository artifacts.
-- Test plugin reload, process restart, machine downtime, duplicate delivery, missing binding, retry exhaustion, dead-letter routing and retention expiry.
+- Test plugin reload, process restart, machine downtime, duplicate delivery, missing policy, missing binding, retry exhaustion, dead-letter routing and retention expiry.
 - Test that reconciliation searches beyond the default message page and across compacted history.
 - Test that each event policy appends only its minimum required identifiers and source references.
+- Test trusted and untrusted review actors without copying review text into the thread.
+- Test direct subagent delivery, owner transfer and every mandatory parent-escalation trigger.
+- Test stale and out-of-order events against current source and commit state.
 - Measure empty-poll operations against the selected Cloudflare plan before deployment.
 - Run the Amp document validators, plugin build checks and isolated projection before merging implementation.
-- Keep this RFC in `Draft` until the executor-assignment and process-lifetime polling spikes pass and Chinh accepts the design.
+- Keep this RFC in `Draft` until the executor-assignment, process-lifetime polling, parent-authority and merge-conflict spikes pass and Chinh accepts the design.
 
 ## Open questions
 
 - Which Slack destination should receive stale-backlog notifications?
 - Is the Cloudflare Workers plan free or paid, and what polling latency fits its retention and daily Queue operation budget?
 - Where should the local SQLite state live across macOS and other future runner platforms?
+- Which structured files hold project and global event policies, and what tool manages them?
 - Should CI events without an associated pull request use a GitHub API fallback in the first implementation?
 - Should a merge event ask the thread to archive itself after any required cleanup, or only report the merge?
+- Which GitHub candidate set detects merge conflicts reliably without excessive base-branch fan-out?
+- What ordering guarantee satisfies the original requirement to preserve event order and timeline? Strict execution order needs a per-target sequencer rather than Queue-only best-effort ordering.
+- How can the plugin verify a parent thread's transfer authority when the current Plugin API exposes no parent relationship?
 - Does a turn submitted by a runner-hosted plugin execute on that runner when another client created the thread, and what supported operation attaches the thread to that runner?
 - Does a system plugin's polling timer remain active for the full runner lifetime across reload and reconnection?
