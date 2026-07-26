@@ -112,6 +112,7 @@ skills/holistics-migrate-power-bi/.remote-source
 skills/holistics-migrate-power-bi/references/
 
 sdk/node_modules/
+__pycache__/
 
 skills/impeccable/SKILL.md
 skills/impeccable/.remote-source
@@ -120,6 +121,7 @@ skills/impeccable/scripts/
 
 # Amp runtime/source mirror: keep only intentional source artifacts under amp/.
 # Do not commit local runtime state, logs, MCP configs, or write metadata.
+.amp/
 amp/logs/
 amp/mcp/
 amp/context-profiles.json
