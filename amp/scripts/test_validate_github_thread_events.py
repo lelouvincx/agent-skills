@@ -110,6 +110,12 @@ class GitHubThreadEventValidationTests(unittest.TestCase):
         self.write_json("policies/global.json", global_set)
         with self.assertRaises(validator.PolicyConfigurationError):
             validator.resolve_policy(
+                self.root, "lelouvincx/dotfiles", "github.workflow-run.failure"
+            )
+
+    def test_unconfigured_repository_cannot_use_global_policy(self):
+        with self.assertRaisesRegex(validator.PolicyConfigurationError, "not configured for monitoring"):
+            validator.resolve_policy(
                 self.root, "another/repository", "github.workflow-run.failure"
             )
 
@@ -146,6 +152,21 @@ class GitHubThreadEventValidationTests(unittest.TestCase):
         errors = validator.validate_tree(self.root)
         self.assertTrue(any("missing required source pointers: head-sha" in error for error in errors))
         self.assertTrue(any("missing required source pointers: actor" in error for error in errors))
+
+    def test_schema_rejects_whitespace_only_actions_and_branches_and_empty_actor_lists(self):
+        config = self.read_json("config.json")
+        config["repositories"][0]["baseBranches"] = ["   "]
+        self.write_json("config.json", config)
+        global_set = self.read_json("policies/global.json")
+        global_set["policies"][0]["fixedAction"] = "   "
+        global_set["policies"][1]["actorTrust"]["trustedActors"] = []
+        self.write_json("policies/global.json", global_set)
+
+        errors = validator.validate_tree(self.root)
+
+        self.assertTrue(any("baseBranches" in error and "does not match" in error for error in errors))
+        self.assertTrue(any("fixedAction" in error and "does not match" in error for error in errors))
+        self.assertTrue(any("trustedActors" in error and "non-empty" in error for error in errors))
 
     def test_project_policy_path_and_repository_must_match_invariants(self):
         project = self.read_json("policies/projects/lelouvincx/agent-skills.json")
