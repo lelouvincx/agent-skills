@@ -90,7 +90,7 @@ This separation is mandatory. The current owner must still invoke `transfer_pr_t
 - Plugin file: `plugins/github-thread-events.ts`
 - Process gate: `AMP_GITHUB_THREAD_EVENTS_ENABLED=1`
 
-The tool is registered only in a process with the exact opt-in value `1`. Before registration, the plugin loads and validates the projected GitHub thread event configuration and applicable policy files. Invalid or missing required runtime contracts stop startup before the plugin creates ownership state or registers any tool. Deployment must set this only in the configured stable-runner process. The Plugin API does not expose a runner ID. The tool therefore proves process eligibility through invocation and records `ctx.thread.id` without making a runner-ID query.
+The plugin registers this tool only in a process with the exact opt-in value `1`. It first validates the projected GitHub thread event configuration and applicable policy files. Missing or invalid runtime contracts stop startup before the plugin creates ownership state. The plugin does not register any tool after this failure. Set the opt-in only in the configured stable-runner process. The Plugin API does not expose a runner ID. The tool therefore proves process eligibility through invocation and records `ctx.thread.id` without querying a runner ID.
 
 ## Contract
 
@@ -125,7 +125,7 @@ The tool never reads or writes `bindings`. Registration does not assign an owner
 
 ## Permissions and side effects
 
-At startup, the plugin reads the projected non-secret configuration and applicable policy files. This tool reads and may insert one row in the local `recipients` table. The enabled plugin may create the Amp state directory, database file and 2 ownership tables before it registers tools. The tool makes no network request, starts no process, changes no thread and reads no secret.
+At startup, the plugin reads projected non-secret configuration and applicable policy files. This tool reads the local `recipients` table and may insert one row. The enabled plugin may create the Amp state directory, database file and 2 ownership tables before it registers tools. The tool makes no network request. It starts no process, changes no thread and reads no secret.
 
 The default database path is `${AMP_CONFIG_DIR:-~/.config/amp}/state/github-thread-events.sqlite`. `AMP_CONFIG_DIR` changes the state root when set to a non-empty value. Neither environment variable contains a credential.
 

@@ -1,6 +1,6 @@
 # GitHub thread event configuration
 
-This directory is the source of truth for non-secret GitHub thread event configuration and policy. `sync-skills.sh` projects the complete directory to `${AMP_CONFIG_DIR}/github-thread-events/`. The opted-in plugin reads only this projected runtime directory. It does not rely on a repository checkout.
+This directory is the source of truth for non-secret GitHub thread event configuration and policy. `sync-skills.sh` projects the complete directory to `${AMP_CONFIG_DIR}/github-thread-events/`. The opted-in plugin reads only this projected directory at runtime. It does not rely on a repository checkout.
 
 The files define configuration only. They do not deploy Cloudflare resources, register webhooks, store credentials or enable event delivery. Runtime ownership and delivery state belongs in `${AMP_CONFIG_DIR}/state/github-thread-events.sqlite`. It must never appear in this directory.
 
@@ -30,25 +30,25 @@ Project paths and configured repository names must use lowercase `owner/reposito
 
 ## Runtime loading
 
-The exact opt-in value `AMP_GITHUB_THREAD_EVENTS_ENABLED=1` makes the plugin load this contract before it opens ownership state or registers tools. It reads:
+The plugin loads this contract when `AMP_GITHUB_THREAD_EVENTS_ENABLED` has the exact value `1`. It does this before it opens ownership state or registers tools. It reads:
 
 - `${AMP_CONFIG_DIR:-~/.config/amp}/github-thread-events/config.json`
 - `${AMP_CONFIG_DIR:-~/.config/amp}/github-thread-events/policies/global.json`
 - an existing exact project file at `${AMP_CONFIG_DIR:-~/.config/amp}/github-thread-events/policies/projects/<owner>/<repository>.json` for each configured repository
 
-Startup fails closed when a required file is missing or unreadable, JSON is malformed, a format version is unsupported, or an applicable object is invalid. It also rejects unknown or forbidden fields, duplicate repositories or policy IDs, unsafe or mismatched project paths, and invalid policy or source-pointer invariants. Errors name the file and invalid field or rule. They do not include file contents or secret values.
+Startup fails closed when a required file is missing or unreadable. Malformed JSON, unsupported versions and invalid objects also stop startup. The plugin rejects unknown or forbidden fields and duplicate repositories or policy IDs. It also rejects unsafe or mismatched project paths and invalid policy or source-pointer rules. Errors name the file and invalid field or rule. They do not include file contents or secret values.
 
-Runtime validation repeats the trust-boundary rules needed to use projected data safely. It checks closed object shapes, fixed versions and configured values, repository and policy identifiers, non-whitespace actions and branch names, non-empty trusted-actor lists, duplicates, forbidden secret and runtime-state fields, project path matching, required initial global policies, and policy pointer invariants. Repository validation remains responsible for checking the JSON Schemas themselves, checking every source-tree project file, and preserving the reviewed repositories, actors and fixed actions.
+Runtime validation repeats the trust-boundary rules needed to use projected data safely. It checks closed object shapes, fixed versions and configured values. It validates repository and policy identifiers, actions, branch names, trusted actors and duplicates. It also rejects forbidden secret and runtime-state fields. Finally, it checks project paths, required initial global policies and policy-pointer rules. Repository validation still checks the JSON Schemas and every project file in the source tree. It also preserves the reviewed repositories, actors and fixed actions.
 
-A missing exact project file is valid. An invalid existing exact project file is not. The loader validates every applicable file at startup, even if the first policy lookup would not select it. Lookup rejects a repository that is not configured for monitoring. A valid project file completely replaces the matching global policy. When it lacks the requested ID, lookup uses the validated global policy. If neither file defines the ID, lookup returns the typed `missing-policy` result with reason `missing-event-policy`.
+A missing exact project file is valid. An invalid existing exact project file is not. The loader validates every applicable file at startup. It does this even when the first policy lookup would not select that file. Lookup rejects repositories that are not configured for monitoring. A valid project file completely replaces the matching global policy. If it lacks the requested ID, lookup uses the validated global policy. If neither file defines the ID, lookup returns `missing-policy` with reason `missing-event-policy`.
 
 ## Scheduler foundation
 
-The local scheduler accepts an injected pull function and sleep function. It polls once immediately. A non-empty result schedules the next pull after the configured 15-second active interval and resets empty backoff. The first consecutive empty result waits 30 seconds. The second and later consecutive empty results wait the configured 60-second maximum.
+The local scheduler accepts injected pull and sleep functions. It polls once immediately. A non-empty result resets empty backoff and schedules the next pull after 15 seconds. The first consecutive empty result waits 30 seconds. The second and later empty results wait the configured 60-second maximum.
 
-An all-day empty queue therefore causes 1,441 pull operations in a 24-hour half-open window starting with the immediate pull. This is below the checked-in Free-plan limit of 10,000 daily Queue operations. This slice counts pull operations only. Queue writes, acknowledgements, retries and metrics checks remain future budget inputs.
+An all-day empty queue causes 1,441 pulls in a 24-hour half-open window, including the immediate pull. This is below the checked-in Free-plan limit of 10,000 daily Queue operations. This slice counts pull operations only. Queue writes, acknowledgements, retries and metrics checks remain future budget inputs.
 
-The plugin does not start this scheduler in production yet. Tests use only injected pull and sleep functions. This slice makes no HTTP call, reads no Cloudflare or GitHub credential or resource ID, acknowledges no message, appends to no thread and changes no delivery state.
+The plugin does not start this scheduler in production. Tests use only injected pull and sleep functions. This slice makes no HTTP call. It reads no Cloudflare or GitHub credential or resource ID. It acknowledges no message, appends to no thread and changes no delivery state.
 
 ## Policy boundary
 

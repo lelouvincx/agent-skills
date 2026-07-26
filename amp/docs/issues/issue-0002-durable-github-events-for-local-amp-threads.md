@@ -6,7 +6,7 @@ slug: "durable-github-events-for-local-amp-threads"
 file: "issue-0002-durable-github-events-for-local-amp-threads.md"
 status: "In progress"
 priority: "P1"
-summary: "Local ownership, runtime policy loading and an injected polling scheduler are implemented, but GitHub events cannot yet return to the responsible Amp thread."
+summary: "Local ownership, policy loading and an injected scheduler are implemented, while GitHub event delivery to the responsible Amp thread remains open."
 created: "2026-07-26"
 updated: "2026-07-26"
 amp_thread_id:
@@ -50,7 +50,7 @@ GitHub events cannot yet return reliably to the local Amp thread that opened a p
 
 The desired workflow uses an always-on local Amp runner when available. It must queue events while the runner or machine is unavailable. When the runner returns, it must append each event to the existing pull-request thread and submit a new turn without creating an Orb.
 
-[RFC-0009](../rfcs/rfc-0009-durable-github-events-for-local-amp-threads.md) is accepted. Disposable experiments passed its stable-runner reattachment, single-poller and merge-conflict Draft gates. The production-projected local plugin implements the 3 ownership tools and their SQLite state. It also loads and validates projected configuration and policy before registering those tools. Exact project replacement, global fallback and typed missing-policy lookup are implemented. An injected adaptive scheduler and operation-budget model are implemented for tests only. Queue transport, production polling, GitHub preflight, thread delivery, cloud infrastructure and deployment remain unimplemented.
+[RFC-0009](../rfcs/rfc-0009-durable-github-events-for-local-amp-threads.md) is accepted. Disposable experiments passed its stable-runner reattachment, single-poller and merge-conflict Draft gates. The projected local plugin implements the 3 ownership tools and their SQLite state. It validates projected configuration and policy before it registers those tools. It also provides exact project replacement, global fallback and typed missing-policy lookup. Tests use an injected adaptive scheduler and operation-budget model. Queue transport, production polling, GitHub preflight, thread delivery, cloud infrastructure and deployment remain unimplemented.
 
 ## Trigger
 
@@ -168,9 +168,9 @@ This passes the merge-conflict Draft gate for one controlled pull request at the
 
 `amp/scripts/validate-github-thread-events.py` validates schema and repository invariants. Its focused tests prove complete project replacement, global fallback, `missing-event-policy` and invalid applicable file failure. `sync-skills.sh` projects the complete directory and deletes stale projected files without creating or copying SQLite state.
 
-The opted-in plugin now loads the projected contract before it opens ownership state or registers tools. Runtime checks fail closed on malformed or unsafe applicable files. Policy lookup returns a complete project or global policy without merging, or a typed missing-policy result. Repository validation still owns schema validation and source-tree-wide reviewed-content checks.
+The opted-in plugin loads the projected contract before it opens ownership state or registers tools. Runtime checks fail closed on malformed or unsafe applicable files. Policy lookup returns one complete project or global policy without merging. It returns a typed missing-policy result when neither policy defines the requested ID. Repository validation still checks the schemas and all reviewed content in the source tree.
 
-The plugin also exposes an adaptive scheduler through injected pull and sleep functions. It polls immediately, waits 30 seconds after the first empty result, reaches the configured 60-second maximum after the second empty result, and resets to 15 seconds after work. An all-day empty schedule uses 1,441 pull operations against the checked-in 10,000-operation daily limit. The plugin does not start production polling or perform network or delivery work.
+The plugin also provides an adaptive scheduler through injected pull and sleep functions. It polls immediately and waits 30 seconds after the first empty result. After the second empty result, it reaches the configured 60-second maximum. Work resets the delay to 15 seconds. An all-day empty schedule uses 1,441 pull operations against the checked-in daily limit of 10,000. The plugin does not start production polling or perform network or delivery work.
 
 ## Findings
 
@@ -280,15 +280,15 @@ Cloudflare Tunnel remains acceptable for local development and manual testing. I
 | CI event without exactly one pull-request identity | P2 | Design selected | publish the event directly to the dead-letter queue as `missing-pull-request-identity`; do not guess a thread |
 | Merge-conflict detection | P2 | Experiment passed | the corrected 26 July 2026 experiment proved bounded convergence for one controlled pull request and one-page upper bounds for the 2 measured bases |
 | Offline notification | P2 | Design selected | read Queue binding metrics, store latches in Workers KV and publish application dead letters directly; no resources exist yet |
-| Free-plan operation budget | P2 | Implemented locally | injected scheduling reaches 60-second idle polling after 2 empty results and models 1,441 pull operations per empty day; future writes, acknowledgements, retries and metrics still need budget inputs |
+| Free-plan operation budget | P2 | Implemented locally | injected scheduling reaches a 60-second idle interval after 2 empty results and models 1,441 pulls per empty day; future operations still need budget inputs |
 | Service-account bootstrap | P2 | In progress | Amp thread T-019f4f39 is resolving the same failure class for separate automation; RFC-0009 retains the runner-specific design |
 | Runner supervision | P3 | Open | add and test a `launchd` service for the local runner |
 
-The local ownership, runtime policy and scheduler boundaries are implemented, but no event-delivery or cloud resource exists yet. The issue remains unresolved until the end-to-end workflow passes its implementation and offline recovery tests.
+The local ownership, runtime policy and scheduler boundaries are implemented. No event-delivery or cloud resource exists yet. The issue remains unresolved until the end-to-end workflow passes its implementation and offline recovery tests.
 
 ## Follow-up
 
-Add injected Queue transport to the scheduler before enabling production polling. Then implement ordering, GitHub preflight, thread append and reconciliation. Recalculate the daily budget with writes, acknowledgements, retries and metrics before deployment. Cloudflare, Slack, `launchd`, 1Password and deployment remain separate later work.
+Add injected Queue transport to the scheduler before enabling production polling. Then implement ordering, GitHub preflight, thread append and reconciliation. Before deployment, add writes, acknowledgements, retries and metrics to the daily budget. Cloudflare, Slack, `launchd`, 1Password and deployment remain separate later work.
 
 ## Validation
 
