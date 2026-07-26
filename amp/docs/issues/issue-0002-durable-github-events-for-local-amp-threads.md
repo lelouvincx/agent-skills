@@ -31,6 +31,7 @@ implementation:
   - path: "../../scripts/test_validate_github_thread_events.py"
 pull_requests:
   - "https://github.com/lelouvincx/agent-skills/pull/126"
+  - "https://github.com/lelouvincx/agent-skills/pull/130"
 related: []
 tags:
   - "amp-runner"
