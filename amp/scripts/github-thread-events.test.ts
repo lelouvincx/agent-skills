@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from 'bun:test'
 import { Database } from 'bun:sqlite'
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 
@@ -171,6 +171,12 @@ describe('plugin process gate', () => {
 				project.unexpected = true
 				writeJson(projectPath, project)
 			},
+			(directory: string) => {
+				const root = installProjectedContract(directory)
+				const configPath = join(root, 'config.json')
+				renameSync(configPath, join(root, 'config.real.json'))
+				symlinkSync('config.real.json', configPath)
+			},
 		]) {
 			const configDirectory = temporaryDirectory()
 			mutate(configDirectory)
@@ -217,6 +223,25 @@ describe('runtime configuration and policy', () => {
 		})
 	})
 
+	test('lookup rejects repositories that are not configured for monitoring', () => {
+		const contract = loadGithubThreadEventContract(installProjectedContract(temporaryDirectory()))
+
+		expect(() => resolveEventPolicy(contract, 'unconfigured/repository', 'github.workflow-run.failure'))
+			.toThrow('repository is not configured for monitoring')
+		expect(() => resolveEventPolicy(contract, 'lelouvincx/agent-skills', 7 as never)).toThrow('policy ID is invalid')
+	})
+
+	test('resolved policies cannot mutate the validated contract', () => {
+		const contract = loadGithubThreadEventContract(installProjectedContract(temporaryDirectory()))
+		const result = resolveEventPolicy(contract, 'lelouvincx/agent-skills', 'github.pull-request.merged')
+		if (result.status !== 'found') throw new Error('expected a policy')
+
+		expect(Object.isFrozen(result.policy)).toBe(true)
+		expect(Object.isFrozen(result.policy.sourcePointers)).toBe(true)
+		expect(Object.isFrozen(result.policy.actorTrust.trustedActors)).toBe(true)
+		expect(() => (result.policy.actorTrust.trustedActors as string[]).push('intruder')).toThrow()
+	})
+
 	test('runtime rejects malformed closed objects, duplicates, forbidden fields and policy invariants', () => {
 		const mutations: ((root: string) => void)[] = [
 			(root) => {
@@ -249,13 +274,38 @@ describe('runtime configuration and policy', () => {
 				policies.policies[0].sourcePointers = policies.policies[0].sourcePointers.filter((item: string) => item !== 'head-sha')
 				writeJson(path, policies)
 			},
+			(root) => {
+				const path = join(root, 'config.json')
+				const config = readJson(path)
+				config.repositories[0].baseBranches = ['   ']
+				writeJson(path, config)
+			},
+			(root) => {
+				const path = join(root, 'policies', 'global.json')
+				const policies = readJson(path)
+				policies.policies[0].fixedAction = '   '
+				writeJson(path, policies)
+			},
+			(root) => {
+				const path = join(root, 'policies', 'global.json')
+				const policies = readJson(path)
+				policies.policies[0].actorTrust.trustedActors = []
+				writeJson(path, policies)
+			},
+			(root) => {
+				const path = join(root, 'policies', 'global.json')
+				const policies = readJson(path)
+				policies.policies = policies.policies.slice(1)
+				writeJson(path, policies)
+			},
 		]
 
-		for (const mutate of mutations) {
+		for (const [index, mutate] of mutations.entries()) {
 			const root = installProjectedContract(temporaryDirectory())
 			mutate(root)
 			let message = ''
 			try { loadGithubThreadEventContract(root) } catch (error) { message = String(error) }
+			if (!message) throw new Error(`contract mutation ${index} was accepted`)
 			expect(message).toContain('GitHub thread event contract')
 			expect(message).not.toContain('not-logged')
 		}
@@ -317,6 +367,30 @@ describe('adaptive polling foundation', () => {
 
 		expect(operations).toBe(1_441)
 		expect(operations).toBeLessThan(config.queueAssumptions.dailyOperationLimit)
+	})
+
+	test('rejects fractional, non-finite and unsafe scheduler bounds', async () => {
+		for (const [activeIntervalSeconds, maximumIdleIntervalSeconds] of [
+			[0.5, 60],
+			[15, Number.POSITIVE_INFINITY],
+			[15, Math.floor(Number.MAX_SAFE_INTEGER / 1000) + 1],
+		]) {
+			await expect(runAdaptivePolling({
+				pull: async () => [],
+				sleep: async () => {},
+				activeIntervalSeconds,
+				maximumIdleIntervalSeconds,
+				maximumPolls: 1,
+			})).rejects.toThrow()
+		}
+		await expect(runAdaptivePolling({
+			pull: async () => [],
+			sleep: async () => {},
+			activeIntervalSeconds: 15,
+			maximumIdleIntervalSeconds: 60,
+			maximumPolls: Number.MAX_SAFE_INTEGER + 1,
+		})).rejects.toThrow('maximumPolls')
+		expect(() => countIdlePullOperations(Number.MAX_SAFE_INTEGER + 1, 15, 60)).toThrow('durationSeconds')
 	})
 })
 

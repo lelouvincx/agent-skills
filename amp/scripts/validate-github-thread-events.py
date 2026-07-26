@@ -156,6 +156,14 @@ def resolve_policy(root, repository, policy_id):
     root = Path(root)
     if not REPOSITORY_PATTERN.fullmatch(repository):
         raise PolicyConfigurationError(f"invalid repository: {repository}")
+    config = read_json(root / "config.json")
+    configured_repositories = {
+        item.get("repository")
+        for item in config.get("repositories", [])
+        if isinstance(item, dict)
+    }
+    if repository not in configured_repositories:
+        raise PolicyConfigurationError(f"repository is not configured for monitoring: {repository}")
     validator = schema_validator(root / "policy-set.schema.json")
     project_path = root / "policies" / "projects" / f"{repository}.json"
     if project_path.exists():

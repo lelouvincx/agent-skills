@@ -5,7 +5,7 @@
 
 import type { PluginAPI } from '@ampcode/plugin'
 import { Database } from 'bun:sqlite'
-import { chmodSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, readdirSync } from 'node:fs'
+import { chmodSync, closeSync, existsSync, lstatSync, mkdirSync, openSync, readFileSync, readdirSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 
@@ -14,6 +14,12 @@ const POLICY_FORMAT = 'github-thread-event-policy-set/v1' as const
 const REPOSITORY_PATTERN = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\/[a-z0-9._-]+$/
 const POLICY_ID_PATTERN = /^[a-z0-9]+(?:[.-][a-z0-9]+)+$/
 const ACTOR_PATTERN = /^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?$/
+const REQUIRED_GLOBAL_POLICIES = new Set([
+	'github.workflow-run.failure',
+	'github.pull-request.merged',
+	'github.pull-request.review-feedback',
+	'github.pull-request.merge-conflict',
+])
 const FORBIDDEN_FIELDS = new Set([
 	'accountid', 'credential', 'credentials', 'database', 'databasepath', 'queueid', 'secret', 'token', 'webhooksecret',
 ])
@@ -34,17 +40,17 @@ const REQUIRED_POINTERS: Record<EventPolicy['currentStatePreflight'], readonly E
 }
 
 export type EventPolicy = {
-	id: string
-	sourceCandidate: string
+	readonly id: string
+	readonly sourceCandidate: string
 	targetKind: 'pull-request'
 	currentStatePreflight: typeof PREFLIGHTS[number]
-	fixedAction: string
-	sourcePointers: (typeof SOURCE_POINTERS[number])[]
-	actorTrust: {
+	readonly fixedAction: string
+	readonly sourcePointers: readonly (typeof SOURCE_POINTERS[number])[]
+	readonly actorTrust: {
 		instructionAuthority: 'fixed-action-only'
-		trustedActors: string[]
+		readonly trustedActors: readonly string[]
 	}
-	expiry: { mode: 'queue-retention' }
+	readonly expiry: { mode: 'queue-retention' }
 }
 
 export type GithubThreadEventConfig = {
@@ -99,7 +105,10 @@ export function loadGithubThreadEventContract(root: string): GithubThreadEventCo
 
 export function resolveEventPolicy(contract: GithubThreadEventContract, repositoryValue: string, policyID: string) {
 	const repository = normalizePolicyRepository(repositoryValue)
-	if (!POLICY_ID_PATTERN.test(policyID)) contractError('policy lookup', 'policy ID is invalid')
+	if (!contract.config.repositories.some((configured) => configured.repository === repository)) {
+		contractError('policy lookup', 'repository is not configured for monitoring')
+	}
+	if (typeof policyID !== 'string' || !POLICY_ID_PATTERN.test(policyID)) contractError('policy lookup', 'policy ID is invalid')
 	const projectPolicy = contract.projects.get(repository)?.policies.find(({ id }) => id === policyID)
 	if (projectPolicy) return { status: 'found' as const, scope: 'project' as const, policy: projectPolicy }
 	const globalPolicy = contract.global.policies.find(({ id }) => id === policyID)
@@ -120,8 +129,8 @@ export async function runAdaptivePolling(options: {
 	maximumPolls?: number
 }) {
 	validatePollingIntervals(options.activeIntervalSeconds, options.maximumIdleIntervalSeconds)
-	if (options.maximumPolls !== undefined && (!Number.isInteger(options.maximumPolls) || options.maximumPolls <= 0)) {
-		throw new Error('maximumPolls must be a positive integer when provided.')
+	if (options.maximumPolls !== undefined && (!Number.isSafeInteger(options.maximumPolls) || options.maximumPolls <= 0)) {
+		throw new Error('maximumPolls must be a positive safe integer when provided.')
 	}
 
 	let emptyResults = 0
@@ -144,8 +153,8 @@ export function countIdlePullOperations(
 	maximumIdleIntervalSeconds: number,
 ) {
 	validatePollingIntervals(activeIntervalSeconds, maximumIdleIntervalSeconds)
-	if (!Number.isInteger(durationSeconds) || durationSeconds <= 0) {
-		throw new Error('durationSeconds must be a positive integer.')
+	if (!Number.isSafeInteger(durationSeconds) || durationSeconds <= 0) {
+		throw new Error('durationSeconds must be a positive safe integer.')
 	}
 	let operations = 0
 	let elapsedSeconds = 0
@@ -393,6 +402,14 @@ function normalizeNonEmptyString(value: unknown, field: string): string {
 }
 
 function readRuntimeJson(path: string): unknown {
+	let stats: ReturnType<typeof lstatSync>
+	try {
+		stats = lstatSync(path)
+	} catch {
+		contractError(path, 'required JSON file is unreadable or missing')
+	}
+	if (!stats.isFile() || stats.isSymbolicLink()) contractError(path, 'required JSON path must be a regular file')
+
 	let text: string
 	try {
 		text = readFileSync(path, 'utf8')
@@ -420,7 +437,7 @@ function decodeConfig(value: unknown, path: string): GithubThreadEventConfig {
 		const repositoryConfig = closedRecord(value, location, ['repository', 'baseBranches'])
 		const repository = matchingString(repositoryConfig.repository, REPOSITORY_PATTERN, location, 'repository')
 		const baseBranches = arrayValue(repositoryConfig.baseBranches, location, 'baseBranches', true)
-			.map((branch, branchIndex) => nonEmptyString(branch, location, `baseBranches[${branchIndex}]`, false))
+			.map((branch, branchIndex) => nonEmptyString(branch, location, `baseBranches[${branchIndex}]`))
 		ensureUnique(baseBranches, location, 'baseBranches')
 		return { repository, baseBranches }
 	})
@@ -474,6 +491,11 @@ function decodePolicySet(value: unknown, path: string): PolicySet {
 	exactValue(policySet.formatVersion, POLICY_FORMAT, path, 'formatVersion')
 	const policies = arrayValue(policySet.policies, path, 'policies').map((policy, index) => decodePolicy(policy, path, index))
 	ensureUnique(policies.map(({ id }) => id), path, 'policy IDs')
+	if (path.endsWith('/policies/global.json')) {
+		for (const policyID of REQUIRED_GLOBAL_POLICIES) {
+			if (!policies.some(({ id }) => id === policyID)) contractError(path, `missing required global policy ${policyID}`)
+		}
+	}
 	return { formatVersion: POLICY_FORMAT, policies }
 }
 
@@ -487,7 +509,7 @@ function decodePolicy(value: unknown, path: string, index: number): EventPolicy 
 	if (id !== sourceCandidate) contractError(location, 'id must equal sourceCandidate')
 	exactValue(policy.targetKind, 'pull-request', location, 'targetKind')
 	const currentStatePreflight = enumString(policy.currentStatePreflight, PREFLIGHTS, location, 'currentStatePreflight')
-	const fixedAction = nonEmptyString(policy.fixedAction, location, 'fixedAction', false)
+	const fixedAction = nonEmptyString(policy.fixedAction, location, 'fixedAction')
 	const sourcePointers = arrayValue(policy.sourcePointers, location, 'sourcePointers', true)
 		.map((pointer, pointerIndex) => enumString(pointer, SOURCE_POINTERS, location, `sourcePointers[${pointerIndex}]`))
 	ensureUnique(sourcePointers, location, 'sourcePointers')
@@ -499,26 +521,33 @@ function decodePolicy(value: unknown, path: string, index: number): EventPolicy 
 
 	const actorTrust = closedRecord(policy.actorTrust, `${location}.actorTrust`, ['instructionAuthority', 'trustedActors'])
 	exactValue(actorTrust.instructionAuthority, 'fixed-action-only', location, 'actorTrust.instructionAuthority')
-	const trustedActors = arrayValue(actorTrust.trustedActors, location, 'actorTrust.trustedActors')
+	const trustedActors = arrayValue(actorTrust.trustedActors, location, 'actorTrust.trustedActors', true)
 		.map((actor, actorIndex) => matchingString(actor, ACTOR_PATTERN, location, `actorTrust.trustedActors[${actorIndex}]`))
 	ensureUnique(trustedActors, location, 'actorTrust.trustedActors')
 	const expiry = closedRecord(policy.expiry, `${location}.expiry`, ['mode'])
 	exactValue(expiry.mode, 'queue-retention', location, 'expiry.mode')
 
-	return {
+	return Object.freeze({
 		id,
 		sourceCandidate,
 		targetKind: 'pull-request',
 		currentStatePreflight,
 		fixedAction,
-		sourcePointers,
-		actorTrust: { instructionAuthority: 'fixed-action-only', trustedActors },
-		expiry: { mode: 'queue-retention' },
-	}
+		sourcePointers: Object.freeze(sourcePointers),
+		actorTrust: Object.freeze({ instructionAuthority: 'fixed-action-only' as const, trustedActors: Object.freeze(trustedActors) }),
+		expiry: Object.freeze({ mode: 'queue-retention' as const }),
+	})
 }
 
 function projectPolicyPaths(root: string): [string, string][] {
 	if (!existsSync(root)) return []
+	let stats: ReturnType<typeof lstatSync>
+	try {
+		stats = lstatSync(root)
+	} catch {
+		contractError(root, 'project policy directory is unreadable')
+	}
+	if (!stats.isDirectory() || stats.isSymbolicLink()) contractError(root, 'project policy path must be a regular directory')
 	const paths: [string, string][] = []
 	for (const ownerEntry of readRuntimeDirectory(root)) {
 		const ownerPath = join(root, ownerEntry.name)
@@ -610,11 +639,13 @@ function normalizePolicyRepository(value: unknown): string {
 }
 
 function validatePollingIntervals(activeIntervalSeconds: number, maximumIdleIntervalSeconds: number): void {
-	if (!Number.isFinite(activeIntervalSeconds) || activeIntervalSeconds <= 0) {
-		throw new Error('activeIntervalSeconds must be greater than 0.')
+	if (!Number.isSafeInteger(activeIntervalSeconds) || activeIntervalSeconds <= 0) {
+		throw new Error('activeIntervalSeconds must be a positive safe integer.')
 	}
-	if (!Number.isFinite(maximumIdleIntervalSeconds) || maximumIdleIntervalSeconds < activeIntervalSeconds) {
-		throw new Error('maximumIdleIntervalSeconds must be at least activeIntervalSeconds.')
+	if (!Number.isSafeInteger(maximumIdleIntervalSeconds)
+		|| maximumIdleIntervalSeconds < activeIntervalSeconds
+		|| maximumIdleIntervalSeconds > Math.floor(Number.MAX_SAFE_INTEGER / 1000)) {
+		throw new Error('maximumIdleIntervalSeconds must be a safe integer from activeIntervalSeconds through the maximum safe millisecond delay.')
 	}
 }
 
