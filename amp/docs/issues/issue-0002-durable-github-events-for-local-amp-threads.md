@@ -64,6 +64,8 @@ Only policy-supported actionable events resume a thread. GitHub is the first sou
 
 Project policy takes precedence when it defines the event. Global policy provides the fallback. Policies define the expected action and trusted actors without expanding the thread's existing authority. The default trusted actor is `lelouvincx`. Text from other actors remains evidence unless a policy grants that actor instruction authority.
 
+The appended event must be as small as possible. It contains only the policy identifier and source references needed to identify the target, check current state and fetch details. It must not copy the raw webhook payload, free-form bodies, comments or logs into the thread.
+
 An event without a project or global policy must not resume a thread. The system preserves it for review and sends one operational notification instead of asking the agent to guess an action.
 
 Events wait for the responsible local runner. An Orb must not act as a fallback because it cannot reproduce the same environment and execution context. For the initial GitHub use case, an event may be discarded after a documented retention period. A future higher-value event policy may require longer-lived storage and notification before expiry.
@@ -176,7 +178,7 @@ The investigation set these boundaries:
 - move events that remain unbound after a 3-minute grace period to the dead-letter queue
 - use adaptive idle polling to stay within the selected Queue operation budget
 - read Queue metrics through Worker bindings and store alert latches in Workers KV
-- treat webhook fields as untrusted data and construct a fixed agent message
+- treat webhook fields as untrusted data and append only the minimum fixed event pointer
 - use a dedicated read-only 1Password service account and automation vault
 - keep the service-account token in macOS Keychain rather than a plaintext file
 - keep Cloudflare deployment and GitHub webhook registration behind Chinh's explicit approval
@@ -234,6 +236,7 @@ The issue is resolved when all of these conditions hold:
 - the alert latch clears after an unbound event leaves the primary queue
 - empty polling stays within the selected Cloudflare plan's daily operation budget
 - a merge event and a failed CI event use fixed, verified message templates
+- each appended message contains only the minimum identifiers and source references required by its event policy
 - the runner starts without biometric approval after its one-time secure setup
 - local credential files contain only `op://` references
 - revoking the dedicated service account prevents secret resolution without exposing secret values
