@@ -163,7 +163,6 @@ describe('binding and recipient state', () => {
 		expect(JSON.parse(await harness.call('register_thread_event_recipient', {}, 'T-destination'))).toEqual({
 			status: 'registered',
 			threadID: 'T-destination',
-			ownershipGranted: false,
 		})
 		expect(queryAll(harness.databasePath, 'select count(*) as count from bindings')).toEqual([{ count: 0 }])
 		const [{ registered_at: registeredAt }] = queryAll(
@@ -176,7 +175,6 @@ describe('binding and recipient state', () => {
 		expect(JSON.parse(await harness.call('register_thread_event_recipient', {}, 'T-destination'))).toEqual({
 			status: 'already_registered',
 			threadID: 'T-destination',
-			ownershipGranted: false,
 		})
 		expect(queryAll(harness.databasePath, 'select registered_at from recipients where thread_id = ?', 'T-destination'))
 			.toEqual([{ registered_at: registeredAt }])

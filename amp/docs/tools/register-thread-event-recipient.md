@@ -106,12 +106,11 @@ Success output is JSON text with this exact shape:
 ```json
 {
   "status": "registered",
-  "threadID": "T-...",
-  "ownershipGranted": false
+  "threadID": "T-..."
 }
 ```
 
-`status` is `registered` on the first call and `already_registered` on later calls. `ownershipGranted` is always `false`.
+`status` is `registered` on the first call and `already_registered` on later calls. Registration never grants ownership.
 
 The input schema rejects every field. The tool returns a SQLite error if it cannot read or write the local state. It does not accept a repository, pull-request number, owner or destination thread ID.
 
@@ -140,13 +139,13 @@ Register the current thread:
 Example first result:
 
 ```json
-{"status":"registered","threadID":"T-...","ownershipGranted":false}
+{"status":"registered","threadID":"T-..."}
 ```
 
 Example repeated result:
 
 ```json
-{"status":"already_registered","threadID":"T-...","ownershipGranted":false}
+{"status":"already_registered","threadID":"T-..."}
 ```
 
 Neither result means the thread owns a pull request. The existing owner must name this registered thread in a successful `transfer_pr_thread_owner` call.

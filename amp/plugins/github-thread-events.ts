@@ -97,10 +97,10 @@ export function openGithubThreadEventStore(databasePath: string) {
 
 	const registerTransaction = database.transaction((threadID: string) => {
 		if (findRecipient.get(threadID)) {
-			return { status: 'already_registered', threadID, ownershipGranted: false }
+			return { status: 'already_registered', threadID }
 		}
 		insertRecipient.run(threadID, new Date().toISOString())
-		return { status: 'registered', threadID, ownershipGranted: false }
+		return { status: 'registered', threadID }
 	})
 
 	const transferTransaction = database.transaction((
