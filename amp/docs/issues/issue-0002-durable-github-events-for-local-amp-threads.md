@@ -12,10 +12,12 @@ updated: "2026-07-26"
 amp_thread_id:
   T-019f9241-c27f-7395-8fd1-f6284344d869: "investigated Amp webhooks, local runner delivery, offline queuing and unattended secret access"
   T-019f4f39-34b7-7169-9005-a5d36a49c642: "acknowledged the unattended 1Password failure and designed service-account authentication for weekly-report automation"
+  T-019f9d2f-33b0-76ce-ad76-9b75ed3944e5: "aligned the issue with the approved v1 eligibility, transfer and ordering boundaries"
 artifacts: []
 implementation:
   - path: "../rfcs/rfc-0009-durable-github-events-for-local-amp-threads.md"
-pull_requests: []
+pull_requests:
+  - "https://github.com/lelouvincx/agent-skills/pull/126"
 related: []
 tags:
   - "amp-runner"
@@ -135,21 +137,33 @@ Cloudflare Queue acknowledgement and Amp thread append happen in different syste
 
 ### P1: retry exhaustion can delete an event
 
-Each redelivery increments a Queue message's attempts. Cloudflare permanently deletes a message at `max_retries` unless the queue has a dead-letter queue. Indefinite delayed retry for a missing binding would therefore lose the event.
+A Queue message's `attempts` value counts full delivery attempts. Cloudflare permanently deletes an exhausted message unless the queue has a dead-letter queue. Indefinite delayed retry for a missing binding would therefore lose the event.
 
 ### P1: local execution is not established
 
-`appendUserMessage` submits a turn but does not select an executor. The design has not yet proved that a plugin on the named runner can submit work to a thread created in another client and have that turn execute on the same runner. It has also not proved that the polling timer survives for the runner process lifetime.
+`appendUserMessage` submits a turn but does not select an executor. The current Plugin API exposes executor choice only when it creates a new thread. It exposes no supported attach or migration operation for an existing arbitrary thread, so v1 excludes that path. V1 accepts only threads created on and running in the configured stable-runner consumer process. Runner reattachment after restart and process-lifetime polling remain unproved.
+
+### P1: parent-authorized transfer is not implementable yet
+
+The Plugin API accepts `parentThreadID` when it creates a thread. However, `PluginThread` exposes no parent query. The accepted v1 therefore permits only the current owner to transfer ownership. Parent-authorized transfer from the broader Original intent is deferred.
+
+### P1: strict per-target ordering is not established
+
+Cloudflare Queues does not guarantee delivery in publication order. Retries can also make an older event visible after a newer event. Strict ordering across batches or retries is explicitly not a v1 guarantee. The approved v1 design uses timeline metadata, sorts simultaneously ready events for each owner and checks current state before acting. It does not use a per-target sequencer.
 
 ### P2: some CI events may not identify a pull request
 
-A `workflow_run` payload can contain associated pull requests, but that list can be empty. The workflow needs a documented fallback from head commit to pull request or a clear unmatched-event outcome.
+A `workflow_run` payload can identify zero, one or several associated pull requests. The selected first design accepts exactly one. It publishes every ambiguous event to the dead-letter queue with reason `missing-pull-request-identity` instead of guessing a thread.
+
+### P2: merge conflicts need live candidate validation
+
+GitHub has no dedicated merge-conflict webhook action. Candidate pull-request changes and base-branch pushes must converge on a live mergeability query. That query can return `UNKNOWN` or null. The policy needs a live spike for convergence, fan-out volume, cost and bounded handling of indeterminate results.
 
 ### P2: offline notification needs a cloud-side signal
 
 An offline local runner cannot report its own outage. Cloudflare exposes queue backlog count and oldest-message age. A scheduled cloud-side check can notify Chinh after a message exceeds a threshold and suppress repeats until the queue drains.
 
-The monitor needs a defined metrics source and cloud-side latch store. A valid event with no thread binding must also leave the primary queue after a bounded grace period. Otherwise ordinary pull requests that no Amp thread opened would trigger stale alerts and keep the alert latch set.
+The selected design reads Queue metrics through Worker bindings and stores alert latches in Workers KV. These are verified design paths, not implemented resources. A valid event with no thread binding must also leave the primary queue after a bounded grace period. The plugin can publish it directly to the dead-letter queue before acknowledging its primary lease. Otherwise ordinary pull requests that no Amp thread opened would trigger stale alerts and keep the alert latch set.
 
 ### P2: fixed polling can exhaust the free operation budget
 
@@ -173,7 +187,11 @@ The investigation set these boundaries:
 - enqueue accepted events in Cloudflare Queues before returning success to GitHub
 - use a pull consumer in the local Amp plugin so the machine needs no inbound endpoint
 - bind each pull request explicitly to its Amp thread
-- require the bound thread to be executable by the stable runner before accepting the binding
+- accept only threads created on and running in the configured stable-runner consumer process
+- let initial binding register its owner, but reject binding outside that process and transfer to an unregistered destination; v1 does not support arbitrary attach or migration
+- allow only the current owner to transfer ownership to a destination registered in that process; defer parent-authorized transfer
+- preserve timeline metadata, sort simultaneously ready events for each owner and check current source and commit state before acting
+- provide no strict ordering guarantee across batches or retries and do not add a per-target sequencer in v1
 - use `appendUserMessage` to submit the turn and use `steer: true` only for busy-thread priority
 - acknowledge a queue message only after Amp accepts the append or reconciliation proves it already happened
 - use the GitHub delivery ID to deduplicate Queue redelivery of the same GitHub delivery
@@ -197,9 +215,13 @@ Cloudflare Tunnel remains acceptable for local development and manual testing. I
 | Missing pull-request-to-thread binding | P1 | Open | implement a dedicated local plugin tool and durable mapping |
 | Cross-system acknowledgement gap | P1 | Open | implement delivery markers, local reconciliation and at-least-once handling |
 | Retry exhaustion deletes events | P1 | Design selected | configure 100 retries and a monitored dead-letter queue |
-| Local runner execution and polling lifecycle | P1 | Open | prove executor assignment and process-lifetime polling before accepting RFC-0009 |
-| CI event without pull-request identity | P2 | Open | define and test head-commit fallback or unmatched-event handling |
-| Offline notification | P2 | Open | read Queue binding metrics, store the latch in Workers KV and bound unmatched-event retries |
+| Runner-created eligibility | P1 | Design selected | accept only threads created on and running in the configured stable-runner consumer process; reject arbitrary attach or migration in v1 |
+| Runner reattachment and polling lifecycle | P1 | Open | prove restart reattachment and one process-lifetime poller across reload and reconnection |
+| Parent-authorized ownership transfer | P1 | Design selected | v1 permits current-owner-only transfer to a registered destination; parent-authorized transfer is deferred |
+| Strict per-target ordering | P1 | Design selected | use timeline metadata, simultaneously-ready owner sorting and current-state preflight; do not guarantee cross-batch or retry order and do not add a sequencer |
+| CI event without exactly one pull-request identity | P2 | Design selected | publish the event directly to the dead-letter queue as `missing-pull-request-identity`; do not guess a thread |
+| Merge-conflict detection | P2 | Open | validate candidate convergence, base-branch fan-out and bounded indeterminate mergeability against live GitHub behavior |
+| Offline notification | P2 | Design selected | read Queue binding metrics, store latches in Workers KV and publish application dead letters directly; no resources exist yet |
 | Free-plan operation budget | P2 | Design selected | back off polling after consecutive empty responses |
 | Service-account bootstrap | P2 | In progress | Amp thread T-019f4f39 is resolving the same failure class for separate automation; RFC-0009 retains the runner-specific design |
 | Runner supervision | P3 | Open | add and test a `launchd` service for the local runner |
@@ -208,7 +230,7 @@ No runtime implementation or cloud resource exists yet. The issue remains open u
 
 ## Follow-up
 
-Implementation follow-up is tracked in [RFC-0009](../rfcs/rfc-0009-durable-github-events-for-local-amp-threads.md#maintenance-notes).
+Before accepting RFC-0009 or writing capability documents, prove runner reattachment after restart and a single process-lifetime poller across reload and reconnection. Also run the live merge-conflict experiment for convergence, base-branch fan-out and bounded indeterminate results.
 
 ## Validation
 
@@ -216,10 +238,17 @@ The issue is resolved when all of these conditions hold:
 
 - GitHub receives a successful response after the event is durably queued
 - no Orb starts for webhook receipt, routing or resumed thread work
-- a turn submitted to a bound thread created in another client executes on the configured stable runner
+- only a thread created on and running in the configured stable-runner consumer process can become eligible
+- initial binding registers its owner, binding elsewhere fails and transfer rejects an unregistered destination
+- an eligible thread reattaches after the configured runner process restarts
 - plugin polling remains active across runner lifetime, reload and reconnection
+- exactly one poller runs for the configured consumer process
 - an online runner adds a matching event to the bound thread
 - an offline runner can return within the retention period and drain the event
+- registering a recipient grants no pull-request ownership by itself
+- only the current owner can transfer ownership, and only to a registered destination
+- timeline metadata is preserved, simultaneously ready events are sorted for each owner and every event receives a current-state preflight
+- cross-batch and retry ordering remains best-effort without a per-target sequencer
 - the queue message remains unacknowledged when thread append fails
 - retry exhaustion moves the event to the dead-letter queue instead of deleting it
 - a repeated Queue delivery with the same GitHub delivery ID does not start a second meaningful Amp turn
@@ -230,7 +259,7 @@ The issue is resolved when all of these conditions hold:
 - stale queued work sends no more than one notification until the backlog drains
 - the alert latch clears after an unbound event leaves the primary queue
 - empty polling stays within the selected Cloudflare plan's daily operation budget
-- a merge event and a failed CI event use fixed, verified message templates
+- failed CI, merge, review-feedback and merge-conflict events pass their candidate, policy and current-state checks, including actor trust where applicable
 - each appended message contains only the minimum identifiers and source references required by its event policy
 - the runner starts without biometric approval after its one-time secure setup
 - local credential files contain only `op://` references
