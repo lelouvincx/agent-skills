@@ -130,23 +130,37 @@ Validation errors identify the invalid field. If another thread owns the normali
 
 ## Behavior
 
-The enabled plugin resolves `${AMP_CONFIG_DIR:-~/.config/amp}/state/github-thread-events.sqlite`, creates its parent directory when needed and opens the database with foreign keys enabled. It creates only these ownership tables when absent:
+The enabled plugin resolves `${AMP_CONFIG_DIR:-~/.config/amp}/state/github-thread-events.sqlite`, creates its parent directory when needed and opens the database with foreign keys enabled. One recipient can own many pull-request bindings. Each binding has exactly one owner.
 
-```sql
-create table if not exists recipients (
-  thread_id text primary key not null
-, registered_at text not null
-);
+```diagram
+┌──────────────────────┐  1       many  ┌──────────────────────────┐
+│ recipients           │────────────────│ bindings                 │
+├──────────────────────┤                ├──────────────────────────┤
+│ PK thread_id         │                │ PK repository            │
+│    registered_at     │                │ PK pull_request          │
+└──────────────────────┘                │    base_ref              │
+                                        │ FK owner_thread_id       │
+                                        │    updated_at            │
+                                        └──────────────────────────┘
+```
 
-create table if not exists bindings (
-  repository text not null
-, pull_request integer not null check (pull_request > 0)
-, base_ref text not null
-, owner_thread_id text not null
-, updated_at text not null
-, primary key (repository, pull_request)
-, foreign key (owner_thread_id) references recipients(thread_id)
-);
+```dbml
+Table recipients {
+  thread_id text [pk, not null]
+  registered_at text [not null]
+}
+
+Table bindings {
+  repository text [not null]
+  pull_request integer [not null, note: 'Must be greater than 0']
+  base_ref text [not null]
+  owner_thread_id text [not null, ref: > recipients.thread_id]
+  updated_at text [not null]
+
+  indexes {
+    (repository, pull_request) [pk]
+  }
+}
 ```
 
 Timestamps are UTC ISO 8601 strings. The plugin keeps the first `registered_at` value. It changes `updated_at` only when it creates a binding or changes its base ref or owner.
