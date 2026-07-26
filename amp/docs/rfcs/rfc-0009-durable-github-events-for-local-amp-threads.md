@@ -4,7 +4,7 @@ code: "RFC-0009"
 title: "Durable GitHub events for local Amp threads"
 slug: "durable-github-events-for-local-amp-threads"
 file: "rfc-0009-durable-github-events-for-local-amp-threads.md"
-status: "Draft"
+status: "Accepted"
 summary: "Queue verified GitHub events in Cloudflare and use source-neutral policies to return actionable events to the thread that owns each pull request."
 created: "2026-07-26"
 updated: "2026-07-26"
@@ -18,7 +18,10 @@ dependency:
     code: "ISSUE-0002"
     title: "Durable GitHub events for local Amp threads"
     path: "../issues/issue-0002-durable-github-events-for-local-amp-threads.md"
-implementation: []
+implementation:
+  - path: "../tools/bind-pr-to-thread.md"
+  - path: "../tools/register-thread-event-recipient.md"
+  - path: "../tools/transfer-pr-thread-owner.md"
 inputs:
   - name: "GitHub webhook delivery"
     kind: "signed HTTP request"
@@ -85,7 +88,31 @@ Transport routing alone is not enough. A policy must decide whether an event is 
 
 `appendUserMessage` submits a turn to an existing thread, but it does not select or migrate that thread's executor. `PluginThread` has no parent or executor query. An agent's executor is set only at creation. `PluginSystem.executor` reports only `local`, `remote` or `unknown`; it does not identify a runner. The first version therefore does not attach or migrate arbitrary existing threads.
 
-The supervised stable-runner process is the trust boundary. It owns the consumer configuration and local eligibility state. A thread must be created and running in that configured process before it can bind a pull request or register to receive a transfer. Runtime spikes must still prove runner reattachment after restart and the one-poller lifecycle.
+The supervised stable-runner process is the trust boundary. It owns the consumer configuration and local eligibility state. A thread must be created and running in that configured process before it can bind a pull request or register to receive a transfer. The runtime spike described below proved runner reattachment after restart and the one-poller lifecycle for this boundary.
+
+### Runtime gate evidence
+
+On 26 July 2026, a disposable polling fixture ran on macOS 26.5.2 arm64 with Amp `0.0.1785042303-g48bae9`. The stable runner ID was `rfc9-gate-019f9d2f`. Existing thread `T-019f9d92-1856-717e-afbe-941db06377fd` was created on that runner and initially returned `/private/tmp/amp-rfc9-runtime-gate-019f9d2f`.
+
+A supported `load_plugin` reload replaced plugin worker PID 3945, instance `069a67a5-762c-48c3-a983-7fc9d79e782d`, with PID 5582, instance `553e9116-28db-4de5-9bd2-ba539ae0e180`. The runner supervisor stayed at PID 3915. The reload produced no self-overlap events or cross-instance polling interval overlaps.
+
+Pausing only the runner supervisor for 43 seconds made the runner disappear from `list_runners`. The same plugin worker and its single poller continued. Resuming the supervisor made the same runner and attached thread reappear. This proves supervisor suspension and reconnection behavior. It does not prove a network partition or machine-sleep behavior.
+
+A full runner process restart changed the supervisor from PID 3915 to PID 11652. It started plugin worker PID 11675, instance `4613a122-bc82-43b9-831a-81a22e7a2660`. Amp reported `Resuming 1 thread this runner previously served`. The same existing thread replied exactly `RESTARTED RFC9-019F9D2F /private/tmp/amp-rfc9-runtime-gate-019f9d2f`, and the new plugin instance observed its agent start.
+
+Across the initial load, reload and restart, the fixture recorded 706 completed polls, 0 incomplete polls, 0 self-overlap events and 0 cross-instance interval overlaps. The fixture was removed after the test. This evidence passes the runner reattachment and single-poller Draft gates. It does not prove the cloud queue, webhook, conflict policy, `launchd`, network-partition or machine-sleep behavior.
+
+### Merge-conflict gate evidence
+
+On 26 July 2026, a corrected controlled experiment used draft [pull request 128](https://github.com/lelouvincx/agent-skills/pull/128). It started from main commit `28793ddeff82c9d874b577af9e9eff2f2f5a12f5` and used branch prefix `rfc9-conflict-probe-20260726T090300Z-15510`.
+
+The GraphQL query was `repository.pullRequest(number) { mergeable mergeStateStatus }`. Only `mergeable: CONFLICTING` and `mergeable: MERGEABLE` counted as pass states. The conflicting head converged through `UNKNOWN:UNKNOWN → UNKNOWN:UNKNOWN → CONFLICTING:DIRTY` in 2,992 milliseconds. This took 3 GraphQL requests and 2 `UNKNOWN` observations. After the same head was updated to resolve the conflict, it converged through `UNKNOWN:UNKNOWN → MERGEABLE:CLEAN` in 2,412 milliseconds. This took 2 GraphQL requests and one `UNKNOWN` observation.
+
+The corrected fan-out check used explicit REST requests of the form `GET /repos/lelouvincx/agent-skills/pulls?state=open&base=<branch>&per_page=100&page=N`. The temporary base had one open pull request and needed one page. The configured `main` base also had one open pull request and needed one page. Open pull-request count is a conservative upper bound. Production fan-out would query only active local bindings for the repository and base branch.
+
+Cleanup closed pull request 128 without merging it. Both temporary remote refs were absent and the temporary clone was removed. An independent coordinator check confirmed the cleanup. Pull request 126 remained `OPEN` and non-draft at head `1b345e743ab2db0032edaf3fb749f97d3f286306`.
+
+This experiment passes the merge-conflict Draft gate at the repository's observed scale. It proves bounded `UNKNOWN` convergence for one controlled pull request and a one-page fan-out upper bound for the 2 measured bases. It does not establish production latency, larger-repository fan-out or deployed event delivery.
 
 ## Decision
 
@@ -127,11 +154,11 @@ The first source adapter recognizes candidate signals for these policy families:
 | `github.workflow-run.failure` | `workflow_run` is `completed` with conclusion `failure`, and its associated pull-request list contains exactly one pull request | the failed run still belongs to that bound pull request and relevant head commit |
 | `github.pull-request.merged` | `pull_request` is `closed` and `merged` is `true` | the pull request is still merged |
 | `github.pull-request.review-feedback` | `pull_request_review` is `submitted`, or `pull_request_review_comment` is `created` or `edited` | current unresolved review state contains feedback covered by policy; the actor is evidence for the policy's trust decision |
-| `github.pull-request.merge-conflict` | `pull_request` is `synchronize`, `reopened`, `ready_for_review` or `edited`, or a configured base branch receives a `push` | GraphQL reports the current pull request's `mergeable` value as `CONFLICTING` |
+| `github.pull-request.merge-conflict` | `pull_request` is `opened`, `synchronize`, `reopened`, `ready_for_review` or `edited`, or a configured base branch receives a `push` | GraphQL reports the current pull request's `mergeable` value as `CONFLICTING` |
 
-GitHub does not publish a dedicated merge-conflict webhook action. The conflict policy therefore treats pull-request changes and configured base-branch pushes as candidate signals. Worker configuration lists the repositories and base branches that can emit this candidate. The local evaluator must query the [GraphQL `mergeable` field](https://docs.github.com/en/graphql/reference/objects#pullrequest) before it resumes any thread. Only `CONFLICTING` confirms a merge conflict. `UNKNOWN` or a null result gets a bounded retry and then moves to review as `indeterminate-mergeability`. Branch protection, missing approvals, failing checks and other merge blocks are not merge conflicts.
+GitHub does not publish a dedicated merge-conflict webhook action. The conflict policy therefore treats pull-request changes and configured base-branch pushes as candidate signals. Worker configuration lists the repositories and base branches that can emit this candidate. The local evaluator must query `repository.pullRequest(number) { mergeable mergeStateStatus }` through GitHub's [GraphQL API](https://docs.github.com/en/graphql/reference/objects#pullrequest) before it resumes any thread. Only `mergeable: CONFLICTING` confirms a merge conflict. `UNKNOWN` or a null result gets a bounded retry and then moves to review as `indeterminate-mergeability`. Branch protection, missing approvals, failing checks and other merge blocks are not merge conflicts.
 
-A base-branch push may fan out to every active binding for that repository and branch. The merge-conflict policy remains gated on a live experiment proving candidate convergence, fan-out volume and cost are acceptable. It must not ship based only on the API preflight semantics.
+A base-branch push may fan out to every active binding for that repository and branch. The controlled experiment passed the Draft gate with one open pull request and one REST page for each measured base. This is an upper-bound observation at the current repository scale, not a production-volume guarantee. The implemented evaluator must fan out through active local bindings rather than all open pull requests.
 
 The Worker rejects unsupported methods, invalid signatures and oversized bodies. It acknowledges valid source events outside the supported candidate set without enqueuing them. It enqueues a supported candidate even when no policy is configured locally, because policy resolution happens after the local consumer finds the project.
 
@@ -195,7 +222,24 @@ The first version uses the primary queue's configured retention for all accepted
 
 ### Pull-request thread binding
 
-The local plugin exposes a binding operation with these logical inputs:
+The accepted local ownership slice uses one opt-in system plugin at `plugins/github-thread-events.ts`. It registers these agent tools only when `AMP_GITHUB_THREAD_EVENTS_ENABLED=1` in the configured stable-runner process:
+
+- [`bind_pr_to_thread`](../tools/bind-pr-to-thread.md)
+- [`register_thread_event_recipient`](../tools/register-thread-event-recipient.md)
+- [`transfer_pr_thread_owner`](../tools/transfer-pr-thread-owner.md)
+
+Deployment must set the opt-in only for that process. The Plugin API does not expose a runner ID, so the plugin does not query or claim one. A tool invocation supplies the eligible thread ID through `ctx.thread.id` in the opted-in process.
+
+The local ownership state uses one SQLite database at `${AMP_CONFIG_DIR:-~/.config/amp}/state/github-thread-events.sqlite`. It stores no secret. The ownership slice uses 2 tables:
+
+```text
+recipients(thread_id, registered_at)
+bindings(repository, pull_request, base_ref, owner_thread_id, updated_at)
+```
+
+`recipients.thread_id` is unique. `(bindings.repository, bindings.pull_request)` is the unique pull-request key. `bindings.owner_thread_id` references a registered recipient. Repository identity is stored as lowercase `owner/repository`.
+
+`bind_pr_to_thread` accepts:
 
 ```json
 {
@@ -205,17 +249,17 @@ The local plugin exposes a binding operation with these logical inputs:
 }
 ```
 
-The plugin takes the owner thread ID from the invocation context. Binding succeeds only when invoked by a thread created and running in the configured consumer process. The plugin records that invoking thread as an eligible runner thread and owner. It stores one active binding for each repository and pull-request number, including the base branch needed to evaluate conflict candidates.
+The plugin takes the owner thread ID only from `ctx.thread.id`. In one transaction, it registers that owner and creates the unique repository and pull-request binding. A call from the same owner is idempotent. The same owner may update `baseRef`. A different invoking thread cannot replace the binding.
 
-The intended agent-facing tool name is `bind_pr_to_thread`. Its capability document must define the final schema and output before implementation.
+Repository must normalize to lowercase `owner/repository`. `pullRequest` must be a positive integer. `baseRef` must be non-empty.
 
-Create or select the responsible thread on the named stable runner before opening and binding a pull request. After that thread opens a pull request, repository guidance should require it to bind before declaring the PR workflow complete. Binding from another process or runner fails clearly. A dedicated tool is preferred over parsing `gh pr create` commands or output.
+Create or select the responsible thread in the configured stable-runner process before opening and binding a pull request. After that thread opens a pull request, repository guidance should require it to bind before declaring the pull-request workflow complete. The tool is absent from processes without the opt-in. This process boundary replaces command-output parsing and does not add an executor query.
 
-Before receiving a transfer, the destination thread must invoke a separate recipient-registration operation in the same configured consumer process. Registration records the destination as eligible. It grants no ownership. The final tool name and schema belong in the capability documents.
+Before receiving a transfer, the destination thread must invoke `register_thread_event_recipient` in the same configured process. Registration takes no input and records only its own `ctx.thread.id`. It is idempotent, creates no binding and grants no ownership.
 
-Only the current owner may invoke the ownership-transfer operation. The transfer names a registered destination and replaces the owner atomically. An invocation from the destination, a parent or any unrelated thread cannot transfer or take ownership. A parent may ask the owner to transfer, but cannot execute the transfer in the first version. Parent-authorized transfer is deferred until Amp exposes a supported parent query.
+`transfer_pr_thread_owner` accepts repository, positive integer pull-request number and destination thread ID. In one transaction, it requires the invoker to be the current owner and the destination to be registered. It then replaces the owner. A destination, parent or unrelated thread that is not the current owner cannot transfer or take ownership. A parent may ask the owner to transfer, but cannot execute the transfer in the first version. Parent-authorized transfer is deferred until Amp exposes a supported parent query.
 
-The first version has no attach, assignment or migration path for an arbitrary existing thread. A destination created elsewhere cannot register or receive a transfer. Runner reattachment after the supervised process restarts remains a runtime proof requirement, not an executor-query claim.
+The first version has no attach, assignment or migration path for an arbitrary existing thread. A destination created elsewhere cannot register or receive a transfer. The runtime spike proved reattachment for a thread created on the stable runner after the supervised process restarted. It did not establish an executor query or migration path.
 
 A bound subagent remains the direct event recipient. It follows its existing parent-reporting contract after the turn starts. The delivery system must not notify the parent automatically unless a mandatory escalation rule applies. Those rules include inability to continue, need for authority or input, an ownership-transfer request, or a material risk outside the subagent's scope.
 
@@ -225,7 +269,7 @@ The local plugin uses Cloudflare's [HTTP pull consumer API](https://developers.c
 
 The plugin polls when it loads and while the runner stays alive. It polls every 15 seconds while draining work or after a non-empty response. After consecutive empty responses, it backs off to a configurable maximum of 60 seconds. These intervals are deployment tuning, not Cloudflare guarantees. This avoids spending most of the free plan's 10,000 daily Queue operations on empty pulls. The configured visibility timeout must be long enough to route and append the batch.
 
-Amp documents plugins as long-lived processes. Before implementation, a spike must still prove that a system plugin can keep this timer active for the lifetime of `amp --no-tui`, including plugin reload and runner reconnection.
+Amp documents plugins as long-lived processes. The runtime spike proved that a system plugin can keep one timer active across supported plugin reload, supervisor reconnection and full `amp --no-tui` restart.
 
 For each leased message, the plugin:
 
@@ -359,7 +403,7 @@ The implementation must not store the service-account token, Cloudflare token, G
 9. Amp runs the turn in the eligible runner thread recorded by the configured consumer process.
 10. The primary queue alert latch clears after the primary queue drains.
 
-The runtime spike must prove that the stable runner reattaches its recorded eligible threads after restart. The design does not migrate a thread from another runner or process.
+The runtime spike proved that the stable runner reattaches its recorded eligible thread after restart. It did not prove production recovery or add migration from another runner or process.
 
 ### Duplicate delivery
 
@@ -426,7 +470,8 @@ The Cloudflare Worker may:
 
 The local Amp plugin may:
 
-- register pull-request binding, recipient-registration and ownership-transfer tools
+- register `bind_pr_to_thread`, `register_thread_event_recipient` and `transfer_pr_thread_owner` only when `AMP_GITHUB_THREAD_EVENTS_ENABLED=1`
+- read and write `${AMP_CONFIG_DIR:-~/.config/amp}/state/github-thread-events.sqlite` for local recipient and ownership state
 - read Cloudflare account, queue and polling configuration
 - make outbound Cloudflare Queue pull, publish and acknowledgement requests
 - read structured project and global event policies
@@ -463,7 +508,7 @@ Register the destination thread from that destination in the same configured con
 {}
 ```
 
-The capability document will define the operation's final name, schema and output. Registration proves eligibility but grants no ownership.
+Call `register_thread_event_recipient`. Registration proves eligibility but grants no ownership.
 
 Transfer ownership from the current owner to the registered destination:
 
@@ -523,11 +568,11 @@ launchd
 
 Implement in this order:
 
-1. Prove stable-runner reattachment for eligible threads after process restart. It passes only if the supervised runner restores those threads and appended turns run there without migration or an executor query.
-2. Prove one active poller across plugin load, reload, runner reconnect and process restart. The polling spike passes only if each transition resumes pulls without overlap, duplicate timers or a manual interactive client. It fails on a missing poller or more than one concurrent poller.
-3. Spike the merge-conflict candidate and current-state check, including base-branch push volume, fan-out cost, convergence and indeterminate mergeability.
-4. Review RFC-0009 for acceptance only after these runtime proofs and the merge-conflict experiment pass.
-5. Document the event-policy, binding, transfer and delivery capabilities before adding plugin code.
+1. Stable-runner reattachment passed on 26 July 2026. The supervised runner restored its existing thread after process restart, and the submitted turn ran there without migration or an executor query.
+2. The one-poller lifecycle passed on 26 July 2026 across plugin load, supported reload, supervisor reconnection and full process restart. All transitions resumed polling without overlap, duplicate timers or a manual interactive client.
+3. The merge-conflict experiment passed on 26 July 2026. It proved bounded convergence for one controlled pull request and one-page upper bounds for both measured bases.
+4. RFC-0009 passed acceptance review on 26 July 2026 after all 3 Draft gates passed. Its status is `Accepted`, not `Implemented`.
+5. Capability documentation is in progress. The binding, recipient-registration and transfer contracts are complete. Event-policy, pull-loop and delivery contracts remain deferred until before their implementation.
 6. Implement and test the Cloudflare Worker, primary queue, dead-letter queue, metrics check and Workers KV latches.
 7. Implement and test policy resolution, ownership binding and transfer, adaptive pull consumption, full-history reconciliation and thread append.
 8. Create the dedicated 1Password automation vault and read-only service account after reviewing the related findings in [Amp thread T-019f4f39](https://ampcode.com/threads/T-019f4f39-34b7-7169-9005-a5d36a49c642).
@@ -551,13 +596,11 @@ Implement in this order:
 - Test stale and out-of-order events against current source and commit state.
 - Measure empty-poll operations against the selected Cloudflare plan before deployment.
 - Run the Amp document validators, plugin build checks and isolated projection before merging implementation.
-- Keep this RFC in `Draft` until runner reattachment and one-poller lifecycle have runtime proof, and the merge-conflict live convergence and fan-out experiment passes. Chinh has accepted the v1 design choices in this RFC.
+- Keep this RFC at `Accepted` until the production plugin and cloud workflow satisfy the full contract. The 3 Draft gates and accepted design do not establish production behavior.
 
 ## Open questions
 
 - Which Slack destination should receive stale-backlog notifications?
 - Is the Cloudflare Workers plan free or paid, and what polling latency fits its retention and daily Queue operation budget?
-- Where should the local SQLite state live across macOS and other future runner platforms?
 - Which structured files hold project and global event policies, and what tool manages them?
 - Should a merge event ask the thread to archive itself after any required cleanup, or only report the merge?
-- Which GitHub candidate set detects merge conflicts reliably without excessive base-branch fan-out?

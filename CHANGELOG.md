@@ -9,7 +9,7 @@ and this project does not currently use versioned releases.
 
 ### Added
 
-- Add ISSUE-0002 and RFC-0009 for durable GitHub event delivery to local Amp threads. [#126](https://github.com/lelouvincx/agent-skills/pull/126)
+- Add ISSUE-0002, accepted RFC-0009 and local pull-request ownership capability contracts for durable GitHub event delivery to local Amp threads. [#126](https://github.com/lelouvincx/agent-skills/pull/126)
 - Add `presales` as the parent workspace and register its child presales projects. [#120](https://github.com/lelouvincx/agent-skills/pull/120)
 - Add `reading-social-posts` for low-latency TikHub retrieval and complete inspection of attached social media. [#117](https://github.com/lelouvincx/agent-skills/pull/117)
 - Add exact-diff evidence requirements and an isolated read-only Git MCP toolset for Claude Code subagent reviews. [#113](https://github.com/lelouvincx/agent-skills/pull/113)

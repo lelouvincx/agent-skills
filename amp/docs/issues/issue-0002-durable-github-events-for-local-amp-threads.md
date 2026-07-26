@@ -13,9 +13,15 @@ amp_thread_id:
   T-019f9241-c27f-7395-8fd1-f6284344d869: "investigated Amp webhooks, local runner delivery, offline queuing and unattended secret access"
   T-019f4f39-34b7-7169-9005-a5d36a49c642: "acknowledged the unattended 1Password failure and designed service-account authentication for weekly-report automation"
   T-019f9d2f-33b0-76ce-ad76-9b75ed3944e5: "aligned the issue with the approved v1 eligibility, transfer and ordering boundaries"
-artifacts: []
+artifacts:
+  - "bind-pr-to-thread"
+  - "register-thread-event-recipient"
+  - "transfer-pr-thread-owner"
 implementation:
   - path: "../rfcs/rfc-0009-durable-github-events-for-local-amp-threads.md"
+  - path: "../tools/bind-pr-to-thread.md"
+  - path: "../tools/register-thread-event-recipient.md"
+  - path: "../tools/transfer-pr-thread-owner.md"
 pull_requests:
   - "https://github.com/lelouvincx/agent-skills/pull/126"
 related: []
@@ -35,7 +41,7 @@ GitHub events cannot yet return reliably to the local Amp thread that opened a p
 
 The desired workflow uses an always-on local Amp runner when available. It must queue events while the runner or machine is unavailable. When the runner returns, it must append each event to the existing pull-request thread and submit a new turn without creating an Orb.
 
-[RFC-0009](../rfcs/rfc-0009-durable-github-events-for-local-amp-threads.md) defines a proposed Cloudflare Worker, Cloudflare Queue and local pull-consumer design. No runtime capability or Cloudflare infrastructure has been implemented yet.
+[RFC-0009](../rfcs/rfc-0009-durable-github-events-for-local-amp-threads.md) is accepted. Disposable experiments passed its stable-runner reattachment, single-poller and merge-conflict Draft gates. The local ownership capability contracts are documented. No production plugin or Cloudflare infrastructure has been implemented.
 
 ## Trigger
 
@@ -117,6 +123,30 @@ The service-account token is a bootstrap credential. It cannot be stored only as
 
 [Amp thread T-019f4f39](https://ampcode.com/threads/T-019f4f39-34b7-7169-9005-a5d36a49c642) has acknowledged this failure class and is resolving it for separate weekly-report automation. That work has selected a dedicated read-only service account, a dedicated vault and an owner-only bootstrap token file. Its implementation has not started. It provides related design evidence rather than an implementation dependency for this webhook runner.
 
+### Stable-runner runtime gates
+
+On 26 July 2026, a disposable polling fixture ran on macOS 26.5.2 arm64 with Amp `0.0.1785042303-g48bae9`. The stable runner ID was `rfc9-gate-019f9d2f`. Existing thread `T-019f9d92-1856-717e-afbe-941db06377fd` was created on that runner and initially returned `/private/tmp/amp-rfc9-runtime-gate-019f9d2f`.
+
+A supported `load_plugin` reload replaced plugin worker PID 3945, instance `069a67a5-762c-48c3-a983-7fc9d79e782d`, with PID 5582, instance `553e9116-28db-4de5-9bd2-ba539ae0e180`. The runner supervisor stayed at PID 3915. The reload produced no self-overlap events or cross-instance polling interval overlaps.
+
+Pausing only the runner supervisor for 43 seconds made the runner disappear from `list_runners`. The same plugin worker and its single poller continued. Resuming the supervisor made the same runner and attached thread reappear. This proves supervisor suspension and reconnection behavior. It does not prove a network partition or machine-sleep behavior.
+
+A full runner process restart changed the supervisor from PID 3915 to PID 11652. It started plugin worker PID 11675, instance `4613a122-bc82-43b9-831a-81a22e7a2660`. Amp reported `Resuming 1 thread this runner previously served`. The same existing thread replied exactly `RESTARTED RFC9-019F9D2F /private/tmp/amp-rfc9-runtime-gate-019f9d2f`, and the new plugin instance observed its agent start.
+
+Across the initial load, reload and restart, the fixture recorded 706 completed polls, 0 incomplete polls, 0 self-overlap events and 0 cross-instance interval overlaps. The fixture was removed after the test. This passes the runner reattachment and single-poller Draft gates. It does not prove the cloud queue, webhook, conflict policy, `launchd`, network-partition or machine-sleep behavior.
+
+### Corrected merge-conflict experiment
+
+On 26 July 2026, a corrected controlled experiment used draft [pull request 128](https://github.com/lelouvincx/agent-skills/pull/128). It started from main commit `28793ddeff82c9d874b577af9e9eff2f2f5a12f5` and used branch prefix `rfc9-conflict-probe-20260726T090300Z-15510`.
+
+The experiment queried `repository.pullRequest(number) { mergeable mergeStateStatus }`. Only `mergeable: CONFLICTING` and `mergeable: MERGEABLE` counted as pass states. The conflicting head converged through `UNKNOWN:UNKNOWN → UNKNOWN:UNKNOWN → CONFLICTING:DIRTY` in 2,992 milliseconds. This took 3 GraphQL requests and 2 `UNKNOWN` observations. After the same head was updated, the resolved sequence was `UNKNOWN:UNKNOWN → MERGEABLE:CLEAN` in 2,412 milliseconds. This took 2 GraphQL requests and one `UNKNOWN` observation.
+
+The corrected fan-out check used explicit REST requests of the form `GET /repos/lelouvincx/agent-skills/pulls?state=open&base=<branch>&per_page=100&page=N`. The temporary base had one open pull request and required one page. The configured `main` base also had one open pull request and required one page. Open pull-request count is a conservative upper bound. The planned evaluator uses active local bindings, so actual fan-out may be lower.
+
+Cleanup closed pull request 128 without merging it. Both temporary remote refs were absent and the temporary clone was removed. An independent coordinator check confirmed the cleanup. Pull request 126 remained `OPEN` and non-draft at head `1b345e743ab2db0032edaf3fb749f97d3f286306`.
+
+This passes the merge-conflict Draft gate for one controlled pull request at the repository's observed scale. It does not prove production latency, larger-repository fan-out or deployed delivery.
+
 ## Findings
 
 ### P1: the Amp webhook path requires an Orb
@@ -141,7 +171,7 @@ A Queue message's `attempts` value counts full delivery attempts. Cloudflare per
 
 ### P1: local execution is not established
 
-`appendUserMessage` submits a turn but does not select an executor. The current Plugin API exposes executor choice only when it creates a new thread. It exposes no supported attach or migration operation for an existing arbitrary thread, so v1 excludes that path. V1 accepts only threads created on and running in the configured stable-runner consumer process. Runner reattachment after restart and process-lifetime polling remain unproved.
+`appendUserMessage` submits a turn but does not select an executor. The current Plugin API exposes executor choice only when it creates a new thread. It exposes no supported attach or migration operation for an existing arbitrary thread, so v1 excludes that path. V1 accepts only threads created on and running in the configured stable-runner consumer process. The runtime spike proved that an existing eligible thread reattaches after restart and that one process-lifetime poller survives the tested lifecycle transitions.
 
 ### P1: parent-authorized transfer is not implementable yet
 
@@ -187,6 +217,8 @@ The investigation set these boundaries:
 - enqueue accepted events in Cloudflare Queues before returning success to GitHub
 - use a pull consumer in the local Amp plugin so the machine needs no inbound endpoint
 - bind each pull request explicitly to its Amp thread
+- register the 3 ownership tools only when `AMP_GITHUB_THREAD_EVENTS_ENABLED=1` in the configured stable-runner process; do not infer a runner ID from the Plugin API
+- store recipients and unique repository and pull-request bindings in `${AMP_CONFIG_DIR:-~/.config/amp}/state/github-thread-events.sqlite`; store no secret there
 - accept only threads created on and running in the configured stable-runner consumer process
 - let initial binding register its owner, but reject binding outside that process and transfer to an unregistered destination; v1 does not support arbitrary attach or migration
 - allow only the current owner to transfer ownership to a destination registered in that process; defer parent-authorized transfer
@@ -212,29 +244,35 @@ Cloudflare Tunnel remains acceptable for local development and manual testing. I
 | --- | --- | --- | --- |
 | Orb required for Amp-managed webhook ingress | P1 | Design selected | RFC-0009 replaces this path with Cloudflare Queues and local pull consumption |
 | Direct Tunnel loses offline deliveries | P1 | Design selected | RFC-0009 places a durable queue before the local runner |
-| Missing pull-request-to-thread binding | P1 | Open | implement a dedicated local plugin tool and durable mapping |
+| Missing pull-request-to-thread binding | P1 | Capability contract accepted | implement the 3 documented local ownership tools and SQLite mapping |
 | Cross-system acknowledgement gap | P1 | Open | implement delivery markers, local reconciliation and at-least-once handling |
 | Retry exhaustion deletes events | P1 | Design selected | configure 100 retries and a monitored dead-letter queue |
 | Runner-created eligibility | P1 | Design selected | accept only threads created on and running in the configured stable-runner consumer process; reject arbitrary attach or migration in v1 |
-| Runner reattachment and polling lifecycle | P1 | Open | prove restart reattachment and one process-lifetime poller across reload and reconnection |
+| Runner reattachment and polling lifecycle | P1 | Runtime gate passed | the 26 July 2026 spike proved restart reattachment and one poller across load, supported reload, supervisor reconnection and full process restart |
 | Parent-authorized ownership transfer | P1 | Design selected | v1 permits current-owner-only transfer to a registered destination; parent-authorized transfer is deferred |
 | Strict per-target ordering | P1 | Design selected | use timeline metadata, simultaneously-ready owner sorting and current-state preflight; do not guarantee cross-batch or retry order and do not add a sequencer |
 | CI event without exactly one pull-request identity | P2 | Design selected | publish the event directly to the dead-letter queue as `missing-pull-request-identity`; do not guess a thread |
-| Merge-conflict detection | P2 | Open | validate candidate convergence, base-branch fan-out and bounded indeterminate mergeability against live GitHub behavior |
+| Merge-conflict detection | P2 | Experiment passed | the corrected 26 July 2026 experiment proved bounded convergence for one controlled pull request and one-page upper bounds for the 2 measured bases |
 | Offline notification | P2 | Design selected | read Queue binding metrics, store latches in Workers KV and publish application dead letters directly; no resources exist yet |
 | Free-plan operation budget | P2 | Design selected | back off polling after consecutive empty responses |
 | Service-account bootstrap | P2 | In progress | Amp thread T-019f4f39 is resolving the same failure class for separate automation; RFC-0009 retains the runner-specific design |
 | Runner supervision | P3 | Open | add and test a `launchd` service for the local runner |
 
-No runtime implementation or cloud resource exists yet. The issue remains open until the end-to-end workflow passes offline recovery tests.
+No production plugin or cloud resource exists yet. The issue remains open until the local ownership tools and end-to-end workflow pass their implementation and offline recovery tests.
 
 ## Follow-up
 
-Before accepting RFC-0009 or writing capability documents, prove runner reattachment after restart and a single process-lifetime poller across reload and reconnection. Also run the live merge-conflict experiment for convergence, base-branch fan-out and bounded indeterminate results.
+Implement the accepted local ownership boundary from these source-of-truth capability contracts:
+
+1. [`bind_pr_to_thread`](../tools/bind-pr-to-thread.md)
+2. [`register_thread_event_recipient`](../tools/register-thread-event-recipient.md)
+3. [`transfer_pr_thread_owner`](../tools/transfer-pr-thread-owner.md)
+
+Keep queue pulling, event policies, ordering, GitHub preflight, thread append and reconciliation deferred until their capability boundaries are documented. Cloudflare, Slack, `launchd`, 1Password and deployment remain separate later work.
 
 ## Validation
 
-The issue is resolved when all of these conditions hold:
+The experiments satisfy the eligible-thread reattachment, single-poller and controlled merge-conflict conditions below. The issue is resolved when all remaining conditions also hold:
 
 - GitHub receives a successful response after the event is durably queued
 - no Orb starts for webhook receipt, routing or resumed thread work
@@ -272,7 +310,8 @@ Maintain this issue as follows:
 - preserve Trigger, Original intent and Evidence as historical facts
 - update Findings, Resolution status, Follow-up and `updated` as implementation progresses
 - keep the current design in RFC-0009
-- add the future capability document to `artifacts` and `implementation`
+- keep the 3 local ownership capability documents in `artifacts` and `implementation`
+- add future policy, consumer and delivery capability documents only after their registration schema and contract are decided
 - link implementation pull requests when they exist
 - keep Cloudflare and GitHub behavior supported by current official documentation
 - keep the frontmatter aligned with the [issue schema](./_schema.md)
