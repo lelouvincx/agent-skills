@@ -11,6 +11,7 @@ created: "2026-07-26"
 updated: "2026-07-26"
 amp_thread_id:
   T-019f9241-c27f-7395-8fd1-f6284344d869: "investigated Amp webhooks, local runner delivery, offline queuing and unattended secret access"
+  T-019f4f39-34b7-7169-9005-a5d36a49c642: "acknowledged the unattended 1Password failure and designed service-account authentication for weekly-report automation"
 artifacts: []
 implementation:
   - path: "../rfcs/rfc-0009-durable-github-events-for-local-amp-threads.md"
@@ -110,7 +111,9 @@ A local plugin therefore needs a durable binding from `owner/repository#pull-req
 
 [1Password service accounts](https://www.1password.dev/service-accounts/use-with-1password-cli) can authenticate `op run` through `OP_SERVICE_ACCOUNT_TOKEN` without biometric approval. Service accounts can be limited to selected vaults and permissions.
 
-The service-account token is a bootstrap credential. It cannot be stored only as an `op://` reference that the same service account must resolve. The unattended host needs a separate protected store for that token. On macOS, the login Keychain can provide this store without adding plaintext credentials to repository or environment files.
+The service-account token is a bootstrap credential. It cannot be stored only as an `op://` reference that the same service account must resolve. The unattended host needs a separate protected store for that token.
+
+[Amp thread T-019f4f39](https://ampcode.com/threads/T-019f4f39-34b7-7169-9005-a5d36a49c642) has acknowledged this failure class and is resolving it for separate weekly-report automation. That work has selected a dedicated read-only service account, a dedicated vault and an owner-only bootstrap token file. Its implementation has not started. It provides related design evidence rather than an implementation dependency for this webhook runner.
 
 ## Findings
 
@@ -198,22 +201,14 @@ Cloudflare Tunnel remains acceptable for local development and manual testing. I
 | CI event without pull-request identity | P2 | Open | define and test head-commit fallback or unmatched-event handling |
 | Offline notification | P2 | Open | read Queue binding metrics, store the latch in Workers KV and bound unmatched-event retries |
 | Free-plan operation budget | P2 | Design selected | back off polling after consecutive empty responses |
-| Service-account bootstrap | P2 | Design selected | store the limited bootstrap token in macOS Keychain |
+| Service-account bootstrap | P2 | In progress | Amp thread T-019f4f39 is resolving the same failure class for separate automation; RFC-0009 retains the runner-specific design |
 | Runner supervision | P3 | Open | add and test a `launchd` service for the local runner |
 
 No runtime implementation or cloud resource exists yet. The issue remains open until the end-to-end workflow passes offline recovery tests.
 
 ## Follow-up
 
-1. Spike executor assignment for a thread created in another client and process-lifetime plugin polling.
-2. Review and accept RFC-0009 only after both spikes pass.
-3. Document the plugin capability before adding plugin code.
-4. Implement and test the Cloudflare Worker, primary queue, dead-letter queue, metrics check and Workers KV latch.
-5. Implement and test the local binding tool, adaptive pull consumer, full-history reconciliation and thread append.
-6. Create the dedicated 1Password automation vault and read-only service account.
-7. Store the service-account token in macOS Keychain and add the supervised runner startup path.
-8. Deploy Cloudflare resources and register the GitHub webhook after explicit approval.
-9. Test online delivery, runner downtime, restart recovery, duplicate delivery, retry exhaustion and missing binding.
+Implementation follow-up is tracked in [RFC-0009](../rfcs/rfc-0009-durable-github-events-for-local-amp-threads.md#maintenance-notes).
 
 ## Validation
 

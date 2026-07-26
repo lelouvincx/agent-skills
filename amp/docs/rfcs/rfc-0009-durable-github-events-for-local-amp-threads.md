@@ -10,6 +10,7 @@ created: "2026-07-26"
 updated: "2026-07-26"
 amp_thread_id:
   T-019f9241-c27f-7395-8fd1-f6284344d869: "defined the local runner, offline queue, thread routing and unattended secret requirements"
+  T-019f4f39-34b7-7169-9005-a5d36a49c642: "provided related unattended 1Password service-account design evidence"
 dependency:
   - type: "issue"
     code: "ISSUE-0002"
@@ -248,6 +249,8 @@ The scheduled Worker uses Queue and Workers KV bindings for metrics and alert-la
 
 The 1Password service-account token is a bootstrap credential. On macOS, store it in login Keychain. A supervised startup wrapper reads it into `OP_SERVICE_ACCOUNT_TOKEN`, then runs Amp through `op run --env-file`. The env file contains only `op://` references.
 
+[Amp thread T-019f4f39](https://ampcode.com/threads/T-019f4f39-34b7-7169-9005-a5d36a49c642) is resolving the same unattended authentication failure class for separate weekly-report automation. Review its service-account findings before implementation, but keep this runner's bootstrap choice independent unless Chinh explicitly aligns them.
+
 The implementation must not store the service-account token, Cloudflare token, GitHub signing secret or Slack webhook in the repository or a plaintext local env file.
 
 ## Behavior
@@ -377,6 +380,18 @@ launchd
 ```
 
 ## Maintenance notes
+
+Implement in this order:
+
+1. Spike executor assignment for a thread created in another client and process-lifetime plugin polling.
+2. Review and accept RFC-0009 only after both spikes pass.
+3. Document the plugin capability before adding plugin code.
+4. Implement and test the Cloudflare Worker, primary queue, dead-letter queue, metrics check and Workers KV latch.
+5. Implement and test the local binding tool, adaptive pull consumer, full-history reconciliation and thread append.
+6. Create the dedicated 1Password automation vault and read-only service account after reviewing the related findings in [Amp thread T-019f4f39](https://ampcode.com/threads/T-019f4f39-34b7-7169-9005-a5d36a49c642).
+7. Store the service-account token in macOS Keychain and add the supervised runner startup path.
+8. Deploy Cloudflare resources and register the GitHub webhook after Chinh's explicit approval.
+9. Test online delivery, runner downtime, restart recovery, duplicate delivery, retry exhaustion and missing binding.
 
 - Keep [ISSUE-0002](../issues/issue-0002-durable-github-events-for-local-amp-threads.md) as the evidence and resolution record.
 - Add the plugin capability document before implementing the plugin.
