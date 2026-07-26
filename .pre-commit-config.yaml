@@ -49,6 +49,22 @@ repos:
         pass_filenames: false
         files: ^(?:amp/docs/rfcs/|amp/scripts/validate-rfcs\.py$|\.github/workflows/ci\.yml$|\.pre-commit-config\.yaml$)
 
+      - id: validate-github-thread-events
+        name: Validate GitHub thread event configuration
+        entry: python amp/scripts/validate-github-thread-events.py
+        language: python
+        additional_dependencies: [jsonschema==4.25.1]
+        pass_filenames: false
+        files: ^(?:amp/github-thread-events/|amp/scripts/(?:test_validate_github_thread_events|validate-github-thread-events)\.py$|sync-skills\.sh$|scripts/check-projection$|\.github/workflows/ci\.yml$|\.pre-commit-config\.yaml$)
+
+      - id: test-github-thread-events
+        name: Test GitHub thread event configuration
+        entry: python -m unittest amp/scripts/test_validate_github_thread_events.py
+        language: python
+        additional_dependencies: [jsonschema==4.25.1]
+        pass_filenames: false
+        files: ^(?:amp/github-thread-events/|amp/scripts/(?:test_validate_github_thread_events|validate-github-thread-events)\.py$|sync-skills\.sh$|scripts/check-projection$|\.github/workflows/ci\.yml$|\.pre-commit-config\.yaml$)
+
       - id: shell-syntax
         name: Check shell syntax
         entry: bash -n
