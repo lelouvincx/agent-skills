@@ -9,7 +9,7 @@ and this project does not currently use versioned releases.
 
 ### Added
 
-- Add ISSUE-0002 and RFC-0009 for durable GitHub event delivery to local Amp threads.
+- Add ISSUE-0002 and RFC-0009 for durable GitHub event delivery to local Amp threads. [#126](https://github.com/lelouvincx/agent-skills/pull/126)
 - Add `presales` as the parent workspace and register its child presales projects. [#120](https://github.com/lelouvincx/agent-skills/pull/120)
 - Add `reading-social-posts` for low-latency TikHub retrieval and complete inspection of attached social media. [#117](https://github.com/lelouvincx/agent-skills/pull/117)
 - Add exact-diff evidence requirements and an isolated read-only Git MCP toolset for Claude Code subagent reviews. [#113](https://github.com/lelouvincx/agent-skills/pull/113)
@@ -39,7 +39,7 @@ and this project does not currently use versioned releases.
 
 ### Changed
 
-- Update the Amp SDK workspace to the latest published SDK, Plugin API types, and bundled Amp CLI.
+- Update the Amp SDK workspace to the latest published SDK, Plugin API types, and bundled Amp CLI. [#126](https://github.com/lelouvincx/agent-skills/pull/126)
 - Require agents to apply the GOV.UK style skill when drafting messages or emails. [#125](https://github.com/lelouvincx/agent-skills/pull/125)
 - Make agents evaluate delegation before non-trivial work, define completion contracts for delegated tasks, and keep detailed routing rules in the `delegating-subagents` skill. [#124](https://github.com/lelouvincx/agent-skills/pull/124)
 - Distinguish concurrent one-turn Task delegation from addressable cross-turn subagent coordination. [#123](https://github.com/lelouvincx/agent-skills/pull/123)
