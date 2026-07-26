@@ -39,6 +39,7 @@ and this project does not currently use versioned releases.
 
 ### Changed
 
+- Limit Logseq coordinator Linear validation to `DAT`, `PS` and `DOC` issue IDs so identifiers such as `RFC-0012` do not prevent parent thread updates or worker archiving. [#129](https://github.com/lelouvincx/agent-skills/pull/129)
 - Update the Amp SDK workspace to the latest published SDK, Plugin API types, and bundled Amp CLI. [#126](https://github.com/lelouvincx/agent-skills/pull/126)
 - Require agents to apply the GOV.UK style skill when drafting messages or emails. [#125](https://github.com/lelouvincx/agent-skills/pull/125)
 - Make agents evaluate delegation before non-trivial work, define completion contracts for delegated tasks, and keep detailed routing rules in the `delegating-subagents` skill. [#124](https://github.com/lelouvincx/agent-skills/pull/124)

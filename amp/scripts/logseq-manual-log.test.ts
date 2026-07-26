@@ -207,6 +207,27 @@ describe('independent Logseq validation', () => {
 		})
 	})
 
+	test('does not treat RFC-0012 as a Linear issue ID', () => {
+		const rfcBacklog = backlog
+			.replaceAll('DAT-745', 'RFC-0012')
+			.replace(`\t  linear:: RFC-0012\n`, '')
+		expect(validateLogseqWrite(rfcBacklog, `- TODO ((${taskID}))`, parentID, today)).toEqual({
+			backlogVerified: true,
+			journalVerified: true,
+			error: undefined,
+		})
+	})
+
+	test.each(['DAT-745', 'PS-123', 'DOC-123'])('requires a matching linear:: property for %s', (linearID) => {
+		const matchingBacklog = backlog.replaceAll('DAT-745', linearID)
+		const withoutLinear = matchingBacklog.replace(`\t  linear:: ${linearID}\n`, '')
+		const mismatchedLinear = matchingBacklog.replace(`linear:: ${linearID}`, 'linear:: DAT-999')
+
+		expect(validateLogseqWrite(matchingBacklog, `- TODO ((${taskID}))`, parentID, today).backlogVerified).toBe(true)
+		expect(validateLogseqWrite(withoutLinear, `- TODO ((${taskID}))`, parentID, today).error).toContain('linear:: must match')
+		expect(validateLogseqWrite(mismatchedLinear, `- TODO ((${taskID}))`, parentID, today).error).toContain('linear:: must match')
+	})
+
 	test.each([
 		['task UUID', `\t  id:: ${taskID}\n`, ''],
 		['project', '\t  project:: [[Internal]]\n', ''],

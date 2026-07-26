@@ -194,7 +194,7 @@ It validates these direct task properties:
 - a `#P` value in `priority::`
 - the parent thread in `input::`
 - today's date in `updated-at::`
-- a matching `linear::` value when the task title or input contains a Linear issue ID
+- a matching `linear::` value when the task title or input contains a `DAT-`, `PS-` or `DOC-` issue ID
 - a non-empty `next-action::` for active tasks
 - a valid `completed::` date and no stale next action or blocker for `DONE` tasks
 
@@ -205,6 +205,8 @@ That activity must have its own UUID in `id::`, today's date in `observed-at::` 
 The journal must contain a block reference to the validated task UUID.
 
 Missing or duplicate tasks fail Backlog verification.
+
+The coordinator recognises only `DAT-`, `PS-` and `DOC-` prefixes as Linear team IDs. It does not treat other uppercase identifiers, such as `RFC-0012`, as Linear issue IDs.
 
 A valid task with a missing journal reference remains partial.
 

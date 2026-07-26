@@ -538,7 +538,7 @@ export function validateLogseqWrite(
 		if (propertyValues(task, 'next-action').length || propertyValues(task, 'blocker').length) errors.push('DONE task must not have next-action:: or blocker::')
 	}
 
-	const linearIDs = new Set(`${task.headline} ${propertyValues(task, 'input').join(' ')}`.match(/\b[A-Z]{2,10}-\d+\b/g) ?? [])
+	const linearIDs = new Set(`${task.headline} ${propertyValues(task, 'input').join(' ')}`.match(/\b(?:DAT|PS|DOC)-\d+\b/g) ?? [])
 	if (linearIDs.size && !linearIDs.has(singleProperty(task, 'linear') ?? '')) errors.push('linear:: must match a Linear issue ID in the task title or input')
 
 	const activities = blocks.filter((block) =>
