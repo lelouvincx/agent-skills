@@ -15,6 +15,7 @@ This folder preserves the original intent, evidence, findings, decisions, and re
 | Code | Issue | Priority | Status |
 | --- | --- | --- | --- |
 | `ISSUE-0001` | [Logseq logging reliability](./issue-0001-logseq-logging-reliability.md) | P0 | Partially resolved |
+| `ISSUE-0002` | [Durable GitHub events for local Amp threads](./issue-0002-durable-github-events-for-local-amp-threads.md) | P1 | Open |
 
 ## Maintenance files
 
