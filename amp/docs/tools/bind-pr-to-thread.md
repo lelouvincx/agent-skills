@@ -190,7 +190,7 @@ Create a binding for the invoking thread:
 
 ```json
 {
-  "repository": "Lelouvincx/Agent-Skills",
+  "repository": "lelouvincx/agent-skills",
   "pullRequest": 126,
   "baseRef": "main"
 }
