@@ -1,1 +1,1 @@
-temporary head content
+temporary deterministically resolved content
