@@ -11,6 +11,11 @@ fi
 tmp_home="$(mktemp -d)"
 trap 'rm -rf "$tmp_home"' EXIT
 
+mkdir -p "$tmp_home/.config/amp/github-thread-events/policies"
+touch "$tmp_home/.config/amp/github-thread-events/policies/stale.json"
+mkdir -p "$tmp_home/.config/amp/state"
+printf '%s\n' 'pre-existing runtime state' > "$tmp_home/.config/amp/state/github-thread-events.sqlite"
+
 HOME="$tmp_home" \
 	AMP_CONFIG_DIR="$tmp_home/.config/amp" \
 	"$REPO_DIR/sync-skills.sh"
@@ -18,6 +23,11 @@ HOME="$tmp_home" \
 for path in \
 	".config/amp/AGENTS.md" \
 	".config/amp/settings.json" \
+	".config/amp/github-thread-events/config.json" \
+	".config/amp/github-thread-events/config.schema.json" \
+	".config/amp/github-thread-events/policy-set.schema.json" \
+	".config/amp/github-thread-events/policies/global.json" \
+	".config/amp/github-thread-events/policies/projects/lelouvincx/agent-skills.json" \
 	".config/amp/plugins" \
 	".config/amp/docs" \
 	".config/amp/mcp-servers/git-diff-server.mjs" \
@@ -28,6 +38,26 @@ for path in \
 		exit 1
 	fi
 done
+
+if ! diff -qr "$REPO_DIR/amp/github-thread-events" "$tmp_home/.config/amp/github-thread-events"; then
+	echo "error: GitHub thread event projection differs from its source" >&2
+	exit 1
+fi
+
+if [ -e "$tmp_home/.config/amp/github-thread-events/policies/stale.json" ]; then
+	echo "error: projection did not delete a stale GitHub thread event file" >&2
+	exit 1
+fi
+
+if find "$REPO_DIR/amp/github-thread-events" "$tmp_home/.config/amp/github-thread-events" -type f \( -name '*.sqlite' -o -name '*.sqlite3' \) | grep -q .; then
+	echo "error: source or projection contains runtime SQLite state" >&2
+	exit 1
+fi
+
+if [ "$(cat "$tmp_home/.config/amp/state/github-thread-events.sqlite")" != "pre-existing runtime state" ]; then
+	echo "error: projection changed runtime GitHub thread event state" >&2
+	exit 1
+fi
 
 for skill in "$REPO_DIR"/skills/*/; do
 	name="$(basename "$skill")"

@@ -230,6 +230,12 @@ sync_amp_artifacts() {
 		echo "copied: amp/settings.json -> $AMP_CONFIG_DIR/settings.json"
 	fi
 
+	if [ -d "$AMP_DIR/github-thread-events" ]; then
+		mkdir -p "$AMP_CONFIG_DIR/github-thread-events"
+		rsync -a --delete "$AMP_DIR/github-thread-events/" "$AMP_CONFIG_DIR/github-thread-events/"
+		echo "synced: amp/github-thread-events/ -> $AMP_CONFIG_DIR/github-thread-events/"
+	fi
+
 	if [ -d "$AMP_DIR/plugins" ]; then
 		mkdir -p "$AMP_CONFIG_DIR/plugins"
 		rsync -a --delete "$AMP_DIR/plugins/" "$AMP_CONFIG_DIR/plugins/"

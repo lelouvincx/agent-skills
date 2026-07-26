@@ -1,0 +1,41 @@
+{
+  "formatVersion": "github-thread-events-config/v1",
+  "cloudflarePlan": "free",
+  "repositories": [
+    {
+      "repository": "lelouvincx/agent-skills",
+      "baseBranches": [
+        "main"
+      ]
+    },
+    {
+      "repository": "lelouvincx/second-brain-logseq",
+      "baseBranches": [
+        "master"
+      ]
+    },
+    {
+      "repository": "lelouvincx/dotfiles",
+      "baseBranches": [
+        "main"
+      ]
+    }
+  ],
+  "queueAssumptions": {
+    "dailyOperationLimit": 10000,
+    "primaryRetentionSeconds": 86400,
+    "deadLetterRetentionSeconds": 86400,
+    "maximumRetries": 100
+  },
+  "polling": {
+    "activeIntervalSeconds": 15,
+    "maximumIdleIntervalSeconds": 60,
+    "batchSize": 5,
+    "visibilityTimeoutSeconds": 30
+  },
+  "bindingGraceSeconds": 180,
+  "staleNotification": {
+    "afterSeconds": 300,
+    "slackChannelID": "C0BKVJXBH98"
+  }
+}

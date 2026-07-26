@@ -1,0 +1,103 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/lelouvincx/agent-skills/amp/github-thread-events/config.schema.json",
+  "title": "GitHub thread event configuration",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "formatVersion",
+    "cloudflarePlan",
+    "repositories",
+    "queueAssumptions",
+    "polling",
+    "bindingGraceSeconds",
+    "staleNotification"
+  ],
+  "properties": {
+    "formatVersion": {
+      "const": "github-thread-events-config/v1"
+    },
+    "cloudflarePlan": {
+      "const": "free"
+    },
+    "repositories": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["repository", "baseBranches"],
+        "properties": {
+          "repository": {
+            "type": "string",
+            "pattern": "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?/[a-z0-9._-]+$"
+          },
+          "baseBranches": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        }
+      }
+    },
+    "queueAssumptions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["dailyOperationLimit", "primaryRetentionSeconds", "deadLetterRetentionSeconds", "maximumRetries"],
+      "properties": {
+        "dailyOperationLimit": {
+          "const": 10000
+        },
+        "primaryRetentionSeconds": {
+          "const": 86400
+        },
+        "deadLetterRetentionSeconds": {
+          "const": 86400
+        },
+        "maximumRetries": {
+          "const": 100
+        }
+      }
+    },
+    "polling": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["activeIntervalSeconds", "maximumIdleIntervalSeconds", "batchSize", "visibilityTimeoutSeconds"],
+      "properties": {
+        "activeIntervalSeconds": {
+          "const": 15
+        },
+        "maximumIdleIntervalSeconds": {
+          "const": 60
+        },
+        "batchSize": {
+          "const": 5
+        },
+        "visibilityTimeoutSeconds": {
+          "const": 30
+        }
+      }
+    },
+    "bindingGraceSeconds": {
+      "const": 180
+    },
+    "staleNotification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["afterSeconds", "slackChannelID"],
+      "properties": {
+        "afterSeconds": {
+          "const": 300
+        },
+        "slackChannelID": {
+          "description": "Slack channel #chinh-amp-experiment",
+          "const": "C0BKVJXBH98"
+        }
+      }
+    }
+  }
+}

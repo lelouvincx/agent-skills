@@ -22,8 +22,13 @@ implementation:
   - path: "../tools/bind-pr-to-thread.md"
   - path: "../tools/register-thread-event-recipient.md"
   - path: "../tools/transfer-pr-thread-owner.md"
+  - path: "../../github-thread-events/README.md"
+  - path: "../../github-thread-events/config.schema.json"
+  - path: "../../github-thread-events/policy-set.schema.json"
   - path: "../../plugins/github-thread-events.ts"
   - path: "../../scripts/github-thread-events.test.ts"
+  - path: "../../scripts/validate-github-thread-events.py"
+  - path: "../../scripts/test_validate_github_thread_events.py"
 inputs:
   - name: "GitHub webhook delivery"
     kind: "signed HTTP request"
@@ -71,7 +76,7 @@ GitHub is the first source. The initial policy set covers failed CI, pull-reques
 
 This design does not use an Orb or expose the local machine through a production Tunnel. The queue accepts events while the runner is offline. A dead-letter queue preserves messages that need review or exhaust their retries. Each queue's configured retention period remains its final expiry boundary.
 
-The local pull-request ownership slice and its tests are implemented. Event policy, queue pulling, thread delivery and the cloud phases remain open, so this RFC remains `Accepted` rather than `Implemented`.
+The local pull-request ownership slice is implemented. Source-controlled configuration, policy schemas, exact project-over-global lookup validation and isolated projection are also implemented. Runtime policy loading, queue pulling, thread delivery and cloud phases remain open, so this RFC remains `Accepted` rather than `Implemented`.
 
 ## Context
 
@@ -218,7 +223,7 @@ An event policy is a structured rule. The local consumer resolves it without usi
 
 The consumer first looks for an exact project policy for the bound repository and policy ID. It then uses the global policy with the same ID. Project policy overrides the global fallback. The repository configuration below fixes the file locations. The final capability document must define the schema before implementation.
 
-Policies do not expand the owner thread's existing authority. The default trusted actor is `lelouvincx`. Text from another actor remains untrusted evidence unless the selected policy grants that actor instruction authority. The plugin never turns a comment body into an instruction. It appends a fixed policy action and a canonical URL from which the thread can inspect current evidence.
+Policies do not expand the owner thread's existing authority. The trusted actors are `lelouvincx`, `lelouvincx-bot` and `chinh-dm-holistics`. Text from another actor remains untrusted evidence unless the selected policy grants that actor instruction authority. The plugin never turns a comment body into an instruction. It appends a fixed policy action and a canonical URL from which the thread can inspect current evidence.
 
 If neither project nor global policy exists, the consumer does not append to the thread. It copies the event to the dead-letter queue with reason `missing-event-policy` and acknowledges the primary lease only after that copy succeeds. The dead-letter monitor provides one latched operational notification while that queue remains nonempty. The dead-letter record preserves the envelope for review until its documented retention expires.
 
@@ -234,7 +239,7 @@ This repository is the source of truth for non-secret GitHub event configuration
 | global event policies | `amp/github-thread-events/policies/global.json` | `${AMP_CONFIG_DIR}/github-thread-events/policies/global.json` |
 | project event policies | `amp/github-thread-events/policies/projects/<owner>/<repository>.json` | `${AMP_CONFIG_DIR}/github-thread-events/policies/projects/<owner>/<repository>.json` |
 
-The first monitored target is repository `lelouvincx/agent-skills` on base branch `main`. The first deployment uses the Cloudflare Free plan. Adaptive polling must remain within that plan's Queue operation budget.
+The monitored targets are `lelouvincx/agent-skills` on `main`, `lelouvincx/second-brain-logseq` on `master` and `lelouvincx/dotfiles` on `main`. The first deployment uses the Cloudflare Free plan. Adaptive polling must remain within that plan's Queue operation budget.
 
 The stale-backlog notification destination is Slack channel `#chinh-amp-experiment`, channel ID `C0BKVJXBH98`. Configuration stores the channel ID, not a Slack credential.
 
@@ -377,7 +382,7 @@ The dead-letter queue holds malformed events, exhausted processing failures, mis
 - 24 hours on the Workers free plan
 - 4 days by default on a paid plan, configurable from 60 seconds to 14 days
 
-The deployment must choose and document separate retention settings for the primary and dead-letter queues. This RFC does not choose the Free or Paid plan.
+The source-controlled first-deployment configuration selects the Cloudflare Free plan. It records the plan's 24-hour retention assumption for both primary and dead-letter queues. Deployment must verify these assumptions against current Cloudflare limits before creating either queue.
 
 A scheduled Worker checks both queues once per minute. It reads best-effort `backlogCount` and `oldestMessageTimestamp` values through each Queue binding's [`metrics()` API](https://developers.cloudflare.com/queues/configuration/javascript-apis/#queue-metrics). Metrics may be delayed or unavailable. The monitor normalizes an absent, invalid or unknown oldest timestamp to `unknown` and does not infer an age from it. When a known oldest message has waited more than 5 minutes, it sends one notification and records one alert latch per queue in Workers KV. It clears each latch when the best available count reaches zero. It sends another notification if a known oldest event approaches that queue's retention deadline.
 
@@ -445,7 +450,7 @@ Adding a policy later does not silently replay preserved events. Chinh must appr
 
 ### Review feedback and actor trust
 
-The review-feedback policy checks current unresolved review state. A project policy can decide which review states are actionable and which actors may give instructions. The global fallback trusts `lelouvincx` by default.
+The review-feedback policy checks current unresolved review state. A project policy can decide which review states are actionable and which actors may give instructions. The global fallback trusts `lelouvincx`, `lelouvincx-bot` and `chinh-dm-holistics` by default.
 
 Feedback from another actor can still resume the owner when the policy treats it as evidence to assess. The appended message contains the fixed policy action, actor identity and canonical review URL. It does not contain the review text or grant that actor more authority.
 
@@ -596,8 +601,8 @@ Implement in this order:
 2. The one-poller lifecycle passed on 26 July 2026 across plugin load, supported reload, supervisor reconnection and full process restart. All transitions resumed polling without overlap, duplicate timers or a manual interactive client.
 3. The merge-conflict experiment passed on 26 July 2026. It proved bounded convergence for one controlled pull request and one-page upper bounds for both measured bases.
 4. RFC-0009 passed acceptance review on 26 July 2026 after all 3 Draft gates passed. Its status is `Accepted`, not `Implemented`.
-5. The documented local ownership slice and its tests are implemented in `plugins/github-thread-events.ts` and `scripts/github-thread-events.test.ts`. Event-policy, pull-loop and delivery contracts remain deferred until before their implementation.
-6. Add capability documents and schemas for repository configuration, global and project policies, queue consumption and notifications. Add their repository source files and project the `amp/github-thread-events/` directory to `${AMP_CONFIG_DIR}/github-thread-events/` through `sync-skills.sh`.
+5. The documented local ownership slice and its tests are implemented in `plugins/github-thread-events.ts` and `scripts/github-thread-events.test.ts`.
+6. The repository configuration and policy contract is implemented under `amp/github-thread-events/`. JSON Schema and semantic validation prove exact project replacement, global fallback, missing policy and invalid-file failure. `sync-skills.sh` projects the complete directory without runtime SQLite state. Runtime policy loading remains deferred to the pull consumer.
 7. Implement and test the Cloudflare Worker, primary queue, dead-letter queue, metrics check and Workers KV latches on the Cloudflare Free plan.
 8. Implement and test policy resolution, adaptive pull consumption, full-history reconciliation and thread append.
 9. Create the dedicated 1Password automation vault and read-only service account after reviewing the related findings in [Amp thread T-019f4f39](https://ampcode.com/threads/T-019f4f39-34b7-7169-9005-a5d36a49c642).
@@ -625,4 +630,4 @@ Implement in this order:
 
 ## Open questions
 
-The next implementation phase must define the configuration and policy schemas in capability documents. It must measure an adaptive polling schedule against the Cloudflare Free plan before deployment. These are implementation tasks, not outstanding product decisions.
+The next implementation phase must load the validated policy contract in the pull consumer and measure the configured adaptive polling schedule against the Cloudflare Free plan before deployment. These are implementation tasks, not outstanding product decisions.

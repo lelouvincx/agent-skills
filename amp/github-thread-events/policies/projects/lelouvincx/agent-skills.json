@@ -1,0 +1,29 @@
+{
+  "formatVersion": "github-thread-event-policy-set/v1",
+  "policies": [
+    {
+      "id": "github.pull-request.merged",
+      "sourceCandidate": "github.pull-request.merged",
+      "targetKind": "pull-request",
+      "currentStatePreflight": "pull-request-still-merged-and-current",
+      "fixedAction": "Confirm the pull request is still merged and current. Sync Git and the local checkout to the merged default branch. Run ./sync-skills.sh. Reload the projected plugins and the system prompt. Archive the owning thread only after every required cleanup step succeeds. If any step fails or is blocked, report it and do not archive.",
+      "sourcePointers": [
+        "delivery-id",
+        "repository",
+        "pull-request",
+        "canonical-url"
+      ],
+      "actorTrust": {
+        "instructionAuthority": "fixed-action-only",
+        "trustedActors": [
+          "lelouvincx",
+          "lelouvincx-bot",
+          "chinh-dm-holistics"
+        ]
+      },
+      "expiry": {
+        "mode": "queue-retention"
+      }
+    }
+  ]
+}
