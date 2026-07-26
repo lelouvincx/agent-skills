@@ -5,13 +5,157 @@
 
 import type { PluginAPI } from '@ampcode/plugin'
 import { Database } from 'bun:sqlite'
-import { chmodSync, closeSync, mkdirSync, openSync } from 'node:fs'
+import { chmodSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, readdirSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
+
+const CONFIG_FORMAT = 'github-thread-events-config/v1' as const
+const POLICY_FORMAT = 'github-thread-event-policy-set/v1' as const
+const REPOSITORY_PATTERN = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\/[a-z0-9._-]+$/
+const POLICY_ID_PATTERN = /^[a-z0-9]+(?:[.-][a-z0-9]+)+$/
+const ACTOR_PATTERN = /^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?$/
+const FORBIDDEN_FIELDS = new Set([
+	'accountid', 'credential', 'credentials', 'database', 'databasepath', 'queueid', 'secret', 'token', 'webhooksecret',
+])
+const SOURCE_POINTERS = [
+	'delivery-id', 'repository', 'pull-request', 'head-sha', 'canonical-url', 'actor',
+] as const
+const PREFLIGHTS = [
+	'failed-run-still-matches-current-head',
+	'pull-request-still-merged-and-current',
+	'current-unresolved-review-feedback',
+	'pull-request-currently-conflicting',
+] as const
+const REQUIRED_POINTERS: Record<EventPolicy['currentStatePreflight'], readonly EventPolicy['sourcePointers'][number][]> = {
+	'failed-run-still-matches-current-head': ['head-sha'],
+	'pull-request-still-merged-and-current': [],
+	'current-unresolved-review-feedback': ['actor'],
+	'pull-request-currently-conflicting': ['head-sha'],
+}
+
+export type EventPolicy = {
+	id: string
+	sourceCandidate: string
+	targetKind: 'pull-request'
+	currentStatePreflight: typeof PREFLIGHTS[number]
+	fixedAction: string
+	sourcePointers: (typeof SOURCE_POINTERS[number])[]
+	actorTrust: {
+		instructionAuthority: 'fixed-action-only'
+		trustedActors: string[]
+	}
+	expiry: { mode: 'queue-retention' }
+}
+
+export type GithubThreadEventConfig = {
+	formatVersion: typeof CONFIG_FORMAT
+	cloudflarePlan: 'free'
+	repositories: { repository: string, baseBranches: string[] }[]
+	queueAssumptions: {
+		dailyOperationLimit: 10000
+		primaryRetentionSeconds: 86400
+		deadLetterRetentionSeconds: 86400
+		maximumRetries: 100
+	}
+	polling: {
+		activeIntervalSeconds: 15
+		maximumIdleIntervalSeconds: 60
+		batchSize: 5
+		visibilityTimeoutSeconds: 30
+	}
+	bindingGraceSeconds: 180
+	staleNotification: { afterSeconds: 300, slackChannelID: 'C0BKVJXBH98' }
+}
+
+type PolicySet = { formatVersion: typeof POLICY_FORMAT, policies: EventPolicy[] }
+
+export type GithubThreadEventContract = {
+	config: GithubThreadEventConfig
+	global: PolicySet
+	projects: ReadonlyMap<string, PolicySet>
+}
 
 type BindingRow = {
 	base_ref: string
 	owner_thread_id: string
+}
+
+export function loadGithubThreadEventContract(root: string): GithubThreadEventContract {
+	const config = decodeConfig(readRuntimeJson(join(root, 'config.json')), join(root, 'config.json'))
+	const globalPath = join(root, 'policies', 'global.json')
+	const global = decodePolicySet(readRuntimeJson(globalPath), globalPath)
+	const configuredRepositories = new Set(config.repositories.map(({ repository }) => repository))
+	const projects = new Map<string, PolicySet>()
+
+	for (const [repository, path] of projectPolicyPaths(join(root, 'policies', 'projects'))) {
+		if (!configuredRepositories.has(repository)) {
+			contractError(path, `project policy path does not match a configured repository`)
+		}
+		projects.set(repository, decodePolicySet(readRuntimeJson(path), path))
+	}
+
+	return { config, global, projects }
+}
+
+export function resolveEventPolicy(contract: GithubThreadEventContract, repositoryValue: string, policyID: string) {
+	const repository = normalizePolicyRepository(repositoryValue)
+	if (!POLICY_ID_PATTERN.test(policyID)) contractError('policy lookup', 'policy ID is invalid')
+	const projectPolicy = contract.projects.get(repository)?.policies.find(({ id }) => id === policyID)
+	if (projectPolicy) return { status: 'found' as const, scope: 'project' as const, policy: projectPolicy }
+	const globalPolicy = contract.global.policies.find(({ id }) => id === policyID)
+	if (globalPolicy) return { status: 'found' as const, scope: 'global' as const, policy: globalPolicy }
+	return {
+		status: 'missing-policy' as const,
+		reason: 'missing-event-policy' as const,
+		repository,
+		policyID,
+	}
+}
+
+export async function runAdaptivePolling(options: {
+	pull: () => Promise<readonly unknown[]>
+	sleep: (milliseconds: number) => Promise<void>
+	activeIntervalSeconds: number
+	maximumIdleIntervalSeconds: number
+	maximumPolls?: number
+}) {
+	validatePollingIntervals(options.activeIntervalSeconds, options.maximumIdleIntervalSeconds)
+	if (options.maximumPolls !== undefined && (!Number.isInteger(options.maximumPolls) || options.maximumPolls <= 0)) {
+		throw new Error('maximumPolls must be a positive integer when provided.')
+	}
+
+	let emptyResults = 0
+	let polls = 0
+	while (options.maximumPolls === undefined || polls < options.maximumPolls) {
+		const messages = await options.pull()
+		polls += 1
+		if (options.maximumPolls !== undefined && polls >= options.maximumPolls) break
+		emptyResults = messages.length === 0 ? emptyResults + 1 : 0
+		const delaySeconds = emptyResults === 0
+			? options.activeIntervalSeconds
+			: Math.min(options.maximumIdleIntervalSeconds, options.activeIntervalSeconds * 2 ** emptyResults)
+		await options.sleep(delaySeconds * 1000)
+	}
+}
+
+export function countIdlePullOperations(
+	durationSeconds: number,
+	activeIntervalSeconds: number,
+	maximumIdleIntervalSeconds: number,
+) {
+	validatePollingIntervals(activeIntervalSeconds, maximumIdleIntervalSeconds)
+	if (!Number.isInteger(durationSeconds) || durationSeconds <= 0) {
+		throw new Error('durationSeconds must be a positive integer.')
+	}
+	let operations = 0
+	let elapsedSeconds = 0
+	let emptyResults = 0
+	while (elapsedSeconds < durationSeconds) {
+		operations += 1
+		emptyResults += 1
+		elapsedSeconds += Math.min(maximumIdleIntervalSeconds, activeIntervalSeconds * 2 ** emptyResults)
+	}
+	return operations
 }
 
 export function openGithubThreadEventStore(databasePath: string) {
@@ -219,6 +363,7 @@ export default function (amp: PluginAPI) {
 	if (process.env.AMP_GITHUB_THREAD_EVENTS_ENABLED !== '1') return
 
 	const configDirectory = process.env.AMP_CONFIG_DIR || join(homedir(), '.config', 'amp')
+	loadGithubThreadEventContract(join(configDirectory, 'github-thread-events'))
 	const databasePath = join(configDirectory, 'state', 'github-thread-events.sqlite')
 	const store = openGithubThreadEventStore(databasePath)
 	registerOwnershipTools(amp, store)
@@ -245,4 +390,234 @@ function normalizePullRequest(value: unknown): number {
 function normalizeNonEmptyString(value: unknown, field: string): string {
 	if (typeof value !== 'string' || !value.trim()) throw new Error(`${field} must be a non-empty string.`)
 	return value.trim()
+}
+
+function readRuntimeJson(path: string): unknown {
+	let text: string
+	try {
+		text = readFileSync(path, 'utf8')
+	} catch {
+		contractError(path, 'required JSON file is unreadable or missing')
+	}
+	try {
+		return JSON.parse(text)
+	} catch {
+		contractError(path, 'JSON is malformed')
+	}
+}
+
+function decodeConfig(value: unknown, path: string): GithubThreadEventConfig {
+	rejectForbiddenFields(value, path)
+	const config = closedRecord(value, path, [
+		'formatVersion', 'cloudflarePlan', 'repositories', 'queueAssumptions', 'polling', 'bindingGraceSeconds', 'staleNotification',
+	])
+	exactValue(config.formatVersion, CONFIG_FORMAT, path, 'formatVersion')
+	exactValue(config.cloudflarePlan, 'free', path, 'cloudflarePlan')
+
+	const repositoryValues = arrayValue(config.repositories, path, 'repositories', true)
+	const repositories = repositoryValues.map((value, index) => {
+		const location = `${path}: repositories[${index}]`
+		const repositoryConfig = closedRecord(value, location, ['repository', 'baseBranches'])
+		const repository = matchingString(repositoryConfig.repository, REPOSITORY_PATTERN, location, 'repository')
+		const baseBranches = arrayValue(repositoryConfig.baseBranches, location, 'baseBranches', true)
+			.map((branch, branchIndex) => nonEmptyString(branch, location, `baseBranches[${branchIndex}]`, false))
+		ensureUnique(baseBranches, location, 'baseBranches')
+		return { repository, baseBranches }
+	})
+	ensureUnique(repositories.map(({ repository }) => repository), path, 'repositories')
+
+	const queue = closedRecord(config.queueAssumptions, `${path}: queueAssumptions`, [
+		'dailyOperationLimit', 'primaryRetentionSeconds', 'deadLetterRetentionSeconds', 'maximumRetries',
+	])
+	exactValue(queue.dailyOperationLimit, 10000, path, 'queueAssumptions.dailyOperationLimit')
+	exactValue(queue.primaryRetentionSeconds, 86400, path, 'queueAssumptions.primaryRetentionSeconds')
+	exactValue(queue.deadLetterRetentionSeconds, 86400, path, 'queueAssumptions.deadLetterRetentionSeconds')
+	exactValue(queue.maximumRetries, 100, path, 'queueAssumptions.maximumRetries')
+
+	const polling = closedRecord(config.polling, `${path}: polling`, [
+		'activeIntervalSeconds', 'maximumIdleIntervalSeconds', 'batchSize', 'visibilityTimeoutSeconds',
+	])
+	exactValue(polling.activeIntervalSeconds, 15, path, 'polling.activeIntervalSeconds')
+	exactValue(polling.maximumIdleIntervalSeconds, 60, path, 'polling.maximumIdleIntervalSeconds')
+	exactValue(polling.batchSize, 5, path, 'polling.batchSize')
+	exactValue(polling.visibilityTimeoutSeconds, 30, path, 'polling.visibilityTimeoutSeconds')
+	exactValue(config.bindingGraceSeconds, 180, path, 'bindingGraceSeconds')
+
+	const stale = closedRecord(config.staleNotification, `${path}: staleNotification`, ['afterSeconds', 'slackChannelID'])
+	exactValue(stale.afterSeconds, 300, path, 'staleNotification.afterSeconds')
+	exactValue(stale.slackChannelID, 'C0BKVJXBH98', path, 'staleNotification.slackChannelID')
+
+	return {
+		formatVersion: CONFIG_FORMAT,
+		cloudflarePlan: 'free',
+		repositories,
+		queueAssumptions: {
+			dailyOperationLimit: 10000,
+			primaryRetentionSeconds: 86400,
+			deadLetterRetentionSeconds: 86400,
+			maximumRetries: 100,
+		},
+		polling: {
+			activeIntervalSeconds: 15,
+			maximumIdleIntervalSeconds: 60,
+			batchSize: 5,
+			visibilityTimeoutSeconds: 30,
+		},
+		bindingGraceSeconds: 180,
+		staleNotification: { afterSeconds: 300, slackChannelID: 'C0BKVJXBH98' },
+	}
+}
+
+function decodePolicySet(value: unknown, path: string): PolicySet {
+	rejectForbiddenFields(value, path)
+	const policySet = closedRecord(value, path, ['formatVersion', 'policies'])
+	exactValue(policySet.formatVersion, POLICY_FORMAT, path, 'formatVersion')
+	const policies = arrayValue(policySet.policies, path, 'policies').map((policy, index) => decodePolicy(policy, path, index))
+	ensureUnique(policies.map(({ id }) => id), path, 'policy IDs')
+	return { formatVersion: POLICY_FORMAT, policies }
+}
+
+function decodePolicy(value: unknown, path: string, index: number): EventPolicy {
+	const location = `${path}: policies[${index}]`
+	const policy = closedRecord(value, location, [
+		'id', 'sourceCandidate', 'targetKind', 'currentStatePreflight', 'fixedAction', 'sourcePointers', 'actorTrust', 'expiry',
+	])
+	const id = matchingString(policy.id, POLICY_ID_PATTERN, location, 'id')
+	const sourceCandidate = matchingString(policy.sourceCandidate, POLICY_ID_PATTERN, location, 'sourceCandidate')
+	if (id !== sourceCandidate) contractError(location, 'id must equal sourceCandidate')
+	exactValue(policy.targetKind, 'pull-request', location, 'targetKind')
+	const currentStatePreflight = enumString(policy.currentStatePreflight, PREFLIGHTS, location, 'currentStatePreflight')
+	const fixedAction = nonEmptyString(policy.fixedAction, location, 'fixedAction', false)
+	const sourcePointers = arrayValue(policy.sourcePointers, location, 'sourcePointers', true)
+		.map((pointer, pointerIndex) => enumString(pointer, SOURCE_POINTERS, location, `sourcePointers[${pointerIndex}]`))
+	ensureUnique(sourcePointers, location, 'sourcePointers')
+	for (const pointer of ['delivery-id', 'repository', 'pull-request', 'canonical-url', ...REQUIRED_POINTERS[currentStatePreflight]]) {
+		if (!sourcePointers.includes(pointer as typeof sourcePointers[number])) {
+			contractError(location, `sourcePointers is missing required pointer ${pointer}`)
+		}
+	}
+
+	const actorTrust = closedRecord(policy.actorTrust, `${location}.actorTrust`, ['instructionAuthority', 'trustedActors'])
+	exactValue(actorTrust.instructionAuthority, 'fixed-action-only', location, 'actorTrust.instructionAuthority')
+	const trustedActors = arrayValue(actorTrust.trustedActors, location, 'actorTrust.trustedActors')
+		.map((actor, actorIndex) => matchingString(actor, ACTOR_PATTERN, location, `actorTrust.trustedActors[${actorIndex}]`))
+	ensureUnique(trustedActors, location, 'actorTrust.trustedActors')
+	const expiry = closedRecord(policy.expiry, `${location}.expiry`, ['mode'])
+	exactValue(expiry.mode, 'queue-retention', location, 'expiry.mode')
+
+	return {
+		id,
+		sourceCandidate,
+		targetKind: 'pull-request',
+		currentStatePreflight,
+		fixedAction,
+		sourcePointers,
+		actorTrust: { instructionAuthority: 'fixed-action-only', trustedActors },
+		expiry: { mode: 'queue-retention' },
+	}
+}
+
+function projectPolicyPaths(root: string): [string, string][] {
+	if (!existsSync(root)) return []
+	const paths: [string, string][] = []
+	for (const ownerEntry of readRuntimeDirectory(root)) {
+		const ownerPath = join(root, ownerEntry.name)
+		if (!ownerEntry.isDirectory()) contractError(ownerPath, 'project policy path must be <owner>/<repository>.json')
+		for (const repositoryEntry of readRuntimeDirectory(ownerPath)) {
+			const path = join(ownerPath, repositoryEntry.name)
+			if (!repositoryEntry.isFile() || !repositoryEntry.name.endsWith('.json')) {
+				contractError(path, 'project policy path must be <owner>/<repository>.json')
+			}
+			const repository = `${ownerEntry.name}/${repositoryEntry.name.slice(0, -5)}`
+			if (!REPOSITORY_PATTERN.test(repository)) {
+				contractError(path, 'project policy path must be lowercase owner/repository.json')
+			}
+			paths.push([repository, path])
+		}
+	}
+	return paths
+}
+
+function readRuntimeDirectory(path: string) {
+	try {
+		return readdirSync(path, { withFileTypes: true })
+	} catch {
+		contractError(path, 'project policy directory is unreadable')
+	}
+}
+
+function closedRecord(value: unknown, path: string, allowedFields: readonly string[]): Record<string, unknown> {
+	if (typeof value !== 'object' || value === null || Array.isArray(value)) contractError(path, 'expected a closed object')
+	const record = value as Record<string, unknown>
+	for (const field of allowedFields) {
+		if (!Object.hasOwn(record, field)) contractError(path, `missing required field ${field}`)
+	}
+	for (const field of Object.keys(record)) {
+		if (!allowedFields.includes(field)) contractError(path, `unknown field ${field}`)
+	}
+	return record
+}
+
+function rejectForbiddenFields(value: unknown, path: string): void {
+	if (Array.isArray(value)) {
+		for (const child of value) rejectForbiddenFields(child, path)
+		return
+	}
+	if (typeof value !== 'object' || value === null) return
+	for (const [field, child] of Object.entries(value)) {
+		if (FORBIDDEN_FIELDS.has(field.toLowerCase())) contractError(path, `forbidden secret, deployment or runtime-state field ${field}`)
+		rejectForbiddenFields(child, path)
+	}
+}
+
+function arrayValue(value: unknown, path: string, field: string, requireItems = false): unknown[] {
+	if (!Array.isArray(value) || (requireItems && value.length === 0)) {
+		contractError(path, `${field} must be ${requireItems ? 'a non-empty' : 'an'} array`)
+	}
+	return value
+}
+
+function nonEmptyString(value: unknown, path: string, field: string, trim = true): string {
+	if (typeof value !== 'string' || value.length === 0 || (trim && !value.trim())) {
+		contractError(path, `${field} must be a non-empty string`)
+	}
+	return value
+}
+
+function matchingString(value: unknown, pattern: RegExp, path: string, field: string): string {
+	if (typeof value !== 'string' || !pattern.test(value)) contractError(path, `${field} has an invalid format`)
+	return value
+}
+
+function enumString<const T extends readonly string[]>(value: unknown, allowed: T, path: string, field: string): T[number] {
+	if (typeof value !== 'string' || !allowed.includes(value)) contractError(path, `${field} has an unsupported value`)
+	return value
+}
+
+function exactValue(value: unknown, expected: string | number, path: string, field: string): void {
+	if (value !== expected) contractError(path, `${field} has an unsupported value`)
+}
+
+function ensureUnique(values: readonly string[], path: string, field: string): void {
+	if (new Set(values).size !== values.length) contractError(path, `${field} contains duplicates`)
+}
+
+function normalizePolicyRepository(value: unknown): string {
+	if (typeof value !== 'string') contractError('policy lookup', 'repository must be a string')
+	const repository = value.trim().toLowerCase()
+	if (!REPOSITORY_PATTERN.test(repository)) contractError('policy lookup', 'repository must use owner/repository form')
+	return repository
+}
+
+function validatePollingIntervals(activeIntervalSeconds: number, maximumIdleIntervalSeconds: number): void {
+	if (!Number.isFinite(activeIntervalSeconds) || activeIntervalSeconds <= 0) {
+		throw new Error('activeIntervalSeconds must be greater than 0.')
+	}
+	if (!Number.isFinite(maximumIdleIntervalSeconds) || maximumIdleIntervalSeconds < activeIntervalSeconds) {
+		throw new Error('maximumIdleIntervalSeconds must be at least activeIntervalSeconds.')
+	}
+}
+
+function contractError(path: string, message: string): never {
+	throw new Error(`Invalid GitHub thread event contract at ${path}: ${message}.`)
 }

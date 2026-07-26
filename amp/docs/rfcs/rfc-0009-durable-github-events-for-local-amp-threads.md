@@ -76,7 +76,7 @@ GitHub is the first source. The initial policy set covers failed CI, pull-reques
 
 This design does not use an Orb or expose the local machine through a production Tunnel. The queue accepts events while the runner is offline. A dead-letter queue preserves messages that need review or exhaust their retries. Each queue's configured retention period remains its final expiry boundary.
 
-The local pull-request ownership slice is implemented. Source-controlled configuration, policy schemas, exact project-over-global lookup validation and isolated projection are also implemented. Runtime policy loading, queue pulling, thread delivery and cloud phases remain open, so this RFC remains `Accepted` rather than `Implemented`.
+The local pull-request ownership slice is implemented. Source-controlled configuration, policy schemas, runtime loading, exact project-over-global lookup and isolated projection are also implemented. An injected adaptive scheduler proves the empty-pull budget without starting production polling. Queue transport, GitHub preflight, thread delivery and cloud phases remain open, so this RFC remains `Accepted` rather than `Implemented`.
 
 ## Context
 
@@ -247,6 +247,10 @@ The selected global or project policy decides how to handle a merged pull reques
 
 These files contain no secrets or runtime ownership state. Credentials stay in the approved 1Password and macOS Keychain path. Recipient and binding state stays in `${AMP_CONFIG_DIR}/state/github-thread-events.sqlite`.
 
+When the exact opt-in is enabled, the plugin reads only the projected runtime paths in this table. It does not use repository-relative paths or Python. Before opening ownership state or registering tools, it validates `config.json`, the global policy file and every existing exact project file for a configured repository. Missing or invalid required files, malformed JSON, unsupported versions, unknown or forbidden fields, duplicates, unsafe or mismatched project paths, and invalid policy pointer invariants make startup fail closed without logging file contents or values.
+
+Runtime validation repeats the closed shapes and semantic invariants needed at the trust boundary. Repository validation also checks the schemas themselves, the complete source tree, required initial global policies and reviewed content. An existing invalid project file blocks startup and therefore blocks global fallback. A valid project match is returned whole, with no deep merge. A valid project file without the requested ID falls back to the validated global policy. If neither defines it, lookup returns `missing-policy` with reason `missing-event-policy`.
+
 ### Pull-request thread binding
 
 The accepted local ownership slice uses one opt-in system plugin at `plugins/github-thread-events.ts`. It registers these agent tools only when `AMP_GITHUB_THREAD_EVENTS_ENABLED=1` in the configured stable-runner process:
@@ -296,7 +300,11 @@ A bound subagent remains the direct event recipient. It follows its existing par
 
 The local plugin uses Cloudflare's [HTTP pull consumer API](https://developers.cloudflare.com/queues/configuration/pull-consumers/). It sends `POST /accounts/{account_id}/queues/{queue_id}/messages/pull` with `batch_size` and `visibility_timeout_ms`. `batch_size` defaults to 5 and must not exceed 100. `visibility_timeout_ms` defaults to 30 seconds and must not exceed 12 hours. Pulls use short polling; an empty queue returns immediately. Each leased message contains `id`, `body`, `timestamp_ms`, `attempts`, `lease_id` and content-type metadata. The Worker publishes the normalized envelope as UTF-8 JSON with Cloudflare's `text` content type. The consumer requires that content type, parses `body` directly as JSON and rejects unsupported messages. It uses `lease_id` only for acknowledgement or retry.
 
-The plugin polls when it loads and while the runner stays alive. It polls every 15 seconds while draining work or after a non-empty response. After consecutive empty responses, it backs off to a configurable maximum of 60 seconds. These intervals are deployment tuning, not Cloudflare guarantees. This avoids spending most of the free plan's 10,000 daily Queue operations on empty pulls. The configured visibility timeout must be long enough to route and append the batch.
+The scheduler polls once immediately. A non-empty response resets the delay to the configured 15-second active interval. The first consecutive empty response waits 30 seconds. The second and later empty responses wait the configured 60-second maximum. This deterministic 2-step backoff needs no jitter because this design permits only one local consumer process.
+
+In a 24-hour half-open window, an always-empty queue causes 1,441 pull operations: one immediate pull, one pull after 30 seconds and then one every 60 seconds. This is below the checked-in Free-plan limit of 10,000 daily Queue operations. This slice models pull operations only. Queue writes, acknowledgements, retries and metrics checks are future budget inputs and must be added before deployment.
+
+The scheduler boundary accepts injected pull and sleep functions. Tests use fakes for both. This slice does not provide a Cloudflare transport and does not start a production polling loop when the plugin loads. It makes no HTTP call, reads no Cloudflare account or queue ID, acknowledges no message, queries no GitHub state, appends to no thread and changes no delivery state. Production polling remains disabled until those later boundaries are implemented and budgeted.
 
 Amp documents plugins as long-lived processes. The runtime spike proved that a system plugin can keep one timer active across supported plugin reload, supervisor reconnection and full `amp --no-tui` restart.
 
@@ -602,13 +610,14 @@ Implement in this order:
 3. The merge-conflict experiment passed on 26 July 2026. It proved bounded convergence for one controlled pull request and one-page upper bounds for both measured bases.
 4. RFC-0009 passed acceptance review on 26 July 2026 after all 3 Draft gates passed. Its status is `Accepted`, not `Implemented`.
 5. The documented local ownership slice and its tests are implemented in `plugins/github-thread-events.ts` and `scripts/github-thread-events.test.ts`.
-6. The repository configuration and policy contract is implemented under `amp/github-thread-events/`. JSON Schema and semantic validation prove exact project replacement, global fallback, missing policy and invalid-file failure. `sync-skills.sh` projects the complete directory without runtime SQLite state. Runtime policy loading remains deferred to the pull consumer.
-7. Implement and test the Cloudflare Worker, primary queue, dead-letter queue, metrics check and Workers KV latches on the Cloudflare Free plan.
-8. Implement and test policy resolution, adaptive pull consumption, full-history reconciliation and thread append.
-9. Create the dedicated 1Password automation vault and read-only service account after reviewing the related findings in [Amp thread T-019f4f39](https://ampcode.com/threads/T-019f4f39-34b7-7169-9005-a5d36a49c642).
-10. Store the service-account token in macOS Keychain and add the supervised runner startup path.
-11. Deploy Cloudflare resources and register the GitHub webhook after Chinh's explicit approval.
-12. Test all 4 initial event policies, online and offline delivery, recipient registration, owner-only transfer, duplicates, ready-batch sorting, current-state preflight, missing policy, retry exhaustion and missing binding.
+6. The repository configuration and policy contract is implemented under `amp/github-thread-events/`. JSON Schema, repository validation and runtime decoding prove exact project replacement, global fallback, typed missing policy and invalid-file failure. `sync-skills.sh` projects the complete directory without runtime SQLite state.
+7. The injected adaptive scheduler is implemented without production transport or startup. Its deterministic budget model proves 1,441 all-day empty pull operations against the configured 10,000-operation limit.
+8. Implement and test the Cloudflare Worker, primary queue, dead-letter queue, metrics check and Workers KV latches on the Cloudflare Free plan.
+9. Implement Queue transport, production polling, full-history reconciliation and thread append. Add writes, acknowledgements, retries and metrics to the operation budget before deployment.
+10. Create the dedicated 1Password automation vault and read-only service account after reviewing the related findings in [Amp thread T-019f4f39](https://ampcode.com/threads/T-019f4f39-34b7-7169-9005-a5d36a49c642).
+11. Store the service-account token in macOS Keychain and add the supervised runner startup path.
+12. Deploy Cloudflare resources and register the GitHub webhook after Chinh's explicit approval.
+13. Test all 4 initial event policies, online and offline delivery, recipient registration, owner-only transfer, duplicates, ready-batch sorting, current-state preflight, missing policy, retry exhaustion and missing binding.
 
 - Keep [ISSUE-0002](../issues/issue-0002-durable-github-events-for-local-amp-threads.md) as the evidence and resolution record.
 - Add the capability documents before implementing the plugin.
@@ -630,4 +639,4 @@ Implement in this order:
 
 ## Open questions
 
-The next implementation phase must load the validated policy contract in the pull consumer and measure the configured adaptive polling schedule against the Cloudflare Free plan before deployment. These are implementation tasks, not outstanding product decisions.
+The next implementation phase must add Queue transport and delivery behavior behind the injected scheduler boundary. It must include every added Queue operation in the Free-plan budget before deployment. These are implementation tasks, not outstanding product decisions.

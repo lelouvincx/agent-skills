@@ -1,12 +1,16 @@
 import { afterEach, describe, expect, test } from 'bun:test'
 import { Database } from 'bun:sqlite'
-import { existsSync, mkdtempSync, rmSync, statSync } from 'node:fs'
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 
 import plugin, {
+	countIdlePullOperations,
+	loadGithubThreadEventContract,
 	openGithubThreadEventStore,
 	registerOwnershipTools,
+	resolveEventPolicy,
+	runAdaptivePolling,
 } from '../plugins/github-thread-events'
 
 type RegisteredTool = {
@@ -46,6 +50,23 @@ function temporaryDirectory() {
 	const directory = mkdtempSync(join(tmpdir(), 'github-thread-events-test-'))
 	temporaryDirectories.push(directory)
 	return directory
+}
+
+const checkedInContract = join(import.meta.dir, '..', 'github-thread-events')
+
+function installProjectedContract(configDirectory: string) {
+	const contractDirectory = join(configDirectory, 'github-thread-events')
+	cpSync(checkedInContract, contractDirectory, { recursive: true })
+	return contractDirectory
+}
+
+function readJson(path: string) {
+	return JSON.parse(readFileSync(path, 'utf8'))
+}
+
+function writeJson(path: string, value: unknown) {
+	mkdirSync(dirname(path), { recursive: true })
+	writeFileSync(path, `${JSON.stringify(value, null, 2)}\n`)
 }
 
 function fakeAmp() {
@@ -111,6 +132,7 @@ describe('plugin process gate', () => {
 
 	test('enabled plugin creates protected state and registers exactly 3 tools', () => {
 		const configDirectory = temporaryDirectory()
+		installProjectedContract(configDirectory)
 		const databasePath = join(configDirectory, 'state', 'github-thread-events.sqlite')
 		process.env.AMP_CONFIG_DIR = configDirectory
 		process.env.AMP_GITHUB_THREAD_EVENTS_ENABLED = '1'
@@ -133,6 +155,168 @@ describe('plugin process gate', () => {
 		expect(statSync(join(configDirectory, 'state')).mode & 0o777).toBe(0o700)
 		expect(statSync(databasePath).mode & 0o777).toBe(0o600)
 		expect(fake.logs).toEqual([`[github-thread-events] enabled → ${databasePath}`])
+	})
+
+	test('enabled plugin fails before state or tools when a projected contract is missing or invalid', () => {
+		for (const mutate of [
+			(_directory: string) => {},
+			(directory: string) => {
+				const root = installProjectedContract(directory)
+				writeFileSync(join(root, 'config.json'), '{ malformed')
+			},
+			(directory: string) => {
+				const root = installProjectedContract(directory)
+				const projectPath = join(root, 'policies', 'projects', 'lelouvincx', 'agent-skills.json')
+				const project = readJson(projectPath)
+				project.unexpected = true
+				writeJson(projectPath, project)
+			},
+		]) {
+			const configDirectory = temporaryDirectory()
+			mutate(configDirectory)
+			process.env.AMP_CONFIG_DIR = configDirectory
+			process.env.AMP_GITHUB_THREAD_EVENTS_ENABLED = '1'
+			const fake = fakeAmp()
+
+			expect(() => plugin(fake.amp as never)).toThrow('GitHub thread event contract')
+			expect(fake.tools).toEqual([])
+			expect(fake.logs).toEqual([])
+			expect(existsSync(join(configDirectory, 'state'))).toBe(false)
+		}
+	})
+})
+
+describe('runtime configuration and policy', () => {
+	test('checked-in projection loads reviewed values and resolves exact project, global fallback and missing policy', () => {
+		const root = installProjectedContract(temporaryDirectory())
+		const contract = loadGithubThreadEventContract(root)
+
+		expect(contract.config.repositories.map((item) => item.repository)).toEqual([
+			'lelouvincx/agent-skills',
+			'lelouvincx/second-brain-logseq',
+			'lelouvincx/dotfiles',
+		])
+		expect(resolveEventPolicy(contract, 'LELOUVINCX/AGENT-SKILLS', 'github.pull-request.merged')).toEqual({
+			status: 'found',
+			scope: 'project',
+			policy: expect.objectContaining({
+				id: 'github.pull-request.merged',
+				fixedAction: expect.stringContaining('Run ./sync-skills.sh. Reload the projected plugins and the system prompt.'),
+			}),
+		})
+		expect(resolveEventPolicy(contract, 'lelouvincx/agent-skills', 'github.workflow-run.failure')).toEqual({
+			status: 'found',
+			scope: 'global',
+			policy: expect.objectContaining({ id: 'github.workflow-run.failure' }),
+		})
+		expect(resolveEventPolicy(contract, 'lelouvincx/agent-skills', 'github.issue.opened')).toEqual({
+			status: 'missing-policy',
+			reason: 'missing-event-policy',
+			repository: 'lelouvincx/agent-skills',
+			policyID: 'github.issue.opened',
+		})
+	})
+
+	test('runtime rejects malformed closed objects, duplicates, forbidden fields and policy invariants', () => {
+		const mutations: ((root: string) => void)[] = [
+			(root) => {
+				const path = join(root, 'config.json')
+				const config = readJson(path)
+				config.formatVersion = 'github-thread-events-config/v2'
+				writeJson(path, config)
+			},
+			(root) => {
+				const path = join(root, 'config.json')
+				const config = readJson(path)
+				config.repositories.push(config.repositories[0])
+				writeJson(path, config)
+			},
+			(root) => {
+				const path = join(root, 'policies', 'global.json')
+				const policies = readJson(path)
+				policies.policies[0].actorTrust.token = 'not-logged'
+				writeJson(path, policies)
+			},
+			(root) => {
+				const path = join(root, 'policies', 'global.json')
+				const policies = readJson(path)
+				policies.policies.push(policies.policies[0])
+				writeJson(path, policies)
+			},
+			(root) => {
+				const path = join(root, 'policies', 'global.json')
+				const policies = readJson(path)
+				policies.policies[0].sourcePointers = policies.policies[0].sourcePointers.filter((item: string) => item !== 'head-sha')
+				writeJson(path, policies)
+			},
+		]
+
+		for (const mutate of mutations) {
+			const root = installProjectedContract(temporaryDirectory())
+			mutate(root)
+			let message = ''
+			try { loadGithubThreadEventContract(root) } catch (error) { message = String(error) }
+			expect(message).toContain('GitHub thread event contract')
+			expect(message).not.toContain('not-logged')
+		}
+	})
+
+	test('runtime rejects project paths that do not match a configured normalized repository', () => {
+		const root = installProjectedContract(temporaryDirectory())
+		const source = join(root, 'policies', 'projects', 'lelouvincx', 'agent-skills.json')
+		const mismatch = join(root, 'policies', 'projects', 'Other', 'Repo.json')
+		mkdirSync(join(root, 'policies', 'projects', 'Other'), { recursive: true })
+		cpSync(source, mismatch)
+
+		expect(() => loadGithubThreadEventContract(root)).toThrow('project policy path')
+	})
+
+	test('invalid applicable project and global policy files fail closed', () => {
+		const invalidProjectRoot = installProjectedContract(temporaryDirectory())
+		const projectPath = join(invalidProjectRoot, 'policies', 'projects', 'lelouvincx', 'agent-skills.json')
+		const project = readJson(projectPath)
+		project.policies[0].sourceCandidate = 'github.other'
+		writeJson(projectPath, project)
+		expect(() => loadGithubThreadEventContract(invalidProjectRoot)).toThrow('id must equal sourceCandidate')
+
+		const invalidGlobalRoot = installProjectedContract(temporaryDirectory())
+		const globalPath = join(invalidGlobalRoot, 'policies', 'global.json')
+		const global = readJson(globalPath)
+		global.policies[0].sourceCandidate = 'github.other'
+		writeJson(globalPath, global)
+		expect(() => loadGithubThreadEventContract(invalidGlobalRoot)).toThrow('id must equal sourceCandidate')
+	})
+})
+
+describe('adaptive polling foundation', () => {
+	test('polls immediately, backs off after empty results and resets after work', async () => {
+		const pulls = [0, 0, 2, 0, 0]
+		const delays: number[] = []
+		const { polling } = loadGithubThreadEventContract(installProjectedContract(temporaryDirectory())).config
+
+		await runAdaptivePolling({
+			pull: async () => Array.from({ length: pulls.shift() ?? 0 }),
+			sleep: async (milliseconds) => { delays.push(milliseconds) },
+			activeIntervalSeconds: polling.activeIntervalSeconds,
+			maximumIdleIntervalSeconds: polling.maximumIdleIntervalSeconds,
+			maximumPolls: 5,
+		})
+
+		expect(delays).toEqual([30_000, 60_000, 15_000, 30_000])
+		expect(pulls).toEqual([])
+	})
+
+	test('all-day empty pull operations stay below the checked-in Free-plan limit', () => {
+		const root = installProjectedContract(temporaryDirectory())
+		const { config } = loadGithubThreadEventContract(root)
+		const operations = countIdlePullOperations(
+			86_400,
+			config.polling.activeIntervalSeconds,
+			config.polling.maximumIdleIntervalSeconds,
+		)
+
+		expect(operations).toBe(1_441)
+		expect(operations).toBeLessThan(config.queueAssumptions.dailyOperationLimit)
 	})
 })
 
