@@ -40,17 +40,17 @@ The desired workflow uses an always-on local Amp runner when available. It must 
 
 The initial question was whether `amp.createWebhook` could spawn a local runner instead of an Orb. The current [Amp Plugin API](https://ampcode.com/manual/plugin-api) permits a webhook handler to create a thread with `executor: { type: "runner", id }`. However, the webhook remains registered to an owning Orb thread, and an event first wakes that Orb.
 
-The user rejected that bridge and described the required workflow:
+Chinh (`lelouvincx`) rejected that bridge and described the required workflow:
 
 - receive GitHub events for CI failure, pull-request merge, code review and code conflict
 - identify the Amp thread that opened the affected pull request
 - append the event to that existing thread
 - run the resumed work on an always-on local runner
 - queue events when the runner is unavailable
-- notify the user when queued work remains stale
+- notify Chinh when queued work remains stale
 - resolve runtime secrets without repeated 1Password biometric prompts
 
-The user initially preferred a Cloudflare Tunnel because Wrangler is already installed. The offline requirement exposed a delivery gap that a Tunnel alone cannot solve.
+Chinh initially preferred a Cloudflare Tunnel because Wrangler is already installed. The offline requirement exposed a delivery gap that a Tunnel alone cannot solve.
 
 ## Original intent
 
@@ -142,7 +142,7 @@ A `workflow_run` payload can contain associated pull requests, but that list can
 
 ### P2: offline notification needs a cloud-side signal
 
-An offline local runner cannot report its own outage. Cloudflare exposes queue backlog count and oldest-message age. A scheduled cloud-side check can notify the user after a message exceeds a threshold and suppress repeats until the queue drains.
+An offline local runner cannot report its own outage. Cloudflare exposes queue backlog count and oldest-message age. A scheduled cloud-side check can notify Chinh after a message exceeds a threshold and suppress repeats until the queue drains.
 
 The monitor needs a defined metrics source and cloud-side latch store. A valid event with no thread binding must also leave the primary queue after a bounded grace period. Otherwise ordinary pull requests that no Amp thread opened would trigger stale alerts and keep the alert latch set.
 
@@ -179,7 +179,7 @@ The investigation set these boundaries:
 - treat webhook fields as untrusted data and construct a fixed agent message
 - use a dedicated read-only 1Password service account and automation vault
 - keep the service-account token in macOS Keychain rather than a plaintext file
-- keep Cloudflare deployment and GitHub webhook registration behind explicit user approval
+- keep Cloudflare deployment and GitHub webhook registration behind Chinh's explicit approval
 
 Cloudflare Tunnel remains acceptable for local development and manual testing. It is not part of the production delivery contract.
 

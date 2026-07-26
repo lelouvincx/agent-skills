@@ -34,7 +34,7 @@ outputs:
     kind: "user message appended to an existing thread"
     purpose: "Return CI or merge work to the thread that opened the pull request."
   - name: "stale backlog notification"
-    kind: "cloud-side user notification"
+    kind: "cloud-side notification for Chinh"
     purpose: "Report events that wait while the runner is unavailable."
 supersedes: []
 superseded_by: null
@@ -230,7 +230,7 @@ A scheduled Worker checks both queues once per minute. It reads `backlogCount` a
 
 An unbound event can contribute to the primary backlog during its 3-minute binding grace period. This is shorter than the 5-minute alert threshold when the runner is polling normally. The notification must still report stale queued work, not claim that the runner is offline. Once the plugin moves the event, the primary latch can clear independently. A later dead-letter notification reports the dead-letter backlog count without exposing event payloads.
 
-Slack through an incoming webhook is the preferred first notification destination. The notification integration remains optional until the user supplies and approves that destination.
+Slack through an incoming webhook is the preferred first notification destination. The notification integration remains optional until Chinh supplies and approves that destination.
 
 ### Secret boundary
 
@@ -263,7 +263,7 @@ The implementation must not store the service-account token, Cloudflare token, G
 2. The Worker still validates and queues the event.
 3. GitHub receives a successful response and does not need to retry.
 4. The message remains in the queue.
-5. The stale-backlog check notifies the user after 5 minutes.
+5. The stale-backlog check notifies Chinh after 5 minutes.
 6. When the runner starts, the plugin immediately polls and processes the backlog.
 7. The plugin submits a turn to the bound thread.
 8. Amp runs the turn on the stable runner established by the binding prerequisite.
@@ -325,7 +325,7 @@ The supervised startup path may:
 - start `amp --no-tui` with a stable runner ID
 - restart the runner after process failure
 
-Deployment may create or change shared Cloudflare resources and GitHub webhook configuration. It requires explicit user approval. The implementation must not deploy, register a webhook, create a 1Password service account or modify Keychain without that approval.
+Deployment may create or change shared Cloudflare resources and GitHub webhook configuration. It requires Chinh's explicit approval. The implementation must not deploy, register a webhook, create a 1Password service account or modify Keychain without that approval.
 
 ## Examples
 
@@ -378,12 +378,12 @@ launchd
 - Keep GitHub event conditions aligned with current webhook payload documentation.
 - Keep Queue pull, acknowledgement, metrics and retention behavior aligned with current Cloudflare documentation.
 - Keep `@ampcode/plugin` types aligned with the Amp CLI version used to load the plugin.
-- Store user configuration outside projected repository artifacts.
+- Store local configuration outside projected repository artifacts.
 - Test plugin reload, process restart, machine downtime, duplicate delivery, missing binding, retry exhaustion, dead-letter routing and retention expiry.
 - Test that reconciliation searches beyond the default message page and across compacted history.
 - Measure empty-poll operations against the selected Cloudflare plan before deployment.
 - Run the Amp document validators, plugin build checks and isolated projection before merging implementation.
-- Keep this RFC in `Draft` until the executor-assignment and process-lifetime polling spikes pass and the user accepts the design.
+- Keep this RFC in `Draft` until the executor-assignment and process-lifetime polling spikes pass and Chinh accepts the design.
 
 ## Open questions
 
