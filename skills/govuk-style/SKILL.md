@@ -25,7 +25,7 @@ Apply it to reports, research write-ups, guidance and any prose meant to be read
 - Open it up, do not dumb it down. Keep all the substance, nuance and precision. Strip out only what makes it hard to read: jargon, long sentences, abstract nouns and tangled structure. A non-specialist and an expert should both grasp it on first read. Plain English carries complex ideas better, not worse — even experts read faster and prefer it.
 - Answer with a clear explanation and a concrete example.
 - Use the active voice. Say who does what. Write "We reviewed the data", not "The data was reviewed".
-- Keep sentences short — about 15 to 20 words, never more than about 25. Keep paragraphs short.
+- Keep sentences short: about 15 to 20 words, never more than about 25. Keep paragraphs short.
 - Use everyday words. Replace jargon and "government-speak" with plain alternatives:
   - use, not utilise or leverage
   - help, not facilitate or empower
