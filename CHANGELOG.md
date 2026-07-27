@@ -102,6 +102,7 @@ and this project does not currently use versioned releases.
 
 ### Removed
 
+- Remove the unused Inkling agent mode and its capability documentation. [#135](https://github.com/lelouvincx/agent-skills/pull/135)
 - Remove the redundant agent-callable Logseq logging tool now that its command-palette action is available on Amp Web. [#108](https://github.com/lelouvincx/agent-skills/pull/108)
 - Remove the `setup-amql-development` remote skill. [#107](https://github.com/lelouvincx/agent-skills/pull/107)
 
