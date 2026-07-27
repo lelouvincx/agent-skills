@@ -41,6 +41,7 @@ and this project does not currently use versioned releases.
 
 ### Changed
 
+- Format every grilling question with sequential question numbers and hierarchical option numbers, and explain both why the question is asked and why its recommended option fits. [#134](https://github.com/lelouvincx/agent-skills/pull/134)
 - Require GOV.UK-style answers to include a clear explanation and concrete example without jargon. [#133](https://github.com/lelouvincx/agent-skills/pull/133)
 - Keep Logseq command ownership through transient Amp worker retries so successful workers can still rename and label parent threads, then archive themselves. [#132](https://github.com/lelouvincx/agent-skills/pull/132)
 - Limit Logseq coordinator Linear validation to `DAT`, `PS` and `DOC` issue IDs so identifiers such as `RFC-0012` do not prevent parent thread updates or worker archiving. [#129](https://github.com/lelouvincx/agent-skills/pull/129)
