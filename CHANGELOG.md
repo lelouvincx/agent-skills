@@ -41,6 +41,7 @@ and this project does not currently use versioned releases.
 
 ### Changed
 
+- Require GOV.UK-style answers to include a clear explanation and concrete example without jargon.
 - Keep Logseq command ownership through transient Amp worker retries so successful workers can still rename and label parent threads, then archive themselves. [#132](https://github.com/lelouvincx/agent-skills/pull/132)
 - Limit Logseq coordinator Linear validation to `DAT`, `PS` and `DOC` issue IDs so identifiers such as `RFC-0012` do not prevent parent thread updates or worker archiving. [#129](https://github.com/lelouvincx/agent-skills/pull/129)
 - Update the Amp SDK workspace to the latest published SDK, Plugin API types, and bundled Amp CLI. [#126](https://github.com/lelouvincx/agent-skills/pull/126)
