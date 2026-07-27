@@ -140,7 +140,9 @@ This guarantee lasts for one plugin process. Amp does not provide an operation s
 
 Amp may not confirm whether it created a worker, delivered a message or stored a response. When this happens, the command keeps ownership and reports `pending`. It does not create another worker, append another message or cancel work that may still write.
 
-After 5 minutes, the command checks worker state and looks for a fresh assistant message. Only a message with a new ID can satisfy the current worker turn.
+The command waits up to 10 minutes for a worker response. Only a message with a new ID can satisfy the current worker turn.
+
+A worker `error` state may be temporary because Amp can retry the same turn. The coordinator waits briefly for the worker to leave `error`, then continues waiting within the original 10-minute limit. It ends ownership only when the worker remains in `error` after that recovery window and has no fresh response.
 
 The Amp plugin API does not provide typed timeout errors. The plugin keeps the 2 required string checks in one compatibility helper.
 
@@ -249,7 +251,7 @@ Verified Logseq completion starts 3 separate actions:
 
 The plugin still attempts archive if rename or labelling fails. Any later-action failure leaves `Logseq: complete` unchanged. A later invocation retries only failed stages.
 
-The operation leaves memory after Logseq, rename, labels and archive all complete. A typed worker error with no fresh response also ends ownership so a later invocation can start a replacement worker.
+The operation leaves memory after Logseq, rename, labels and archive all complete. A sustained worker error with no fresh response also ends ownership so a later invocation can start a replacement worker.
 
 ## Permissions and side effects
 

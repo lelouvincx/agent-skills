@@ -62,6 +62,7 @@ function deferred<T>() {
 function fakeWorker(options: {
 	id?: string
 	state?: string | (() => string | Promise<string>)
+	subscribe?: (onNext: (state: string) => void) => void
 	waitForResponse?: () => unknown | Promise<unknown>
 	messages?: () => unknown[] | Promise<unknown[]>
 	appendUserMessage?: (message: { content: string }) => void | Promise<void>
@@ -72,7 +73,10 @@ function fakeWorker(options: {
 		id: options.id ?? workerID,
 		state: {
 			get: async () => typeof state === 'function' ? state() : state,
-			subscribe: () => ({ unsubscribe() {} }),
+			subscribe: (onNext: (state: string) => void) => {
+				options.subscribe?.(onNext)
+				return { unsubscribe() {} }
+			},
 		},
 		waitForResponse: async () => options.waitForResponse ? options.waitForResponse() : assistantResponse('response-1'),
 		messages: async () => options.messages ? options.messages() : [],
@@ -306,6 +310,30 @@ describe('worker wait outcomes', () => {
 		const { worker } = fakeWorker({ state: 'error', waitForResponse: async () => { throw new Error('worker failed') } })
 		const outcome = await waitForWorkerOutcome(worker as never, undefined, neverStartupGuard(), 1)
 		expect(outcome.kind).toBe('failed')
+	})
+
+	test('keeps waiting when Amp retries a transient worker error', async () => {
+		let state = 'running'
+		let waits = 0
+		const response = assistantResponse('recovered')
+		const { worker } = fakeWorker({
+			state: () => state,
+			subscribe: (onNext) => queueMicrotask(() => {
+				state = 'running'
+				onNext(state)
+			}),
+			waitForResponse: async () => {
+				waits += 1
+				if (waits === 1) {
+					state = 'error'
+					throw new Error('OpenAI WebSocket closed: 1006')
+				}
+				return response
+			},
+		})
+
+		expect(await waitForWorkerOutcome(worker as never, undefined, neverStartupGuard(), 20)).toEqual({ kind: 'response', response })
+		expect(waits).toBe(2)
 	})
 
 	test('never reuses the previous assistant message', async () => {

@@ -19,7 +19,8 @@ import { readFile } from 'node:fs/promises'
 const LOGSEQ_REPO = process.env.AMP_LOGSEQ_GRAPH_DIR ?? '/Users/lelouvincx/Developer/second-brain-logseq'
 const WORKER_MODE = 'high' as BuiltinAgentMode
 const WORKER_STARTUP_TIMEOUT_MS = 15_000
-const WORKER_TIMEOUT_MS = 5 * 60 * 1000
+const WORKER_TIMEOUT_MS = 10 * 60 * 1000
+const WORKER_ERROR_RECOVERY_TIMEOUT_MS = 15_000
 const MAX_NOTIFICATION_CHARS = 500
 const LOGSEQ_WORKER_PROMPT_PREFIX = '[logseq-manual-log]'
 const WORKER_RESULT_KEYS = ['backlogVerified', 'error', 'journalVerified', 'summary', 'threadLabels', 'threadTitle', 'version']
@@ -354,18 +355,51 @@ export async function waitForWorkerOutcome(
 	startupGuard: StartupGuard,
 	timeoutMs = WORKER_TIMEOUT_MS,
 ): Promise<WorkerWaitOutcome> {
-	const stored = await getFreshWorkerResponse(workerThread, lastConsumedAssistantMessageID)
-	if (stored.kind === 'response') return stored
-	try {
-		const outcome = await Promise.race([
-			workerThread.waitForResponse({ timeoutMs }).then((response) => ({ kind: 'response' as const, response })),
-			startupGuard.promise.then((signal) => ({ kind: 'startup' as const, signal })),
-		])
-		if (outcome.kind === 'response' && outcome.response.id !== lastConsumedAssistantMessageID) return outcome
-		return reconcileWorkerAfterWait(workerThread, lastConsumedAssistantMessageID, outcome.kind === 'startup' ? outcome.signal : undefined)
-	} catch (error) {
-		return reconcileWorkerAfterWait(workerThread, lastConsumedAssistantMessageID, error)
+	const deadline = Date.now() + timeoutMs
+	while (true) {
+		const stored = await getFreshWorkerResponse(workerThread, lastConsumedAssistantMessageID)
+		if (stored.kind === 'response') return stored
+		const remainingMs = deadline - Date.now()
+		if (remainingMs <= 0) return reconcileWorkerAfterWait(workerThread, lastConsumedAssistantMessageID, 'Timed out waiting for agent response')
+		try {
+			const outcome = await Promise.race([
+				workerThread.waitForResponse({ timeoutMs: remainingMs }).then((response) => ({ kind: 'response' as const, response })),
+				startupGuard.promise.then((signal) => ({ kind: 'startup' as const, signal })),
+			])
+			if (outcome.kind === 'response' && outcome.response.id !== lastConsumedAssistantMessageID) return outcome
+			return reconcileWorkerAfterWait(workerThread, lastConsumedAssistantMessageID, outcome.kind === 'startup' ? outcome.signal : undefined)
+		} catch (error) {
+			const reconciled = await reconcileWorkerAfterWait(workerThread, lastConsumedAssistantMessageID, error)
+			if (reconciled.kind !== 'failed') return reconciled
+			const recoveryMs = Math.min(WORKER_ERROR_RECOVERY_TIMEOUT_MS, deadline - Date.now())
+			if (recoveryMs <= 0 || !await waitForWorkerRecovery(workerThread, recoveryMs)) return reconciled
+		}
 	}
+}
+
+function waitForWorkerRecovery(workerThread: WorkerThread, timeoutMs: number): Promise<boolean> {
+	return new Promise((resolvePromise) => {
+		let settled = false
+		let subscription: { unsubscribe(): void } | undefined
+		const finish = (recovered: boolean) => {
+			if (settled) return
+			settled = true
+			clearTimeout(timeout)
+			subscription?.unsubscribe()
+			resolvePromise(recovered)
+		}
+		const timeout = setTimeout(() => finish(false), timeoutMs)
+		try {
+			subscription = workerThread.state.subscribe((state) => {
+				if (state !== 'error') finish(true)
+			})
+			void workerThread.state.get().then((state) => {
+				if (state !== 'error') finish(true)
+			}, () => finish(false))
+		} catch {
+			finish(false)
+		}
+	})
 }
 
 async function reconcileWorkerAfterWait(
