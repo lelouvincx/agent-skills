@@ -9,6 +9,7 @@ and this project does not currently use versioned releases.
 
 ### Added
 
+- Add `technical-precision` for unambiguous procedures and technical documentation using controlled-English principles. [#137](https://github.com/lelouvincx/agent-skills/pull/137)
 - Add fail-closed loading and exact project-over-global policy lookup for projected GitHub events. Add an injected adaptive scheduler and operation-budget model. [#131](https://github.com/lelouvincx/agent-skills/pull/131)
 - Add source-controlled, schema-validated GitHub thread event configuration and policies with exact project-over-global precedence and isolated runtime projection. [#130](https://github.com/lelouvincx/agent-skills/pull/130)
 - Add ISSUE-0002, accepted RFC-0009 and its implemented local pull-request ownership tools for durable GitHub event delivery to local Amp threads. [#126](https://github.com/lelouvincx/agent-skills/pull/126)
@@ -41,6 +42,9 @@ and this project does not currently use versioned releases.
 
 ### Changed
 
+- Apply the 1Password env-file policy to every action, remove delegated Amp permission settings and show Amp costs. [#137](https://github.com/lelouvincx/agent-skills/pull/137)
+- Make `govuk-style` a local skill so remote refreshes cannot change its behaviour. [#137](https://github.com/lelouvincx/agent-skills/pull/137)
+- Keep `linear-cli` personal preferences in `PERSONAL.md` instead of versioning generated remote payloads. [#137](https://github.com/lelouvincx/agent-skills/pull/137)
 - Preserve every grilling decision's outcome, verbatim user rationale, validated evidence, and status of alternative options when persisting a session. [#136](https://github.com/lelouvincx/agent-skills/pull/136)
 - Format every grilling question with sequential question numbers and hierarchical option numbers, and explain both why the question is asked and why its recommended option fits. [#134](https://github.com/lelouvincx/agent-skills/pull/134)
 - Require GOV.UK-style answers to include a clear explanation and concrete example without jargon. [#133](https://github.com/lelouvincx/agent-skills/pull/133)

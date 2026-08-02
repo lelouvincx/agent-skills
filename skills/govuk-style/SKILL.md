@@ -39,6 +39,8 @@ Apply it to reports, research write-ups, guidance and any prose meant to be read
 - Avoid metaphors and clichés: drive, unlock, deep dive, robust, key, ring-fence, hub, portal, landscape, ecosystem, going forward.
 - Address the reader as "you". Write about yourself or the organisation as "we". Use "they", "them" and "their" rather than gendered pronouns. Write "disabled people", not "the disabled".
 - Contractions are fine for a warmer tone (we'll, you'll), but avoid negative contractions — write "cannot", not "can't" — and avoid "should've", "could've", "would've".
+- Use articles sparingly, especially "the". Remove "the" when the sentence stays natural and clear without it.
+- Avoid em dashes. Use a comma, colon, full stop or brackets instead.
 
 ## Formatting
 
@@ -67,7 +69,7 @@ Apply it to reports, research write-ups, guidance and any prose meant to be read
 
 The "no bold" and formatting rules apply to the prose you produce (reports, guidance, summaries). Code, data tables and direct quotations keep their own conventions. Markdown headings and lists are fine — they are structure, not emphasis.
 
-## Chinh's presales and Slack adaptation
+## Chinh's presales
 
 Use the original GOV.UK style as the base: clear, plain, active, front-loaded writing.
 
@@ -78,18 +80,17 @@ For customer-facing writing, optimise for deal movement: the reader should know 
 - Lead with the answer, recommendation or honest status.
 - Keep the tone warm, direct and practical. Do not sound like a policy page.
 - Explain product behaviour in customer terms, not internal implementation terms.
-- Preserve technical accuracy. Do not hide limitations, but do not sound defensive.
+- Preserve technical accuracy. Do not hide limitations, but do not sound defensive. Sometimes hide it to prevent over-explaining technical terms.
 - End with the next useful action: a question, workaround, offer to help, product-priority check or trial criterion.
 
 ### Slack formatting
 
 Slack is skimmable, not a formal document. Use structure where it helps the reader act.
 
-- Use bold sparingly for thread titles, section labels, final asks and important status.
+- Use bold sparingly for thread titles, sections, final asks, important phrase.
 - Keep short paragraphs. One idea per paragraph still applies.
-- Use numbered lists for steps or separate customer questions.
-- Use bullets for options, constraints and product boundaries.
-- Use code blocks, tables and plain-text diagrams when they prevent misunderstanding.
+- If customer asks many unrelated questions at a time, separate them so that things not getting tangled.
+- Prefer numbered/bullet list.
 - Preserve product names, UI labels, code, SQL, AQL, dates, links and screenshots.
 
 ### Customer-facing patterns
@@ -107,7 +108,7 @@ Good shape:
 
 > Just to confirm, you're asking whether one date-range filter can become 2 conditions for one chart: the start date applies to Field A, and the end date applies to Field B. Is that right?
 
-Done when the customer has confirmed the interpretation, or the remaining question is small enough to answer safely.
+Done when: the customer has confirmed the interpretation, or the remaining question is small enough to answer safely.
 
 #### Product gap or unsupported feature
 
@@ -129,7 +130,7 @@ Good shape:
 >
 > I will circle back once I hear from product.
 
-Done when the customer can tell whether the feature is supported, what they can do now, and what priority signal you need from them.
+Done when: the customer can tell whether the feature is supported, what they can do now, and what priority signal you need from them.
 
 #### Workaround or immediate solution
 
@@ -147,7 +148,7 @@ Good shape:
 > 2. Turn on text wrapping when the issue is packed labels.
 > 3. Set column widths in AML when you want the dashboard definition to keep them.
 
-Done when the customer has a next action they can try without another explanation.
+Done when: the customer has a next action they can try without another explanation.
 
 #### Failed AI or product confidence issue
 
@@ -167,7 +168,7 @@ Good shape:
 >
 > I suggest we treat this as one of your trial criteria and use it to harden the semantic context, instead of leaving it as a one-off failed answer.
 
-Done when the message restores confidence without hiding the failure, and turns the issue into a concrete evaluation or improvement step.
+Done when: the message restores confidence without hiding the failure, and turns the issue into a concrete evaluation or improvement step.
 
 ### Before sending customer-facing messages
 
