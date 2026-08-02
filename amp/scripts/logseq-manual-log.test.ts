@@ -1,4 +1,7 @@
 import { describe, expect, test } from 'bun:test'
+import { access, chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 
 import plugin, {
 	classifyWorkerCompatibilityError,
@@ -14,6 +17,7 @@ const workerID = 'T-worker'
 const timing = {
 	startupTimeoutMs: 20,
 	workerTimeoutMs: 20,
+	checkpointDir: null,
 	verifyLogseqWrite: async () => ({ backlogVerified: true, journalVerified: true }),
 }
 const completeResult = {
@@ -49,6 +53,18 @@ function assistantResponse(id: string, result: unknown = completeResult) {
 	}
 }
 
+function workerPrompt(parentThreadID = parentID, workerThreadID = workerID) {
+	return `[logseq-manual-log]\n\n- Parent Amp thread id: ${parentThreadID}\n- Worker Amp thread id: ${workerThreadID}\n`
+}
+
+async function writeRecoveryCheckpoint(checkpointDir: string, parentThreadID = parentID, workerThreadID = workerID) {
+	await writeFile(join(checkpointDir, `${parentThreadID}.json`), JSON.stringify({
+		version: 1,
+		parentThreadID,
+		workerThreadID,
+	}), 'utf8')
+}
+
 function deferred<T>() {
 	let resolvePromise!: (value: T) => void
 	let rejectPromise!: (error: unknown) => void
@@ -64,7 +80,7 @@ function fakeWorker(options: {
 	state?: string | (() => string | Promise<string>)
 	subscribe?: (onNext: (state: string) => void) => void
 	waitForResponse?: () => unknown | Promise<unknown>
-	messages?: () => unknown[] | Promise<unknown[]>
+	messages?: (options?: unknown) => unknown[] | Promise<unknown[]>
 	appendUserMessage?: (message: { content: string }) => void | Promise<void>
 } = {}) {
 	const appended: string[] = []
@@ -79,7 +95,7 @@ function fakeWorker(options: {
 			},
 		},
 		waitForResponse: async () => options.waitForResponse ? options.waitForResponse() : assistantResponse('response-1'),
-		messages: async () => options.messages ? options.messages() : [],
+		messages: async (messageOptions: unknown) => options.messages ? options.messages(messageOptions) : [],
 		appendUserMessage: (message: { content: string }) => {
 			appended.push(message.content)
 			return Promise.resolve(options.appendUserMessage?.(message))
@@ -101,6 +117,7 @@ function fakeShell(handler?: (command: string, values: unknown[]) => { exitCode:
 
 function fakeAmp(options: {
 	createThread?: () => unknown | Promise<unknown>
+	getThread?: (threadID: string) => unknown
 	shell?: ReturnType<typeof fakeShell>['shell']
 } = {}) {
 	let createCalls = 0
@@ -132,7 +149,7 @@ function fakeAmp(options: {
 		},
 		$: options.shell ?? defaultShell.shell,
 		threads: {
-			get: () => ({ messages: async () => [] }),
+			get: (threadID: string) => options.getThread?.(threadID) ?? { messages: async () => [] },
 		},
 	}
 	return {
@@ -434,6 +451,189 @@ describe('operation coordinator', () => {
 		expect(second).toContain('Worker: pending')
 		expect(harness.createCalls).toBe(1)
 		expect(appended).toHaveLength(1)
+	})
+
+	test('recovers a completed worker after reload and removes its disposable checkpoint', async () => {
+		const checkpointDir = await mkdtemp(join(tmpdir(), 'logseq-manual-log-test-'))
+		let state = 'running'
+		const response = assistantResponse('recovered-response')
+		const { worker } = fakeWorker({
+			state: () => state,
+			messages: (options) => {
+				const request = options as { from?: string }
+				if (request.from === 'start') {
+					return [{ role: 'user', id: 'initial-prompt', content: [{ type: 'text', text: workerPrompt() }] }]
+				}
+				return state === 'idle' ? [response] : []
+			},
+			waitForResponse: async () => { throw new Error('Timed out waiting for agent response') },
+		})
+		const recoveryTiming = { ...timing, checkpointDir, workerTimeoutMs: 1 }
+
+		try {
+			const firstHarness = fakeAmp({ createThread: () => worker })
+			const first = await logCurrentTask(firstHarness.amp as never, context() as never, '', 500, new Map(), recoveryTiming)
+			expect(first).toContain('Worker: pending')
+			expect(JSON.parse(await readFile(join(checkpointDir, `${parentID}.json`), 'utf8'))).toEqual({
+				version: 1,
+				parentThreadID: parentID,
+				workerThreadID: workerID,
+			})
+
+			state = 'idle'
+			const secondHarness = fakeAmp({
+				createThread: () => { throw new Error('must not create another worker') },
+				getThread: () => worker,
+			})
+			const recovered = await logCurrentTask(secondHarness.amp as never, context() as never, '', 500, new Map(), recoveryTiming)
+			expect(recovered).toContain('Logseq: complete')
+			expect(recovered).toContain('Rename: complete')
+			expect(recovered).toContain('Labels: complete')
+			expect(recovered).toContain('Archive: complete')
+			expect(secondHarness.createCalls).toBe(0)
+			expect(access(join(checkpointDir, `${parentID}.json`))).rejects.toThrow()
+		} finally {
+			await rm(checkpointDir, { recursive: true, force: true })
+		}
+	})
+
+	test('does not prompt a worker until its checkpoint can be written', async () => {
+		const root = await mkdtemp(join(tmpdir(), 'logseq-manual-log-test-'))
+		const checkpointDir = join(root, 'blocked')
+		await mkdir(checkpointDir)
+		await chmod(checkpointDir, 0o500)
+		const { worker, appended } = fakeWorker()
+		const harness = fakeAmp({ createThread: () => worker })
+		const operations: LogseqOperationStore = new Map()
+		const recoveryTiming = { ...timing, checkpointDir }
+
+		try {
+			const first = await logCurrentTask(harness.amp as never, context() as never, '', 500, operations, recoveryTiming)
+			expect(first).toContain('Checkpoint write failed; worker prompt was not sent')
+			expect(appended).toHaveLength(0)
+			expect(harness.createCalls).toBe(1)
+
+			await chmod(checkpointDir, 0o700)
+			const second = await logCurrentTask(harness.amp as never, context() as never, '', 500, operations, recoveryTiming)
+			expect(second).toContain('Logseq: complete')
+			expect(appended).toHaveLength(1)
+			expect(harness.createCalls).toBe(1)
+		} finally {
+			await rm(root, { recursive: true, force: true })
+		}
+	})
+
+	test.each([
+		['an unrelated first message', 'unrelated work'],
+		['a prompt bound to another parent', workerPrompt('T-other-parent')],
+	])('discards a checkpoint with %s without prompting that thread', async (_label, initialText) => {
+		const checkpointDir = await mkdtemp(join(tmpdir(), 'logseq-manual-log-test-'))
+		await writeRecoveryCheckpoint(checkpointDir)
+		const stale = fakeWorker({ messages: () => [{ role: 'user', id: 'wrong-prompt', content: [{ type: 'text', text: initialText }] }] })
+		const replacement = fakeWorker({ id: 'T-replacement-worker' })
+		const harness = fakeAmp({ createThread: () => replacement.worker, getThread: () => stale.worker })
+
+		try {
+			const output = await logCurrentTask(harness.amp as never, context() as never, '', 500, new Map(), { ...timing, checkpointDir })
+			expect(output).toContain('Logseq: complete')
+			expect(stale.appended).toHaveLength(0)
+			expect(replacement.appended).toHaveLength(1)
+			expect(harness.createCalls).toBe(1)
+		} finally {
+			await rm(checkpointDir, { recursive: true, force: true })
+		}
+	})
+
+	test('prompts an empty checkpointed worker exactly once', async () => {
+		const checkpointDir = await mkdtemp(join(tmpdir(), 'logseq-manual-log-test-'))
+		await writeRecoveryCheckpoint(checkpointDir)
+		const recovered = fakeWorker({ messages: () => [] })
+		const harness = fakeAmp({
+			createThread: () => { throw new Error('must not create another worker') },
+			getThread: () => recovered.worker,
+		})
+
+		try {
+			const output = await logCurrentTask(harness.amp as never, context() as never, '', 500, new Map(), { ...timing, checkpointDir })
+			expect(output).toContain('Logseq: complete')
+			expect(recovered.appended).toHaveLength(1)
+			expect(harness.createCalls).toBe(0)
+		} finally {
+			await rm(checkpointDir, { recursive: true, force: true })
+		}
+	})
+
+	test('does not reuse a response that predates a queued repair after reload', async () => {
+		const checkpointDir = await mkdtemp(join(tmpdir(), 'logseq-manual-log-test-'))
+		await writeRecoveryCheckpoint(checkpointDir)
+		const previousResponse = assistantResponse('partial-response', partialResult)
+		const repairMessage = { role: 'user', id: 'repair-prompt', content: [{ type: 'text', text: '[logseq-manual-log]\nrepair' }] }
+		const recovered = fakeWorker({
+			state: 'idle',
+			messages: (options) => {
+				const request = options as { from?: string; roles?: string[] }
+				if (request.from === 'start') return [{ role: 'user', id: 'initial-prompt', content: [{ type: 'text', text: workerPrompt() }] }]
+				return request.roles?.includes('user') ? [repairMessage] : [previousResponse]
+			},
+			waitForResponse: async () => { throw new Error('Timed out waiting for agent response') },
+		})
+		const operations: LogseqOperationStore = new Map()
+		const harness = fakeAmp({ getThread: () => recovered.worker })
+
+		try {
+			const output = await logCurrentTask(harness.amp as never, context() as never, '', 500, operations, { ...timing, checkpointDir, workerTimeoutMs: 1 })
+			expect(output).toContain('Worker: pending')
+			expect(output).toContain('Logseq: unverified')
+			expect(recovered.appended).toHaveLength(0)
+			expect(operations.get(parentID)?.lastConsumedAssistantMessageID).toBe('partial-response')
+		} finally {
+			await rm(checkpointDir, { recursive: true, force: true })
+		}
+	})
+
+	test.each(['rename', 'label', 'archive'])('retries %s and the other downstream setters after reload', async (failedCommand) => {
+		const checkpointDir = await mkdtemp(join(tmpdir(), 'logseq-manual-log-test-'))
+		let state = 'running'
+		let failedCalls = 0
+		const response = assistantResponse('complete-response')
+		const recovered = fakeWorker({
+			state: () => state,
+			messages: (options) => {
+				const request = options as { from?: string }
+				if (request.from === 'start') return [{ role: 'user', id: 'initial-prompt', content: [{ type: 'text', text: workerPrompt() }] }]
+				return state === 'idle' ? [response] : []
+			},
+			waitForResponse: () => response,
+		})
+		const shell = fakeShell((command) => {
+			if (!command.includes(failedCommand)) return { exitCode: 0 }
+			failedCalls += 1
+			return failedCalls === 1 ? { exitCode: 1, stderr: `${failedCommand} failed` } : { exitCode: 0 }
+		})
+		const recoveryTiming = { ...timing, checkpointDir }
+
+		try {
+			const firstHarness = fakeAmp({ createThread: () => recovered.worker, shell: shell.shell })
+			const first = await logCurrentTask(firstHarness.amp as never, context() as never, '', 500, new Map(), recoveryTiming)
+			expect(first).toContain(`${failedCommand === 'label' ? 'Labels' : `${failedCommand[0].toUpperCase()}${failedCommand.slice(1)}`}: failed`)
+
+			state = 'idle'
+			const secondHarness = fakeAmp({
+				createThread: () => { throw new Error('must not create another worker') },
+				getThread: () => recovered.worker,
+				shell: shell.shell,
+			})
+			const second = await logCurrentTask(secondHarness.amp as never, context() as never, '', 500, new Map(), recoveryTiming)
+			expect(second).toContain('Rename: complete')
+			expect(second).toContain('Labels: complete')
+			expect(second).toContain('Archive: complete')
+			expect(secondHarness.createCalls).toBe(0)
+			expect(recovered.appended).toHaveLength(1)
+			expect(failedCalls).toBe(2)
+			expect(access(join(checkpointDir, `${parentID}.json`))).rejects.toThrow()
+		} finally {
+			await rm(checkpointDir, { recursive: true, force: true })
+		}
 	})
 
 	test('serializes concurrent calls during worker creation', async () => {
@@ -814,7 +1014,7 @@ describe('operation coordinator', () => {
 describe('command-only plugin surface', () => {
 	test('registers one command without an agent tool or lifecycle routing', () => {
 		const harness = fakeAmp()
-		plugin(harness.amp as never)
+		plugin(harness.amp as never, { checkpointDir: null })
 		expect(harness.command).toBeFunction()
 		expect(harness.tool).toBeUndefined()
 		expect([...harness.hooks.keys()]).toEqual(['tool.call'])
@@ -828,7 +1028,7 @@ describe('command-only plugin surface', () => {
 		} })
 		const harness = fakeAmp({ createThread: () => worker })
 		const notifications: string[] = []
-		plugin(harness.amp as never)
+		plugin(harness.amp as never, { checkpointDir: null })
 
 		await harness.command!({
 			thread: { id: parentID },
@@ -849,7 +1049,7 @@ describe('command-only plugin surface', () => {
 	test('keeps the Oracle guard for active command workers', async () => {
 		const { worker, appended } = fakeWorker({ waitForResponse: async () => { throw new Error('Timed out waiting for agent response') } })
 		const harness = fakeAmp({ createThread: () => worker })
-		plugin(harness.amp as never)
+		plugin(harness.amp as never, { checkpointDir: null })
 		await harness.command!({
 			thread: { id: parentID },
 			ui: { input: async () => '', notify: async () => {} },

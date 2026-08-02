@@ -43,6 +43,7 @@ and this project does not currently use versioned releases.
 
 ### Changed
 
+- Recover Logseq logging operations after plugin reloads through disposable parent-to-worker checkpoints.
 - Apply the 1Password env-file policy to every action, remove delegated Amp permission settings and show Amp costs. [#137](https://github.com/lelouvincx/agent-skills/pull/137)
 - Make `govuk-style` a local skill so remote refreshes cannot change its behaviour. [#137](https://github.com/lelouvincx/agent-skills/pull/137)
 - Keep `linear-cli` personal preferences in `PERSONAL.md` instead of versioning generated remote payloads. [#137](https://github.com/lelouvincx/agent-skills/pull/137)

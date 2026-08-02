@@ -8,7 +8,7 @@ status: "Partially resolved"
 priority: "P0"
 summary: "Explains the incident, command-only scope and reliability decisions behind Logseq task logging."
 created: "2026-07-15"
-updated: "2026-07-18"
+updated: "2026-08-02"
 amp_thread_id:
   T-019f63f5-d4b8-76e8-870e-b6ec96584a2d: "incident thread containing the original Logseq logging request and recovery"
   T-019f6417-0880-755e-bc60-ce2faebe753d: "worker thread that completed Logseq writes after the coordinator reported a timeout"
@@ -160,6 +160,8 @@ created
 
 PR #98 records this lifecycle in memory. A plugin reload can still lose pending work because Amp provides no operation store or way to list child threads.
 
+A later recovery change keeps the in-memory lifecycle but saves the parent and worker IDs in a disposable temporary checkpoint. After a reload, another command invocation reconnects to that worker, replays its latest result, validates Logseq again and safely reattempts all 3 downstream setters. The guarantee starts only after the checkpoint is committed, so uncertain creation before that point remains outside it.
+
 #### Concurrent calls and retries could create duplicate writers
 
 The worker prompt told the agent to avoid duplicate tasks by parent thread ID. The coordinator could still start another worker for the same parent. A prompt cannot prevent this race.
@@ -286,8 +288,8 @@ The investigation set these boundaries:
 - preserve PR #111 project and customer labels as a separate downstream stage
 - store user-specific titles, customer aliases and task-ID rules in the Logseq graph, linked from `pages/Canonical Pages.md`
 - keep task identity and user-specific naming rules outside P0
-- limit the P0 ownership guarantee to one plugin process and rely on worker-attested read-back checks
-- do not claim durable ownership across plugin reloads or that the coordinator independently verifies the graph's meaning
+- recover ownership across plugin reloads only after the disposable parent-to-worker checkpoint is committed
+- do not claim durable ownership before checkpoint commit or that the coordinator independently verifies the graph's meaning
 
 ## Resolution status
 
@@ -295,8 +297,8 @@ The investigation set these boundaries:
 | --- | --- | --- | --- |
 | In-thread agent routing | P0 | Superseded | PR #108 removed the agent tool; logging is command-only |
 | Truthful timeout state | P0 | Resolved | Active and uncertain operations report pending |
-| Explicit operation lifecycle | P0 | Resolved | Parent-scoped in-memory operation store |
-| Duplicate active writers | P0 | Resolved within one plugin load | Ordered create, append, consume, rename, label and archive transitions |
+| Explicit operation lifecycle | P0 | Resolved | Parent-scoped in-memory operation with a disposable reload checkpoint |
+| Duplicate active writers | P0 | Resolved after worker ID assignment | Ordered transitions reconnect to the checkpointed worker after reload |
 | Two-file partial state | P0 | Resolved within worker trust boundary | Exact result plus post-write read-back attestation and repair |
 | Downstream status conflation | P0 | Resolved | Independent Logseq, rename, labels and archive outcomes |
 | Free-form control protocol | P0 | Resolved | Strict versioned JSON and isolated timeout compatibility |
