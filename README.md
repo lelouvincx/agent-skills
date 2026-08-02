@@ -53,6 +53,7 @@ See [PROJECTS.md](PROJECTS.md) for the generated project list.
 | [writing-investigation-docs](skills/writing-investigation-docs/SKILL.md) | Local | write evidence-first investigation and decision docs |
 | [creating-client-design-systems](skills/creating-client-design-systems/SKILL.md) | Local | create Google DESIGN.md files for client brands and Holistics dashboard themes |
 | [explaining-technical-concepts](skills/explaining-technical-concepts/SKILL.md) | Local | explain technical concepts so they are easy to understand |
+| [technical-precision](skills/technical-precision/SKILL.md) | Local | write unambiguous procedures and technical documentation |
 | [govuk-style](skills/govuk-style/SKILL.md) | Remote | write clear plain-English prose |
 | [impeccable](skills/impeccable/SKILL.md) | Remote | design, review, and improve frontend interfaces |
 | [domain-modeling](skills/domain-modeling/SKILL.md) | Remote | define domain terms and decisions |
