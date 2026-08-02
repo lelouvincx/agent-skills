@@ -14,7 +14,9 @@ import type {
 	ThreadMessageID,
 	ThreadState,
 } from '@ampcode/plugin'
-import { readFile } from 'node:fs/promises'
+import { mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 
 const LOGSEQ_REPO = process.env.AMP_LOGSEQ_GRAPH_DIR ?? '/Users/lelouvincx/Developer/second-brain-logseq'
 const WORKER_MODE = 'high' as BuiltinAgentMode
@@ -33,7 +35,8 @@ type WorkerThread = {
 		subscribe(onNext: (state: ThreadState) => void): { unsubscribe(): void }
 	}
 	waitForResponse(options: { timeoutMs: number }): Promise<ThreadAssistantMessage>
-	messages(options: { from: 'end'; limit: number; roles: ['assistant'] }): Promise<ThreadMessage[]>
+	messages(options: { from: 'end'; limit: number; roles: Array<'user' | 'assistant'> }): Promise<ThreadMessage[]>
+	messages(options: { full: true; from: 'start'; limit: number }): Promise<ThreadMessage[]>
 	appendUserMessage(message: { type: 'user-message'; content: string }): Promise<void>
 }
 
@@ -46,9 +49,11 @@ type LogseqVerifier = (parentThreadID: string) => Promise<LogseqValidation>
 type Timing = {
 	startupTimeoutMs: number
 	workerTimeoutMs: number
+	checkpointDir?: string | null
 	verifyLogseqWrite?: LogseqVerifier
 	onWorkerCreated?: (workerID: ThreadID) => void | Promise<void>
 }
+type RecoveryCheckpoint = { version: 1; parentThreadID: ThreadID; workerThreadID: ThreadID }
 type WorkerResult = {
 	version: 1
 	backlogVerified: boolean
@@ -72,6 +77,7 @@ export type LogseqOperation = {
 	generation: number
 	creationPromise?: Promise<WorkerThread>
 	creationUncertain: boolean
+	checkpointReady: boolean
 	worker?: WorkerThread
 	workerID?: ThreadID
 	workerStatus: WorkerStatus
@@ -98,10 +104,12 @@ export type LogseqOperationStore = Map<ThreadID, LogseqOperation>
 const DEFAULT_TIMING: Timing = {
 	startupTimeoutMs: WORKER_STARTUP_TIMEOUT_MS,
 	workerTimeoutMs: WORKER_TIMEOUT_MS,
+	checkpointDir: join(tmpdir(), 'amp-logseq-manual-log'),
 }
 
-export default function (amp: PluginAPI) {
+export default function (amp: PluginAPI, timingOverrides: Partial<Timing> = {}) {
 	const operations = new Map<ThreadID, LogseqOperation>()
+	const timing = { ...DEFAULT_TIMING, ...timingOverrides }
 
 	amp.logger.log(`[logseq-manual-log] plugin loaded → ${LOGSEQ_REPO}`)
 
@@ -142,7 +150,7 @@ export default function (amp: PluginAPI) {
 				return
 			}
 			const result = await logCurrentTask(amp, ctx, hint.trim(), MAX_NOTIFICATION_CHARS, operations, {
-				...DEFAULT_TIMING,
+				...timing,
 				onWorkerCreated: (workerID) => ctx.ui.notify(`Logseq Amp thread created: ${workerID}`),
 			})
 			await ctx.ui.notify(result)
@@ -167,15 +175,32 @@ export async function logCurrentTask(
 	if (operation?.processing) return formatOperation(operation, maxResultChars, 'Another invocation is already reconciling this operation.')
 	if (!operation) {
 		operation = newOperation(parentThreadID, hint)
+		operation.processing = true
 		operations.set(parentThreadID, operation)
+		try {
+			const restored = await restoreOperation(amp, parentThreadID, hint, timing.checkpointDir)
+			restored.processing = true
+			operation = restored
+			operations.set(parentThreadID, operation)
+		} catch (error) {
+			operation.creationUncertain = true
+			operation.workerStatus = 'pending'
+			operation.workerError = `Recovery checkpoint could not be read safely: ${errorMessage(error)}`
+		}
+	} else {
+		operation.processing = true
 	}
-	operation.processing = true
 	try {
 		await advanceOperation(amp, operation, timing)
 		return formatOperation(operation, maxResultChars)
 	} finally {
 		operation.processing = false
-		if (operation.restartAllowed || isFullyComplete(operation)) operations.delete(parentThreadID)
+		if (operation.restartAllowed || isFullyComplete(operation)) {
+			operations.delete(parentThreadID)
+			await removeCheckpoint(timing.checkpointDir, parentThreadID).catch((error) => {
+				amp.logger.log(`[logseq-manual-log] checkpoint cleanup failed: ${errorMessage(error)}`)
+			})
+		}
 	}
 }
 
@@ -186,6 +211,7 @@ function newOperation(parentThreadID: ThreadID, hint: string): LogseqOperation {
 		processing: false,
 		generation: 0,
 		creationUncertain: false,
+		checkpointReady: false,
 		workerStatus: 'creating',
 		turnInFlight: false,
 		appendStatus: 'none',
@@ -198,11 +224,96 @@ function newOperation(parentThreadID: ThreadID, hint: string): LogseqOperation {
 	}
 }
 
+async function restoreOperation(
+	amp: PluginAPI,
+	parentThreadID: ThreadID,
+	hint: string,
+	checkpointDir: string | null | undefined,
+): Promise<LogseqOperation> {
+	const checkpoint = await readCheckpoint(checkpointDir, parentThreadID)
+	const operation = newOperation(parentThreadID, hint)
+	if (!checkpoint) return operation
+
+	operation.worker = amp.threads.get(checkpoint.workerThreadID) as unknown as WorkerThread
+	operation.workerID = checkpoint.workerThreadID
+	operation.checkpointReady = true
+	operation.workerStatus = 'pending'
+	try {
+		const [initialMessage] = await operation.worker.messages({ full: true, from: 'start', limit: 1 })
+		if (!initialMessage) return operation
+		if (!isBoundWorkerPrompt(initialMessage, parentThreadID, checkpoint.workerThreadID)) {
+			await removeCheckpoint(checkpointDir, parentThreadID)
+			return newOperation(parentThreadID, hint)
+		}
+		operation.generation = 1
+		operation.turnInFlight = true
+		operation.appendStatus = 'accepted'
+		const [latestMessage] = await operation.worker.messages({ from: 'end', limit: 1, roles: ['user', 'assistant'] })
+		if (latestMessage?.role === 'user') {
+			const [previousResponse] = await operation.worker.messages({ from: 'end', limit: 1, roles: ['assistant'] })
+			if (previousResponse?.role === 'assistant') operation.lastConsumedAssistantMessageID = previousResponse.id
+		}
+	} catch (error) {
+		operation.generation = 1
+		operation.turnInFlight = true
+		operation.appendStatus = 'unknown'
+		operation.workerError = `Worker message lookup is pending: ${errorMessage(error)}`
+	}
+	return operation
+}
+
+function isBoundWorkerPrompt(message: ThreadMessage, parentThreadID: ThreadID, workerThreadID: ThreadID): boolean {
+	if (message.role !== 'user') return false
+	const text = message.content.filter((block) => block.type === 'text').map((block) => block.text).join('\n')
+	return text.startsWith(LOGSEQ_WORKER_PROMPT_PREFIX)
+		&& text.includes(`- Parent Amp thread id: ${parentThreadID}\n`)
+		&& text.includes(`- Worker Amp thread id: ${workerThreadID}\n`)
+}
+
+async function readCheckpoint(checkpointDir: string | null | undefined, parentThreadID: ThreadID): Promise<RecoveryCheckpoint | undefined> {
+	if (!checkpointDir) return undefined
+	let text: string
+	try {
+		text = await readFile(checkpointPath(checkpointDir, parentThreadID), 'utf8')
+	} catch (error) {
+		if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined
+		throw error
+	}
+	const value = JSON.parse(text) as Partial<RecoveryCheckpoint>
+	if (value.version !== 1 || value.parentThreadID !== parentThreadID || typeof value.workerThreadID !== 'string') {
+		throw new Error(`Invalid checkpoint at ${checkpointPath(checkpointDir, parentThreadID)}`)
+	}
+	return value as RecoveryCheckpoint
+}
+
+async function saveCheckpoint(checkpointDir: string | null | undefined, checkpoint: RecoveryCheckpoint): Promise<void> {
+	if (!checkpointDir) return
+	await mkdir(checkpointDir, { recursive: true })
+	const path = checkpointPath(checkpointDir, checkpoint.parentThreadID)
+	const temporaryPath = `${path}.${process.pid}.tmp`
+	await writeFile(temporaryPath, JSON.stringify(checkpoint), 'utf8')
+	await rename(temporaryPath, path)
+}
+
+async function removeCheckpoint(checkpointDir: string | null | undefined, parentThreadID: ThreadID): Promise<void> {
+	if (!checkpointDir) return
+	try {
+		await unlink(checkpointPath(checkpointDir, parentThreadID))
+	} catch (error) {
+		if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+	}
+}
+
+function checkpointPath(checkpointDir: string, parentThreadID: ThreadID): string {
+	return join(checkpointDir, `${parentThreadID}.json`)
+}
+
 async function advanceOperation(amp: PluginAPI, operation: LogseqOperation, timing: Timing): Promise<void> {
 	if (!operation.worker) {
 		await ensureWorker(amp, operation, timing)
 		if (!operation.worker) return
 	}
+	if (!await ensureCheckpoint(amp, operation, timing)) return
 
 	if (operation.turnInFlight) {
 		await consumeCurrentTurn(operation, timing)
@@ -221,6 +332,7 @@ async function advanceOperation(amp: PluginAPI, operation: LogseqOperation, timi
 }
 
 async function ensureWorker(amp: PluginAPI, operation: LogseqOperation, timing: Timing): Promise<void> {
+	if (operation.creationUncertain) return
 	if (!operation.creationPromise) {
 		operation.workerStatus = 'creating'
 		try {
@@ -259,6 +371,27 @@ async function ensureWorker(amp: PluginAPI, operation: LogseqOperation, timing: 
 	operation.worker = outcome.value
 	operation.workerID = outcome.value.id
 	operation.workerStatus = 'starting'
+	operation.workerError = undefined
+}
+
+async function ensureCheckpoint(amp: PluginAPI, operation: LogseqOperation, timing: Timing): Promise<boolean> {
+	if (operation.checkpointReady) return true
+	if (!operation.workerID) return false
+	try {
+		await saveCheckpoint(timing.checkpointDir, {
+			version: 1,
+			parentThreadID: operation.parentThreadID,
+			workerThreadID: operation.workerID,
+		})
+		operation.checkpointReady = true
+		operation.workerError = undefined
+		return true
+	} catch (error) {
+		operation.workerStatus = 'pending'
+		operation.workerError = `Checkpoint write failed; worker prompt was not sent: ${errorMessage(error)}`
+		amp.logger.log(`[logseq-manual-log] ${operation.workerError}`)
+		return false
+	}
 }
 
 function notifyWorkerCreated(amp: PluginAPI, timing: Timing, workerID: ThreadID): void {

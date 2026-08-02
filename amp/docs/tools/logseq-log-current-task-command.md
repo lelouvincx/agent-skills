@@ -22,7 +22,7 @@ amp:
   docs_sources:
     api_docs: "amp plugins show-docs"
     agent_options: "amp plugins show-agent-options --json"
-  last_verified: "2026-07-22"
+  last_verified: "2026-08-02"
 contract:
   input_kind: "ui_prompt"
   output_kind: "ui_notification"
@@ -43,6 +43,7 @@ runtime:
     - "PluginThread.waitForResponse"
     - "PluginThread.messages"
     - "PluginThread.state"
+    - "node:fs/promises temporary checkpoint"
     - "amp.threads.get(...).messages"
     - "amp.$ amp threads rename"
     - "amp.$ amp threads label"
@@ -55,11 +56,13 @@ runtime:
   reads:
     - "parent Amp thread through spawned worker via read_thread"
     - "Logseq graph through spawned worker"
+    - "temporary parent-to-worker recovery checkpoint"
   writes:
     - "Logseq graph through spawned worker"
     - "parent Amp thread title"
     - "parent Amp thread labels"
     - "worker thread archive state"
+    - "temporary parent-to-worker recovery checkpoint"
   network:
     - "Amp built-in high agent runtime"
   logs:
@@ -78,7 +81,7 @@ safety:
   risks:
     - "Worker can edit the configured Logseq graph."
     - "The coordinator validates the documented task fields and journal pointer, but it does not judge whether the worker summary is semantically complete."
-    - "Operation state is in memory and cannot prevent duplicate workers after plugin reload or process restart."
+    - "A reload before Amp returns a worker ID can still lose ownership of an uncertain worker creation."
 related:
   - "spawn-subagent"
 tags:
@@ -134,7 +137,11 @@ The first invocation starts one hidden built-in `high` worker without copying re
 
 As soon as Amp confirms that the worker thread was created, the command starts a notification containing the worker thread ID. It starts this creation notification once per worker, before waiting for the worker response. The command does not wait for the notification to finish. A failed or unresolved notification does not interrupt Logseq logging.
 
-This guarantee lasts for one plugin process. Amp does not provide an operation store or a way to list child threads. A plugin reload can therefore lose ownership of pending work.
+After Amp returns the worker ID, the command writes a small parent-to-worker checkpoint at `$TMPDIR/amp-logseq-manual-log/<parent-thread-id>.json`. It stores no prompt or conversation content. The command does not send the worker prompt until this checkpoint is committed.
+
+A plugin reload pauses the operation. Run the command again from the parent thread to reconnect to the saved worker. The coordinator replays its latest result, validates Logseq again and reattempts rename, label and archive. These downstream actions are safe to repeat. The command deletes the checkpoint after every stage completes or the worker definitively fails.
+
+Amp does not provide a way to list child threads. A reload before the checkpoint is committed, including before Amp returns the worker ID, can therefore still lose ownership of an uncertain worker creation.
 
 ### Uncertain work stays pending
 
@@ -279,7 +286,7 @@ Use these checks when the command does not complete:
 - for `Logseq: partial`, `Logseq: unverified` or `Logseq: failed`, run the command again so the same worker can repair the state
 - for `Rename: failed`, `Labels: failed` or `Archive: failed`, run the command again to retry only that action
 - for `Worker: failed`, run the command again to start a replacement worker
-- if `Worker: pending` remains unresolved after repeated retries, reload the plugins or restart Amp to clear in-memory ownership; use this only as an escape hatch because the original worker may still write
+- if a checkpointed `Worker: pending` remains unresolved after repeated retries, inspect `$TMPDIR/amp-logseq-manual-log/<parent-thread-id>.json`; delete only that file as a last-resort escape hatch, because the original worker may still write when its availability is ambiguous
 - to use another graph, set `AMP_LOGSEQ_GRAPH_DIR` before starting Amp
 
 ## Maintenance notes
