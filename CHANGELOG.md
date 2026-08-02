@@ -9,6 +9,7 @@ and this project does not currently use versioned releases.
 
 ### Added
 
+- Add `gmail` for searching and reading Gmail through a least-privilege `gog` integration.
 - Add `technical-precision` for unambiguous procedures and technical documentation using controlled-English principles. [#137](https://github.com/lelouvincx/agent-skills/pull/137)
 - Add fail-closed loading and exact project-over-global policy lookup for projected GitHub events. Add an injected adaptive scheduler and operation-budget model. [#131](https://github.com/lelouvincx/agent-skills/pull/131)
 - Add source-controlled, schema-validated GitHub thread event configuration and policies with exact project-over-global precedence and isolated runtime projection. [#130](https://github.com/lelouvincx/agent-skills/pull/130)
