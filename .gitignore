@@ -8,10 +8,9 @@
 skills/notion/SKILL.md
 skills/notion/.remote-source
 
-skills/linear/SKILL.md
-skills/linear/.remote-source
-skills/linear/references/
-skills/linear/scripts/
+skills/linear-cli/SKILL.md
+skills/linear-cli/.remote-source
+skills/linear-cli/references/
 
 # Add other remote skills here as they are added
 
