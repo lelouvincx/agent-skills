@@ -60,6 +60,7 @@
   - If the user explicitly requests the work token, resolve `GH_TOKEN_WORK`
   - Otherwise, if in holistics-related projects, use `chinh-dm-holistics`, if personal, use `lelouvincx`
 - Actively looking for pull request template and use it
+- After opening a pull request and after every subsequent commit, poll its GitHub Actions runs until they complete. Fix any failures and repeat until all runs pass.
 
 ## Presales
 
