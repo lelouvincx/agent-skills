@@ -36,6 +36,7 @@ See [PROJECTS.md](PROJECTS.md) for the generated project list.
 
 | Skill | Type | Use it to |
 | --- | --- | --- |
+| [gmail](skills/gmail/SKILL.md) | Local | search and read Gmail through a read-only `gog` account |
 | [slackcli](skills/slackcli/SKILL.md) | Local | read, send, and manage Slack messages from the CLI |
 | [bigquery-query](skills/bigquery-query/SKILL.md) | Local | query Google BigQuery with the `bq` CLI |
 | [reading-social-posts](skills/reading-social-posts/SKILL.md) | Local | read social posts and inspect all attached media through TikHub |
