@@ -50,7 +50,7 @@ See [PROJECTS.md](PROJECTS.md) for the generated project list.
 | [ponytail](skills/ponytail/SKILL.md) | Remote | choose the simplest code that works |
 | [ponytail-review](skills/ponytail-review/SKILL.md) | Remote | review code for over-engineering only |
 | [ponytail-help](skills/ponytail-help/SKILL.md) | Remote | show ponytail commands and modes |
-| [writing-great-skills](skills/writing-great-skills/SKILL.md) | Remote | write and edit skills well |
+| [writing-for-agents](skills/writing-for-agents/SKILL.md) | Remote | write documents for agents, including skills and agent instructions |
 | [writing-investigation-docs](skills/writing-investigation-docs/SKILL.md) | Local | write evidence-first investigation and decision docs |
 | [creating-client-design-systems](skills/creating-client-design-systems/SKILL.md) | Local | create Google DESIGN.md files for client brands and Holistics dashboard themes |
 | [explaining-technical-concepts](skills/explaining-technical-concepts/SKILL.md) | Local | explain technical concepts so they are easy to understand |
@@ -59,6 +59,7 @@ See [PROJECTS.md](PROJECTS.md) for the generated project list.
 | [impeccable](skills/impeccable/SKILL.md) | Remote | design, review, and improve frontend interfaces |
 | [domain-modeling](skills/domain-modeling/SKILL.md) | Remote | define domain terms and decisions |
 | [grilling](skills/grilling/SKILL.md) | Remote | stress-test a plan or design through questions |
+| [to-questionnaire](skills/to-questionnaire/SKILL.md) | Remote | turn missing stakeholder knowledge into a reusable questionnaire |
 | [tdd](skills/tdd/SKILL.md) | Remote | work test-first |
 | [teach](skills/teach/SKILL.md) | Remote | teach a skill or concept in a workspace |
 | [develop-amql](skills/develop-amql/SKILL.md) | Remote | develop Holistics AMQL assets |

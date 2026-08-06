@@ -1,6 +1,6 @@
 ---
 name: explaining-technical-concepts
-description: Explains technical concepts through clear, causal explainers, video scripts, and teaching prose. Use when the user wants a complex idea made easy to understand, asks to simplify a technical concept, turn notes into a talk or script, or borrow clarity patterns from an educator without copying their exact voice.
+description: Explains technical concepts through clear, causal explainers, video scripts, and teaching prose. Use when the user wants a complex idea made easy to understand, wants notes turned into a talk or script, signals that the previous explanation did not land, or wants to borrow clarity patterns from an educator without copying their exact voice.
 ---
 
 # Explaining Technical Concepts
@@ -8,6 +8,18 @@ description: Explains technical concepts through clear, causal explainers, video
 Turn complex technical topics into simple, causal explainers that move from confusion to clarity.
 
 Do not imitate a living creator's exact wording, catchphrases, or personal voice. If the user names a creator, extract transferable clarity patterns instead: structure, pacing, analogy use, signposting, and explanation sequence.
+
+## Repair a previous explanation
+
+When the user's immediate response shows that the previous explanation did not land:
+
+1. Identify the failed rung: the unfamiliar term, missing premise, hidden causal step, or analogy that did not map back. Infer it from the exchange when possible; otherwise ask one focused question.
+2. Restore the minimum missing context before returning to the confusing point. Use established project or domain vocabulary when it is available, and define only terms the audience does not know.
+3. Load `technical-precision` and apply its controlled-English principles as the source of truth for stable terminology and unambiguous relationships.
+4. Re-pitch from a different starting point or causal path. Choose a new concrete example, contrast, diagram-like sequence, or level of abstraction instead of shortening or paraphrasing the previous structure.
+5. Verify the repair with one focused check: ask the reader to explain the key relationship in their own words, choose between two concrete cases, or name the remaining unclear step.
+
+Completion criterion: the new explanation supplies the missing premise, uses a meaningfully different route, and checks the specific relationship that previously failed to land.
 
 ## Workflow
 
