@@ -2,12 +2,19 @@
 
 Keep the dependency-aware frontier-round workflow above. Number rounds from `Round 1`, and number questions globally from `Q1` across the whole session; do not restart question numbering in a new round. Ask every currently answerable frontier question in the same numbered round. For question `QN`, label every option `QN.1`, `QN.2`, `QN.3`, and so on.
 
-For every question, preserve the upstream `❓ **QN**` format and include these fields in its body:
+The following plain-text format replaces the upstream question and recommendation example. Use it for every question:
 
-- the decision question
-- **Why I am asking:** how the answer affects the plan or a later decision
-- **Options:** the available answers, each with its `QN.x` label
-- the upstream `➡️` recommendation, identifying the recommended option by its `QN.x` label and explaining why it best fits the current context
+```
+**Question QN:** <decision question>
+
+**Why I am asking:** <how the answer affects the plan or a later decision>
+
+**Options:**
+- **QN.1:** <option>
+- **QN.2:** <option>
+
+**Recommendation:** <recommended QN.x option and why it best fits the current context>
+```
 
 ## Persisting decisions
 
