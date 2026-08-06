@@ -15,7 +15,7 @@ When the user's immediate response shows that the previous explanation did not l
 
 1. Identify the failed rung: the unfamiliar term, missing premise, hidden causal step, or analogy that did not map back. Infer it from the exchange when possible; otherwise ask one focused question.
 2. Restore the minimum missing context before returning to the confusing point. Use established project or domain vocabulary when it is available, and define only terms the audience does not know.
-3. Load `technical-precision` and apply its controlled-English principles as the source of truth for stable terminology and unambiguous relationships.
+3. Load `technical-precision` and apply its ASD-STE100-inspired controlled-English principles as the source of truth for stable terminology and unambiguous relationships. Call the style controlled English; do not claim ASD-STE100 compliance.
 4. Re-pitch from a different starting point or causal path. Choose a new concrete example, contrast, diagram-like sequence, or level of abstraction instead of shortening or paraphrasing the previous structure.
 5. Verify the repair with one focused check: ask the reader to explain the key relationship in their own words, choose between two concrete cases, or name the remaining unclear step.
 
