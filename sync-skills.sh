@@ -102,6 +102,7 @@ sync_remote_skills() {
 	# One-time cleanup for retired upstream artifacts.
 	rm -rf "$SKILLS_DIR/to-prd"
 	rm -rf "$SKILLS_DIR/writing-great-skills"
+	rm -rf "$SKILLS_DIR/remotion"
 	rm -f "$SKILLS_DIR/tdd/refactoring.md"
 
 	echo "Syncing remote skills..."
