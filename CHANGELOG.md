@@ -9,7 +9,7 @@ and this project does not currently use versioned releases.
 
 ### Added
 
-- Add `to-questionnaire` for collecting missing knowledge from a stakeholder, and repair failed explanations through the existing `explaining-technical-concepts` skill.
+- Add `to-questionnaire` for collecting missing knowledge from a stakeholder, and repair failed explanations through the existing `explaining-technical-concepts` skill. [#141](https://github.com/lelouvincx/agent-skills/pull/141)
 - Add `gmail` for searching and reading Gmail through a least-privilege `gog` integration. [#138](https://github.com/lelouvincx/agent-skills/pull/138)
 - Add `technical-precision` for unambiguous procedures and technical documentation using controlled-English principles. [#137](https://github.com/lelouvincx/agent-skills/pull/137)
 - Add fail-closed loading and exact project-over-global policy lookup for projected GitHub events. Add an injected adaptive scheduler and operation-budget model. [#131](https://github.com/lelouvincx/agent-skills/pull/131)
@@ -44,7 +44,7 @@ and this project does not currently use versioned releases.
 
 ### Changed
 
-- Update the maintained Matt Pocock skills for upstream 1.2 by adopting frontier-round grilling, shareable HTML logic prototypes and the renamed `writing-for-agents` guidance.
+- Update the maintained Matt Pocock skills for upstream 1.2 by adopting frontier-round grilling, shareable HTML logic prototypes and the renamed `writing-for-agents` guidance. [#141](https://github.com/lelouvincx/agent-skills/pull/141)
 - Recover Logseq logging operations after plugin reloads through disposable parent-to-worker checkpoints. [#139](https://github.com/lelouvincx/agent-skills/pull/139)
 - Apply the 1Password env-file policy to every action, remove delegated Amp permission settings and show Amp costs. [#137](https://github.com/lelouvincx/agent-skills/pull/137)
 - Make `govuk-style` a local skill so remote refreshes cannot change its behaviour. [#137](https://github.com/lelouvincx/agent-skills/pull/137)
