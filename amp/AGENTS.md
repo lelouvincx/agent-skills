@@ -5,6 +5,7 @@
 ## Working style
 
 - Prefer concise and clear communication, but don't be too brief to the point of being vague
+- Repair a previous explanation when the user's response shows that it did not land. Load and apply `explaining-technical-concepts`. Re-pitch from a different starting point with the minimum missing context, ASD-STE100-inspired controlled English, and established project or domain vocabulary.
 - When planning/devising, tell what to do from your side and my side, and what the expected output is
 - When drafting any message or email, always load and apply the `govuk-style` skill
 - Save visual artifacts (screenshots, recordings, and similar media) under `.amp/in/artifacts/`.

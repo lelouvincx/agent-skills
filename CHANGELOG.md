@@ -44,6 +44,7 @@ and this project does not currently use versioned releases.
 
 ### Changed
 
+- Repair explanations that did not land by restoring missing context and using controlled English with established project vocabulary. [#143](https://github.com/lelouvincx/agent-skills/pull/143)
 - Update the maintained Matt Pocock skills for upstream 1.2 by adopting frontier-round grilling, shareable HTML logic prototypes and the renamed `writing-for-agents` guidance. [#141](https://github.com/lelouvincx/agent-skills/pull/141)
 - Recover Logseq logging operations after plugin reloads through disposable parent-to-worker checkpoints. [#139](https://github.com/lelouvincx/agent-skills/pull/139)
 - Apply the 1Password env-file policy to every action, remove delegated Amp permission settings and show Amp costs. [#137](https://github.com/lelouvincx/agent-skills/pull/137)
