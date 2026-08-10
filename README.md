@@ -75,29 +75,42 @@ Start there when a skill works sometimes but not reliably enough. Add a fixture 
 
 ## Validation
 
-Install [pre-commit](https://pre-commit.com), then enable the fast commit hooks and optional integration checks:
+Use [pre-commit](https://pre-commit.com) as the local entry point for validation.
+
+### Set up once
 
 ```bash
 pre-commit install
 pre-commit install --hook-type pre-push
-pre-commit run
-pre-commit run --hook-stage pre-push
 ```
 
-Pre-push checks additionally require `uv`/`uvx`, `rsync`, Bun 1.3.14 or newer, and npm. The SDK check uses `npm ci` and the committed lockfile. To debug a failure, run its repository command directly:
+### Run checks
+
+Run fast checks on staged files while you work. Run all integration checks before you push:
 
 ```bash
-python3 -m unittest amp/scripts/test_validate_plugin_docs.py
-python3 amp/scripts/validate-plugin-docs.py
-python3 amp/scripts/validate-rfcs.py
-scripts/check-project-registry
-scripts/check-projection
-scripts/check-project-resolver
-scripts/check-plugin-builds
-npm ci --prefix sdk
+pre-commit run
+pre-commit run --hook-stage pre-push --all-files
 ```
 
-Local hooks provide early feedback and may be bypassed with `--no-verify`; GitHub Actions remains authoritative. Changelog enforcement is PR-only, and remote synchronization (`./sync-skills.sh --remote`) remains an explicit maintenance operation.
+Full pre-push validation requires `uv`/`uvx`, `rsync`, Bun 1.3.14 or newer, and npm. The SDK check uses `npm ci` and the committed lockfile.
+
+### Debug a failed check
+
+Run the relevant repository command directly:
+
+| Check | Command |
+| --- | --- |
+| Test the Amp documentation validator | `python3 -m unittest amp/scripts/test_validate_plugin_docs.py` |
+| Validate Amp capability and issue docs | `python3 amp/scripts/validate-plugin-docs.py` |
+| Validate Amp RFCs | `python3 amp/scripts/validate-rfcs.py` |
+| Test the GitHub thread event validator | `python3 -m unittest amp/scripts/test_validate_github_thread_events.py` |
+| Validate GitHub thread event configuration | `python3 amp/scripts/validate-github-thread-events.py` |
+| Validate the project registry | `scripts/check-project-registry` |
+| Test the project resolver | `scripts/check-project-resolver` |
+| Validate runtime projection | `scripts/check-projection` |
+| Build Amp plugins | `scripts/check-plugin-builds` |
+| Validate SDK dependencies | `npm ci --prefix sdk` |
 
 ## Amp capabilities
 

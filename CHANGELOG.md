@@ -44,6 +44,7 @@ and this project does not currently use versioned releases.
 
 ### Changed
 
+- Clarify local validation and require source cross-checks when researching Amp built-in tools. [#145](https://github.com/lelouvincx/agent-skills/pull/145)
 - Allow Ultra mode in `spawn_subagent` while keeping Ultra review routing independent from the child-thread mechanism and retaining default Oracle for focused expert judgment. [#144](https://github.com/lelouvincx/agent-skills/pull/144)
 - Repair explanations that did not land by restoring missing context and using controlled English with established project vocabulary. [#143](https://github.com/lelouvincx/agent-skills/pull/143)
 - Update the maintained Matt Pocock skills for upstream 1.2 by adopting frontier-round grilling, shareable HTML logic prototypes and the renamed `writing-for-agents` guidance. [#141](https://github.com/lelouvincx/agent-skills/pull/141)
