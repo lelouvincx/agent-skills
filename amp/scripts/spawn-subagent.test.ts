@@ -10,7 +10,7 @@ import {
 const childID = 'T-11111111-1111-1111-1111-111111111111'
 const otherID = 'T-22222222-2222-2222-2222-222222222222'
 
-function spawnMessages(status: 'done' | 'error' | 'cancelled' = 'done') {
+function spawnMessages(status: 'done' | 'error' | 'cancelled' = 'done', mode: 'high' | 'ultra' = 'high') {
 	return [
 		{
 			role: 'assistant',
@@ -19,7 +19,7 @@ function spawnMessages(status: 'done' | 'error' | 'cancelled' = 'done') {
 				type: 'tool_use',
 				id: 'tool-1',
 				name: 'spawn_subagent',
-				input: { instructions: 'Check the parser', mode: 'high', cwd: '/tmp' },
+				input: { instructions: 'Check the parser', mode, cwd: '/tmp' },
 			}],
 		},
 		{
@@ -29,7 +29,7 @@ function spawnMessages(status: 'done' | 'error' | 'cancelled' = 'done') {
 				type: 'tool_result',
 				toolUseID: 'tool-1',
 				status,
-				output: `Started high subagent in ${childID}. Do not poll or wait for it.`,
+				output: `Started ${mode} subagent in ${childID}. Do not poll or wait for it.`,
 			}],
 		},
 	] as never[]
@@ -60,15 +60,22 @@ function threadDirectory(state: 'idle' | 'running' | 'awaiting-approval' | 'erro
 }
 
 function spawnHarness() {
-	let spawnTool: { execute: (input: Record<string, unknown>, ctx: unknown) => Promise<string> } | undefined
+	let spawnTool: { description: string; execute: (input: Record<string, unknown>, ctx: unknown) => Promise<string> } | undefined
+	let toolCallHandler: ((event: { tool: string; thread: { id: string } }) => Promise<unknown>) | undefined
 	const createCalls: unknown[] = []
+	const requestedModes: string[] = []
 	const initialMessages: string[] = []
 	registerSubagentTools({
-		on: () => undefined,
+		on: (_event: string, handler: typeof toolCallHandler) => { toolCallHandler = handler },
 		registerTool: (tool: { name: string }) => {
 			if (tool.name === 'spawn_subagent') spawnTool = tool as typeof spawnTool
 		},
-		getBuiltinAgent: () => ({
+		threads: {
+			get: () => ({ messages: async () => [] }),
+		},
+		getBuiltinAgent: (mode: string) => {
+			requestedModes.push(mode)
+			return {
 			createThread: async (options: unknown) => {
 				createCalls.push(options)
 				return {
@@ -76,13 +83,17 @@ function spawnHarness() {
 					appendUserMessage: async ({ content }: { content: string }) => { initialMessages.push(content) },
 				}
 			},
-		}),
+			}
+		},
 	} as never)
 	if (!spawnTool) throw new Error('spawn_subagent was not registered')
 	return {
 		execute: (input: Record<string, unknown>) => spawnTool!.execute(input, { thread: { id: otherID } }),
+		toolCall: (tool: string, threadID = childID) => toolCallHandler!({ tool, thread: { id: threadID } }),
+		description: spawnTool.description,
 		createCalls,
 		initialMessages,
+		requestedModes,
 	}
 }
 
@@ -136,6 +147,44 @@ describe('subagent execution target', () => {
 		})).rejects.toThrow('cwd is only supported for local execution')
 		expect(harness.createCalls).toEqual([])
 	})
+
+	test('starts an Ultra child for a hard independent review', async () => {
+		const harness = spawnHarness()
+		const result = await harness.execute({
+			mode: 'ultra',
+			instructions: 'Review the exact diff only. Do not edit files.',
+		})
+
+		expect(harness.requestedModes).toEqual(['ultra'])
+		expect(result).toBe(`Started ultra subagent in ${childID}. Do not poll or wait for it.`)
+		expect(harness.description).toContain('Ultra mode alone does not select this tool')
+		expect(harness.initialMessages[0]).toContain('This Ultra child is a read-only reviewer. Do not modify files.')
+		expect(harness.initialMessages[0]).toContain('working directory for read-only file inspection, searches, shell commands, and validation')
+		expect(harness.initialMessages[0]).not.toContain('shell commands, edits, and validation')
+	})
+
+	test('keeps non-Ultra implementation prompts writable', async () => {
+		const harness = spawnHarness()
+		await harness.execute({
+			mode: 'high',
+			instructions: 'Implement the bounded fix and validate it.',
+		})
+
+		expect(harness.initialMessages[0]).toContain('This child may modify files when the bounded task requires implementation.')
+		expect(harness.initialMessages[0]).not.toContain('This Ultra child is a read-only reviewer. Do not modify files.')
+	})
+
+	test('keeps Oracle available to the parent while blocking child escalation', async () => {
+		const harness = spawnHarness()
+		await harness.execute({ instructions: 'Check locally' })
+
+		expect(await harness.toolCall('oracle')).toEqual({
+			action: 'reject-and-continue',
+			message: 'Oracle escalation is reserved for the parent coordinator. Report the unresolved judgment call to the parent through send_to_thread.',
+		})
+		expect(await harness.toolCall('oracle', otherID)).toEqual({ action: 'allow' })
+		expect(await harness.toolCall('finder')).toEqual({ action: 'allow' })
+	})
 })
 
 describe('subagent transcript discovery', () => {
@@ -170,6 +219,10 @@ describe('subagent transcript discovery', () => {
 
 	test('ignores unsuccessful spawn results', () => {
 		expect(discoverSpawnedSubagents(spawnMessages('error') as never)).toEqual([])
+	})
+
+	test('discovers Ultra review children', () => {
+		expect(discoverSpawnedSubagents(spawnMessages('done', 'ultra') as never)[0]?.mode).toBe('ultra')
 	})
 
 	test('reads a full transcript in Amp-sized pages', async () => {
