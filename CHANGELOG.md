@@ -9,7 +9,7 @@ and this project does not currently use versioned releases.
 
 ### Added
 
-- Add Figma's official `figma-design-to-code` skill with a read-only personal route, a minimal Figma MCP toolset and a 1Password-backed REST fallback.
+- Add Figma's official `figma-design-to-code` skill with a read-only personal route, a minimal Figma MCP toolset and a 1Password-backed REST fallback. [#147](https://github.com/lelouvincx/agent-skills/pull/147)
 - Add `to-questionnaire` for collecting missing knowledge from a stakeholder, and repair failed explanations through the existing `explaining-technical-concepts` skill. [#141](https://github.com/lelouvincx/agent-skills/pull/141)
 - Add `gmail` for searching and reading Gmail through a least-privilege `gog` integration. [#138](https://github.com/lelouvincx/agent-skills/pull/138)
 - Add `technical-precision` for unambiguous procedures and technical documentation using controlled-English principles. [#137](https://github.com/lelouvincx/agent-skills/pull/137)
@@ -45,7 +45,7 @@ and this project does not currently use versioned releases.
 
 ### Changed
 
-- Merge optional `PERSONAL.md` description overrides into remote skill frontmatter and cache overlays by content hash.
+- Merge optional `PERSONAL.md` description overrides into remote skill frontmatter and cache overlays by content hash. [#147](https://github.com/lelouvincx/agent-skills/pull/147)
 - Require agents to create Git worktrees inside the current repository root's `.amp/worktrees/` directory and verify their registered paths. [#146](https://github.com/lelouvincx/agent-skills/pull/146)
 - Clarify local validation and require source cross-checks when researching Amp built-in tools. [#145](https://github.com/lelouvincx/agent-skills/pull/145)
 - Allow Ultra mode in `spawn_subagent` while keeping Ultra review routing independent from the child-thread mechanism and retaining default Oracle for focused expert judgment. [#144](https://github.com/lelouvincx/agent-skills/pull/144)
