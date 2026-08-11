@@ -119,6 +119,8 @@ sync_remote_skills() {
 		local personal_file="$skill_dir/PERSONAL.md"
 		local remote_source="$skill_dir/.remote-source"
 		local tmp_file="$skill_dir/.remote-tmp"
+		local personal_body="$skill_dir/.personal-body"
+		local merged_remote="$skill_dir/.remote-merged"
 
 		mkdir -p "$skill_dir"
 
@@ -166,12 +168,20 @@ sync_remote_skills() {
 			old_hash=$(grep "^REMOTE_HASH=" "$remote_source" | cut -d'=' -f2)
 		fi
 
-		local personal_changed=false
-		if [ -f "$personal_file" ] && [ -f "$skill_file" ] && [ "$personal_file" -nt "$skill_file" ]; then
-			personal_changed=true
+		local personal_hash=""
+		if [ -f "$personal_file" ]; then
+			if command -v sha256sum &>/dev/null; then
+				personal_hash=$(sha256sum "$personal_file" | awk '{print $1}')
+			else
+				personal_hash=$(shasum -a 256 "$personal_file" | awk '{print $1}')
+			fi
+		fi
+		local old_personal_hash=""
+		if [ -f "$remote_source" ]; then
+			old_personal_hash=$(grep "^PERSONAL_HASH=" "$remote_source" | cut -d'=' -f2 || true)
 		fi
 
-		if [ "$new_hash" = "$old_hash" ] && [ -f "$skill_file" ] && [ "$personal_changed" = false ]; then
+		if [ "$new_hash" = "$old_hash" ] && [ "$personal_hash" = "$old_personal_hash" ] && [ -f "$skill_file" ]; then
 			echo "✓ up-to-date"
 			rm -f "$tmp_file"
 			sync_companion_files "$skill_dir" "$url" "$files" true
@@ -180,12 +190,52 @@ sync_remote_skills() {
 
 		echo -n "downloaded, "
 
-		# Build final SKILL.md: normalized remote base + PERSONAL.md (if exists)
+		# Build final SKILL.md: normalized remote base + PERSONAL.md body. A
+		# one-line description in PERSONAL.md frontmatter overrides the remote
+		# description so personal invocation branches remain discoverable.
 		if [ -f "$personal_file" ]; then
+			cp "$tmp_file" "$merged_remote"
+			if [[ "$(head -n 1 "$personal_file")" == "---" ]]; then
+				if ! awk '
+					NR == 1 { in_frontmatter = 1; next }
+					in_frontmatter && $0 == "---" { in_frontmatter = 0; closed = 1; next }
+					!in_frontmatter { print }
+					END { if (!closed) exit 1 }
+				' "$personal_file" > "$personal_body"; then
+					echo "✗ invalid PERSONAL.md frontmatter"
+					rm -f "$tmp_file" "$personal_body" "$merged_remote"
+					continue
+				fi
+				local personal_description
+				personal_description=$(awk '
+					NR == 1 { next }
+					$0 == "---" { exit }
+					/^description:[[:space:]]*/ { print; exit }
+				' "$personal_file")
+				if [ -n "$personal_description" ]; then
+					awk -v description="$personal_description" '
+						NR == 1 { in_frontmatter = 1; print; next }
+						in_frontmatter && $0 == "---" {
+							if (!replaced) print description
+							in_frontmatter = 0
+							print
+							next
+						}
+						in_frontmatter && /^description:[[:space:]]*/ {
+							print description
+							replaced = 1
+							next
+						}
+						{ print }
+					' "$tmp_file" > "$merged_remote"
+				fi
+			else
+				cp "$personal_file" "$personal_body"
+			fi
 			{
-				cat "$tmp_file"
+				cat "$merged_remote"
 				printf '\n'
-				cat "$personal_file"
+				cat "$personal_body"
 			} > "$skill_file"
 		else
 			cp "$tmp_file" "$skill_file"
@@ -196,9 +246,10 @@ sync_remote_skills() {
 		SOURCE_URL=$url
 		LAST_SYNC=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 		REMOTE_HASH=$new_hash
+		PERSONAL_HASH=$personal_hash
 		EOF
 
-		rm -f "$tmp_file"
+		rm -f "$tmp_file" "$personal_body" "$merged_remote"
 
 		if [ -f "$personal_file" ]; then
 			echo "✓ merged with PERSONAL.md"
