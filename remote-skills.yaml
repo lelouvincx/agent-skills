@@ -8,12 +8,16 @@
 # The sync process will:
 #   1. Fetch the remote SKILL.md from the URL
 #   2. Strip unsupported model-invocation controls from its frontmatter
-#   3. Append PERSONAL.md content if it exists in skills/<name>/PERSONAL.md
+#   3. Merge a PERSONAL.md description override and append its Markdown body
 #   4. Generate skills/<name>/SKILL.md (this file is gitignored)
 #   5. Store metadata in skills/<name>/.remote-source
 #   6. Fetch any listed companion files into skills/<name>/
 
 skills:
+  - name: figma-design-to-code
+    url: https://raw.githubusercontent.com/figma/mcp-server-guide/main/skills/figma-design-to-code/SKILL.md
+    enabled: true
+
   - name: notion
     url: https://raw.githubusercontent.com/lox/notion-cli/refs/heads/main/skills/notion/SKILL.md
     enabled: true
