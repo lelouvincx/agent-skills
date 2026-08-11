@@ -45,6 +45,7 @@ and this project does not currently use versioned releases.
 
 ### Changed
 
+- Replace Impeccable's partial companion-file manifest with staged, rollback-safe upstream-directory syncing so Amp can load `scripts/live.mjs` and its transitive modules.
 - Merge optional `PERSONAL.md` description overrides into remote skill frontmatter and cache overlays by content hash. [#147](https://github.com/lelouvincx/agent-skills/pull/147)
 - Require agents to create Git worktrees inside the current repository root's `.amp/worktrees/` directory and verify their registered paths. [#146](https://github.com/lelouvincx/agent-skills/pull/146)
 - Clarify local validation and require source cross-checks when researching Amp built-in tools. [#145](https://github.com/lelouvincx/agent-skills/pull/145)
