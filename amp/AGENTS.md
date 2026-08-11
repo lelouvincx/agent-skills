@@ -55,6 +55,7 @@
 
 ## Version control
 
+- Git worktrees: Create every worktree inside `<repository-root>/.amp/worktrees/`, resolving `<repository-root>` with `git rev-parse --show-toplevel`; finish only after `git worktree list --porcelain` reports the new worktree inside that directory.
 - When creating pull request, GitHub token references are stored at `~/.credentials/github.env` as 1Password `op://...` references only; do not store or read plaintext tokens from local `.env` files:
   - Resolve with 1Password at execution time, e.g. `op run --env-file ~/.credentials/github.env -- sh -c 'GH_TOKEN="$GH_TOKEN_BOT" gh pr ...'`, or use a repo/helper loader that resolves `op://` values without printing them
   - If the user explicitly requests the bot token, resolve `GH_TOKEN_BOT` and pass it only in the command environment (`GH_TOKEN=$GH_TOKEN_BOT gh pr ...`); never echo it
