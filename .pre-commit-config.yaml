@@ -90,6 +90,14 @@ repos:
         stages: [pre-push]
         files: ^(?:\.agents/|amp/|bin/|skills/|projects\.yaml$|PROJECTS\.md$|remote-skills\.yaml$|sync-skills\.sh$|scripts/check-projection$|\.pre-commit-config\.yaml$)
 
+      - id: check-remote-archive-sync
+        name: Check rollback-safe remote archive syncing
+        entry: scripts/check-remote-archive-sync
+        language: system
+        pass_filenames: false
+        stages: [pre-push]
+        files: ^(?:remote-skills\.yaml$|sync-skills\.sh$|scripts/check-remote-archive-sync$|\.pre-commit-config\.yaml$)
+
       - id: check-project-resolver
         name: Check project resolver behavior
         entry: scripts/check-project-resolver

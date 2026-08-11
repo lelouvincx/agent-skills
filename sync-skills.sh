@@ -2,10 +2,10 @@
 set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
-SKILLS_DIR="$REPO_DIR/skills"
+SKILLS_DIR="${SKILLS_DIR:-$REPO_DIR/skills}"
 BIN_DIR="$REPO_DIR/bin"
 AMP_DIR="$REPO_DIR/amp"
-REMOTE_SKILLS_CONFIG="$REPO_DIR/remote-skills.yaml"
+REMOTE_SKILLS_CONFIG="${REMOTE_SKILLS_CONFIG:-$REPO_DIR/remote-skills.yaml}"
 CLAUDE_SKILLS_DIR="$HOME/.claude/skills"
 AGENTS_SKILLS_DIR="$HOME/.agents/skills"
 AMP_CONFIG_DIR="${AMP_CONFIG_DIR:-$HOME/.config/amp}"
@@ -21,16 +21,20 @@ parse_yaml() {
 	local skill_url=""
 	local skill_enabled=""
 	local skill_files=""
+	local skill_archive=""
+	local skill_archive_path=""
 	local in_files=false
 
 	_flush_skill() {
-		if [[ -n "$skill_name" && -n "$skill_url" && -n "$skill_enabled" ]]; then
-			echo "$skill_name|$skill_url|$skill_enabled|$skill_files"
+		if [[ -n "$skill_name" && -n "$skill_enabled" && ( -n "$skill_url" || -n "$skill_archive" ) ]]; then
+			echo "$skill_name|$skill_url|$skill_enabled|$skill_files|$skill_archive|$skill_archive_path"
 		fi
 		skill_name=""
 		skill_url=""
 		skill_enabled=""
 		skill_files=""
+		skill_archive=""
+		skill_archive_path=""
 		in_files=false
 	}
 
@@ -45,6 +49,12 @@ parse_yaml() {
 			skill_name="${BASH_REMATCH[1]}"
 		elif [[ "$line" =~ ^[[:space:]]*url:[[:space:]]*(.+)$ ]]; then
 			skill_url="${BASH_REMATCH[1]}"
+			in_files=false
+		elif [[ "$line" =~ ^[[:space:]]*archive:[[:space:]]*(.+)$ ]]; then
+			skill_archive="${BASH_REMATCH[1]}"
+			in_files=false
+		elif [[ "$line" =~ ^[[:space:]]*archive_path:[[:space:]]*(.+)$ ]]; then
+			skill_archive_path="${BASH_REMATCH[1]}"
 			in_files=false
 		elif [[ "$line" =~ ^[[:space:]]*enabled:[[:space:]]*(.+)$ ]]; then
 			skill_enabled="${BASH_REMATCH[1]}"
@@ -63,6 +73,86 @@ parse_yaml() {
 		fi
 	done < "$yaml_file"
 	_flush_skill
+}
+
+normalize_remote_skill() {
+	local input="$1"
+	local output="$2"
+
+	if [[ "$(head -n 1 "$input")" == "---" ]]; then
+		awk '
+			NR == 1 { in_frontmatter = 1; print; next }
+			in_frontmatter && $0 == "---" { in_frontmatter = 0; closed = 1; print; next }
+			in_frontmatter && /^disable-model-invocation:[[:space:]]*/ { next }
+			{ print }
+			END { if (!closed) exit 1 }
+		' "$input" > "$output"
+	else
+		{
+			printf '%s\n' '---' '---' ''
+			cat "$input"
+		} > "$output"
+	fi
+}
+
+merge_personal_overlay() {
+	local remote_file="$1"
+	local personal_file="$2"
+	local output="$3"
+	local work_dir="$4"
+	local personal_body="$work_dir/personal-body"
+	local merged_remote="$work_dir/remote-merged"
+
+	if [ ! -f "$personal_file" ]; then
+		cp "$remote_file" "$output" || return 1
+		return
+	fi
+
+	cp "$remote_file" "$merged_remote" || return 1
+	if [[ "$(head -n 1 "$personal_file")" == "---" ]]; then
+		if ! awk '
+			NR == 1 { in_frontmatter = 1; next }
+			in_frontmatter && $0 == "---" { in_frontmatter = 0; closed = 1; next }
+			!in_frontmatter { print }
+			END { if (!closed) exit 1 }
+		' "$personal_file" > "$personal_body"; then
+			return 1
+		fi
+		local personal_description
+		if ! personal_description="$(awk '
+			NR == 1 { next }
+			$0 == "---" { exit }
+			/^description:[[:space:]]*/ { print; exit }
+		' "$personal_file")"; then
+			return 1
+		fi
+		if [ -n "$personal_description" ]; then
+			if ! awk -v description="$personal_description" '
+				NR == 1 { in_frontmatter = 1; print; next }
+				in_frontmatter && $0 == "---" {
+					if (!replaced) print description
+					in_frontmatter = 0
+					print
+					next
+				}
+				in_frontmatter && /^description:[[:space:]]*/ {
+					print description
+					replaced = 1
+					next
+				}
+				{ print }
+			' "$remote_file" > "$merged_remote"; then
+				return 1
+			fi
+		fi
+	else
+		cp "$personal_file" "$personal_body" || return 1
+	fi
+	{
+		cat "$merged_remote"
+		printf '\n'
+		cat "$personal_body"
+	} > "$output" || return 1
 }
 
 sync_companion_files() {
@@ -87,8 +177,103 @@ sync_companion_files() {
 			echo "✓"
 		else
 			echo "✗ failed"
+			return 1
 		fi
 	done
+}
+
+sync_remote_archive_skill() {
+	local name="$1"
+	local archive="$2"
+	local archive_path="$3"
+	local skill_dir="$SKILLS_DIR/$name"
+	local personal_file="$skill_dir/PERSONAL.md"
+	local work_dir archive_file extract_dir archive_root source_dir publish_dir normalized_file
+	local archive_hash personal_hash=""
+
+	if [ -z "$archive_path" ] || [[ "$archive_path" = /* ]] \
+		|| [[ "/$archive_path/" = *"/../"* ]] || [[ "/$archive_path/" = *"/./"* ]]; then
+		echo "→ $name: ✗ archive_path must be a relative path without dot segments" >&2
+		return 1
+	fi
+
+	work_dir="$(mktemp -d "$SKILLS_DIR/.${name}-remote.XXXXXX")"
+	archive_file="$work_dir/source.tar.gz"
+	extract_dir="$work_dir/extract"
+	publish_dir="$work_dir/publish"
+	normalized_file="$work_dir/normalized-skill.md"
+	mkdir -p "$extract_dir" "$publish_dir"
+
+	echo -n "→ $name: fetching archive... "
+	if ! curl -fsSL "$archive" -o "$archive_file" 2>/dev/null; then
+		echo "✗ failed"
+		rm -rf "$work_dir"
+		return 1
+	fi
+	if ! tar -xzf "$archive_file" -C "$extract_dir"; then
+		echo "✗ invalid archive"
+		rm -rf "$work_dir"
+		return 1
+	fi
+	archive_root="$(find "$extract_dir" -mindepth 1 -maxdepth 1 -type d -print)"
+	if [ -z "$archive_root" ] || [ "$(printf '%s\n' "$archive_root" | wc -l | tr -d ' ')" -ne 1 ]; then
+		echo "✗ archive must contain exactly one top-level directory"
+		rm -rf "$work_dir"
+		return 1
+	fi
+	source_dir="$archive_root/$archive_path"
+	if [ -z "$source_dir" ] || [ ! -f "$source_dir/SKILL.md" ]; then
+		echo "✗ archive path not found"
+		rm -rf "$work_dir"
+		return 1
+	fi
+	if ! cp -R "$source_dir/." "$publish_dir/" \
+		|| ! normalize_remote_skill "$publish_dir/SKILL.md" "$normalized_file" \
+		|| ! merge_personal_overlay "$normalized_file" "$personal_file" "$publish_dir/SKILL.md" "$work_dir"; then
+		echo "✗ invalid skill payload"
+		rm -rf "$work_dir"
+		return 1
+	fi
+
+	if [ -f "$personal_file" ]; then
+		cp "$personal_file" "$publish_dir/PERSONAL.md"
+		personal_hash="$(shasum -a 256 "$personal_file" | awk '{print $1}')"
+	fi
+	if command -v sha256sum &>/dev/null; then
+		archive_hash="$(sha256sum "$archive_file" | awk '{print $1}')"
+	else
+		archive_hash="$(shasum -a 256 "$archive_file" | awk '{print $1}')"
+	fi
+	cat > "$publish_dir/.remote-source" <<-EOF
+	SOURCE_URL=$archive
+	ARCHIVE_PATH=$archive_path
+	LAST_SYNC=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+	REMOTE_HASH=$archive_hash
+	PERSONAL_HASH=$personal_hash
+	EOF
+
+	local backup_root backup_dir publish_failed=false
+	backup_root="$(mktemp -d "$SKILLS_DIR/.${name}-backup.XXXXXX")"
+	backup_dir="$backup_root/payload"
+	trap 'if [ ! -e "$skill_dir" ] && [ -e "$backup_dir" ]; then mv "$backup_dir" "$skill_dir"; fi; rm -rf "$backup_root" "$work_dir"; exit 1' HUP INT TERM
+	if [ -e "$skill_dir" ]; then
+		mv "$skill_dir" "$backup_dir"
+	fi
+	if [ "${SYNC_SKILLS_TEST_FAIL_AFTER_BACKUP:-}" = "1" ]; then
+		publish_failed=true
+	elif ! mv "$publish_dir" "$skill_dir"; then
+		publish_failed=true
+	fi
+	if [ "$publish_failed" = true ]; then
+		[ -e "$backup_dir" ] && mv "$backup_dir" "$skill_dir"
+		echo "✗ publish failed"
+		trap - HUP INT TERM
+		rm -rf "$backup_root" "$work_dir"
+		return 1
+	fi
+	trap - HUP INT TERM
+	rm -rf "$backup_root" "$work_dir"
+	echo "✓ synced complete directory"
 }
 
 # --- Remote Skills Sync ---
@@ -108,11 +293,15 @@ sync_remote_skills() {
 	echo "Syncing remote skills..."
 	echo ""
 
-	while IFS='|' read -r name url enabled files; do
+	while IFS='|' read -r name url enabled files archive archive_path; do
 		[[ "$enabled" != "true" ]] && {
 			echo "⊘ $name: disabled, skipping"
 			continue
 		}
+		if [ -n "$archive" ]; then
+			sync_remote_archive_skill "$name" "$archive" "$archive_path"
+			continue
+		fi
 
 		local skill_dir="$SKILLS_DIR/$name"
 		local skill_file="$skill_dir/SKILL.md"
@@ -134,23 +323,10 @@ sync_remote_skills() {
 		fi
 
 		# Normalize frontmatter and remove controls unsupported by Amp.
-		if [[ "$(head -n 1 "$tmp_file")" == "---" ]]; then
-			if ! awk '
-				NR == 1 { in_frontmatter = 1; print; next }
-				in_frontmatter && $0 == "---" { in_frontmatter = 0; closed = 1; print; next }
-				in_frontmatter && /^disable-model-invocation:[[:space:]]*/ { next }
-				{ print }
-				END { if (!closed) exit 1 }
-			' "$tmp_file" > "${tmp_file}.amp"; then
-				echo "✗ invalid frontmatter"
-				rm -f "$tmp_file" "${tmp_file}.amp"
-				continue
-			fi
-		else
-			{
-				printf '%s\n' '---' '---' ''
-				cat "$tmp_file"
-			} > "${tmp_file}.amp"
+		if ! normalize_remote_skill "$tmp_file" "${tmp_file}.amp"; then
+			echo "✗ invalid frontmatter"
+			rm -f "$tmp_file" "${tmp_file}.amp"
+			continue
 		fi
 		mv "${tmp_file}.amp" "$tmp_file"
 
@@ -193,52 +369,10 @@ sync_remote_skills() {
 		# Build final SKILL.md: normalized remote base + PERSONAL.md body. A
 		# one-line description in PERSONAL.md frontmatter overrides the remote
 		# description so personal invocation branches remain discoverable.
-		if [ -f "$personal_file" ]; then
-			cp "$tmp_file" "$merged_remote"
-			if [[ "$(head -n 1 "$personal_file")" == "---" ]]; then
-				if ! awk '
-					NR == 1 { in_frontmatter = 1; next }
-					in_frontmatter && $0 == "---" { in_frontmatter = 0; closed = 1; next }
-					!in_frontmatter { print }
-					END { if (!closed) exit 1 }
-				' "$personal_file" > "$personal_body"; then
-					echo "✗ invalid PERSONAL.md frontmatter"
-					rm -f "$tmp_file" "$personal_body" "$merged_remote"
-					continue
-				fi
-				local personal_description
-				personal_description=$(awk '
-					NR == 1 { next }
-					$0 == "---" { exit }
-					/^description:[[:space:]]*/ { print; exit }
-				' "$personal_file")
-				if [ -n "$personal_description" ]; then
-					awk -v description="$personal_description" '
-						NR == 1 { in_frontmatter = 1; print; next }
-						in_frontmatter && $0 == "---" {
-							if (!replaced) print description
-							in_frontmatter = 0
-							print
-							next
-						}
-						in_frontmatter && /^description:[[:space:]]*/ {
-							print description
-							replaced = 1
-							next
-						}
-						{ print }
-					' "$tmp_file" > "$merged_remote"
-				fi
-			else
-				cp "$personal_file" "$personal_body"
-			fi
-			{
-				cat "$merged_remote"
-				printf '\n'
-				cat "$personal_body"
-			} > "$skill_file"
-		else
-			cp "$tmp_file" "$skill_file"
+		if ! merge_personal_overlay "$tmp_file" "$personal_file" "$skill_file" "$skill_dir"; then
+			echo "✗ invalid PERSONAL.md frontmatter"
+			rm -f "$tmp_file" "$personal_body" "$merged_remote"
+			continue
 		fi
 
 		# Update metadata

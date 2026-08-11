@@ -1,0 +1,121 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+tmp="$(mktemp -d)"
+trap 'rm -rf "$tmp"' EXIT
+
+test_repo="$tmp/repo"
+source_root="$tmp/source/fixture-main"
+archive="$tmp/fixture.tar.gz"
+home="$tmp/home"
+mkdir -p "$test_repo/skills/demo" "$source_root/plugin/skills/demo/scripts/lib" "$home"
+cp "$REPO_DIR/sync-skills.sh" "$test_repo/sync-skills.sh"
+chmod +x "$test_repo/sync-skills.sh"
+
+cat > "$test_repo/skills/demo/PERSONAL.md" <<'EOF'
+---
+description: Demo skill with a local overlay.
+---
+
+Local instructions.
+EOF
+cp "$test_repo/skills/demo/PERSONAL.md" "$tmp/expected-personal.md"
+
+cat > "$test_repo/remote-skills.yaml" <<EOF
+skills:
+  - name: demo
+    archive: file://$archive
+    archive_path: plugin/skills/demo
+    enabled: true
+EOF
+
+build_archive() {
+	local version="$1"
+	rm -rf "$tmp/source"
+	mkdir -p "$source_root/plugin/skills/demo/scripts/lib" "$source_root/examples/plugin/skills/demo"
+	printf '%s\n' 'decoy' > "$source_root/examples/plugin/skills/demo/SKILL.md"
+	cat > "$source_root/plugin/skills/demo/SKILL.md" <<'EOF'
+---
+name: demo
+description: Remote demo skill.
+disable-model-invocation: true
+---
+
+# Demo
+EOF
+	printf "export const version = '%s';\n" "$version" > "$source_root/plugin/skills/demo/scripts/lib/version.mjs"
+	cat > "$source_root/plugin/skills/demo/scripts/live.mjs" <<'EOF'
+import { version } from './lib/version.mjs';
+if (process.argv.includes('--help')) console.log(`live ${version}`);
+EOF
+	tar -czf "$archive" -C "$tmp/source" fixture-main
+}
+
+run_sync() {
+	HOME="$home" \
+		SKILLS_DIR="$test_repo/skills" \
+		REMOTE_SKILLS_CONFIG="$test_repo/remote-skills.yaml" \
+		AMP_CONFIG_DIR="$home/.config/amp" \
+		"$test_repo/sync-skills.sh" --remote >/dev/null
+}
+
+build_archive v1
+run_sync
+cmp "$tmp/expected-personal.md" "$test_repo/skills/demo/PERSONAL.md"
+grep -q '^description: Demo skill with a local overlay\.$' "$test_repo/skills/demo/SKILL.md"
+grep -q '^Local instructions\.$' "$test_repo/skills/demo/SKILL.md"
+if grep -q '^disable-model-invocation:' "$test_repo/skills/demo/SKILL.md"; then
+	echo "error: archive sync kept unsupported frontmatter" >&2
+	exit 1
+fi
+node "$test_repo/skills/demo/scripts/live.mjs" --help | grep -q '^live v1$'
+
+touch "$test_repo/skills/demo/stale.txt"
+build_archive v2
+run_sync
+cmp "$tmp/expected-personal.md" "$test_repo/skills/demo/PERSONAL.md"
+node "$test_repo/skills/demo/scripts/live.mjs" --help | grep -q '^live v2$'
+if [ -e "$test_repo/skills/demo/stale.txt" ]; then
+	echo "error: archive sync kept a stale remote-owned file" >&2
+	exit 1
+fi
+
+find "$source_root/plugin/skills/demo" -type f ! -name SKILL.md -print \
+	| sed "s#^$source_root/plugin/skills/demo/##" | sort > "$tmp/expected-paths"
+find "$test_repo/skills/demo" -type f ! -name SKILL.md ! -name PERSONAL.md ! -name .remote-source -print \
+	| sed "s#^$test_repo/skills/demo/##" | sort > "$tmp/actual-paths"
+diff -u "$tmp/expected-paths" "$tmp/actual-paths"
+
+find "$test_repo/skills/demo" -type f -exec shasum -a 256 {} \; | sort > "$tmp/before-failure"
+if HOME="$home" SKILLS_DIR="$test_repo/skills" REMOTE_SKILLS_CONFIG="$test_repo/remote-skills.yaml" \
+	AMP_CONFIG_DIR="$home/.config/amp" SYNC_SKILLS_TEST_FAIL_AFTER_BACKUP=1 \
+	"$test_repo/sync-skills.sh" --remote >/dev/null 2>&1; then
+	echo "error: archive sync succeeded after an injected publish failure" >&2
+	exit 1
+fi
+find "$test_repo/skills/demo" -type f -exec shasum -a 256 {} \; | sort > "$tmp/after-failure"
+diff -u "$tmp/before-failure" "$tmp/after-failure"
+cmp "$tmp/expected-personal.md" "$test_repo/skills/demo/PERSONAL.md"
+
+cp "$test_repo/skills/demo/SKILL.md" "$tmp/skill-before-bad-personal.md"
+printf '%s\n' '---' 'description: Broken overlay.' > "$test_repo/skills/demo/PERSONAL.md"
+if run_sync; then
+	echo "error: archive sync accepted malformed PERSONAL.md" >&2
+	exit 1
+fi
+cmp "$tmp/skill-before-bad-personal.md" "$test_repo/skills/demo/SKILL.md"
+cp "$tmp/expected-personal.md" "$test_repo/skills/demo/PERSONAL.md"
+
+find "$test_repo/skills/demo" -type f -exec shasum -a 256 {} \; | sort > "$tmp/before-failure"
+sed "s#file://$archive#file://$tmp/missing.tar.gz#" "$test_repo/remote-skills.yaml" > "$tmp/broken-config.yaml"
+if HOME="$home" SKILLS_DIR="$test_repo/skills" REMOTE_SKILLS_CONFIG="$tmp/broken-config.yaml" \
+	AMP_CONFIG_DIR="$home/.config/amp" "$test_repo/sync-skills.sh" --remote >/dev/null 2>&1; then
+	echo "error: archive sync succeeded with a missing archive" >&2
+	exit 1
+fi
+find "$test_repo/skills/demo" -type f -exec shasum -a 256 {} \; | sort > "$tmp/after-failure"
+diff -u "$tmp/before-failure" "$tmp/after-failure"
+cmp "$tmp/expected-personal.md" "$test_repo/skills/demo/PERSONAL.md"
+
+echo "Remote archive sync check passed"
