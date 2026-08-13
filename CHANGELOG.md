@@ -46,7 +46,7 @@ and this project does not currently use versioned releases.
 
 ### Changed
 
-- Deduplicate delegation guidance: trim the `delegating-subagents` skill to its unique routing rules, make the capability document's Summary table the single decision-order statement, merge the repository-instruction delegation bullets, and require asking the user when a blocked child or the parent needs user-only input.
+- Deduplicate delegation guidance: trim the `delegating-subagents` skill to its unique routing rules, make the capability document's Summary table the single decision-order statement, merge the repository-instruction delegation bullets, and require asking the user when a blocked child or the parent needs user-only input. [#151](https://github.com/lelouvincx/agent-skills/pull/151)
 - Use Figma's hosted MCP endpoint for the `figma-design-to-code` skill instead of the retired desktop endpoint. [#149](https://github.com/lelouvincx/agent-skills/pull/149)
 - Replace Impeccable's partial companion-file manifest with staged, rollback-safe upstream-directory syncing so Amp can load `scripts/live.mjs` and its transitive modules. [#148](https://github.com/lelouvincx/agent-skills/pull/148)
 - Merge optional `PERSONAL.md` description overrides into remote skill frontmatter and cache overlays by content hash. [#147](https://github.com/lelouvincx/agent-skills/pull/147)
