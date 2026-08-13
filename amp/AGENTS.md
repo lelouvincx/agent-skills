@@ -13,10 +13,10 @@
 
 ## Delegation
 
-- Before starting non-trivial work, consider whether it contains independent, bounded workstreams that can run concurrently.
+- Before starting non-trivial work, consider whether it contains independent, bounded workstreams that can run concurrently, but do not delegate simple reads, searches, localized edits, or unresolved product or design decisions. The parent remains responsible for synthesis, integration, and final verification.
 - Load `delegating-subagents` before delegating and when hard review or expert judgment could use default Oracle or an Ultra child. The skill selects the reviewer and child-thread mechanism separately.
-- Do not delegate simple reads, searches, localized edits, or unresolved product or design decisions. The parent remains responsible for synthesis, integration, and final verification.
 - Every delegated task needs a bounded brief with scope, constraints and non-goals, success criteria, validation, and a completion contract. Require a done report with evidence or a blocked report naming the smallest parent input needed. The parent verifies the result and closes any gap directly or through a focused follow-up.
+- Ask the user when a blocked subagent or the parent needs input only the user can provide. Subagents must report the required input rather than guess.
 - When a user message starts with `|subagent` or `/subagent`, call `spawn_subagent` with the remaining message as the bounded subagent instructions.
 - Treat side questions introduced with `btw` or triggered with `|btw` as delegation requests so they do not displace the parent's current task. Load the `delegating-subagents` skill to choose the mechanism.
 
