@@ -9,6 +9,7 @@ and this project does not currently use versioned releases.
 
 ### Added
 
+- Add the pinned `diagram-design` remote skill with local artifact, branding and browser-based PNG export guidance.
 - Add Figma's official `figma-design-to-code` skill with a read-only personal route, a minimal Figma MCP toolset and a 1Password-backed REST fallback. [#147](https://github.com/lelouvincx/agent-skills/pull/147)
 - Add `to-questionnaire` for collecting missing knowledge from a stakeholder, and repair failed explanations through the existing `explaining-technical-concepts` skill. [#141](https://github.com/lelouvincx/agent-skills/pull/141)
 - Add `gmail` for searching and reading Gmail through a least-privilege `gog` integration. [#138](https://github.com/lelouvincx/agent-skills/pull/138)

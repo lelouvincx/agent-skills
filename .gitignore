@@ -120,6 +120,12 @@ skills/impeccable/.remote-source
 skills/impeccable/reference/
 skills/impeccable/scripts/
 
+skills/diagram-design/SKILL.md
+skills/diagram-design/.remote-source
+skills/diagram-design/assets/
+skills/diagram-design/references/
+skills/diagram-design/scripts/
+
 # Amp runtime/source mirror: keep only intentional source artifacts under amp/.
 # Do not commit local runtime state, logs, MCP configs, or write metadata.
 .amp/

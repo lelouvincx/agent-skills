@@ -336,6 +336,11 @@ skills:
     archive_path: plugin/skills/impeccable
     enabled: true
 
+  - name: diagram-design
+    archive: https://codeload.github.com/cathrynlavery/diagram-design/tar.gz/f3622cf66a3c557cb2ead57b687a3c1ff63f5a2b
+    archive_path: skills/diagram-design
+    enabled: true
+
   # Add more remote skills here:
   # - name: example-skill
   #   url: https://raw.githubusercontent.com/user/repo/main/skills/example/SKILL.md
