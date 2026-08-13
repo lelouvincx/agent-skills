@@ -37,7 +37,14 @@ Use `thread_interact` for native child messaging and metadata. Use `subagent_con
 
 ## Delegate side questions
 
-When the user introduces a side question with `btw` or triggers `|btw`, delegate that question so it does not displace the parent's current task. Remove the trigger from the delegated brief. This is a request to delegate, not a request for a specific mechanism. Use built-in `Task` by default. Use `create_thread` when the question must report across turns or needs follow-up and its executor can see the required state; if not, use `spawn_subagent` when that wrapper can.
+When the user introduces a side question with `btw` or triggers `|btw`:
+
+- delegate the question so it does not displace the parent's current task
+- remove the trigger from the delegated brief
+- treat the trigger as a request to delegate, not a request for a specific mechanism
+- use built-in `Task` by default
+- use `create_thread` when the question must report across turns or needs follow-up and its executor can see the required state
+- use `spawn_subagent` when `create_thread` is unavailable or cannot see the required state, but only when the wrapper can see that state
 
 ## Constraints
 
