@@ -66,6 +66,7 @@ safety:
     - "An ultra review brief must be read-only and include the exact change-set evidence when line-level fidelity matters."
     - "Give every delegated task a bounded brief with scope, constraints and non-goals, success criteria, validation, and a completion contract."
     - "Require a done report with evidence or a blocked report naming the smallest parent input needed; verify the result and close gaps directly or through a focused follow-up."
+    - "Ask the user when a blocked child or the parent needs input only the user can provide; neither the parent nor the child may guess."
     - "Use Claude Code, Claude Design, and Pi subagents only when the user explicitly requests the named specialist."
     - "Treat Claude Code and Pi as read-only advisers; Amp applies and verifies any proposed changes."
     - "Treat Claude Design as a cloud design write tool, not a read-only adviser or local implementation worker."
@@ -123,16 +124,17 @@ Repository instructions require agents to consider delegation before non-trivial
 
 ## Contract
 
-The skill receives the current task and its coordination needs from conversation context. It returns instructions for choosing one of these paths:
+The skill receives the current task and its coordination needs from conversation context.
 
-1. Work directly or use a specialist tool when it already covers the task.
-2. Use the named Claude Code, Claude Design or Pi subagent when the user explicitly requests it.
-3. Use `oracle` for a focused expert second opinion on a hard judgment call, tricky review, alternative analysis or complex plan.
-4. Use Ultra mode for a genuinely hard independent review of completed parent work when its current routing adds an independent perspective. Choose the child-thread mechanism separately.
-5. Use `spawn_subagent` when the task needs its managed-local controls or the user explicitly requests that mechanism.
-6. Otherwise, use built-in `create_thread` for normal addressable cross-turn work, including Ultra reviews, when it is available and its executor can see the required state.
-7. If addressable cross-turn work still needs a child but `create_thread` is unavailable or cannot see the required state, use `spawn_subagent` when its executor can see that state. Otherwise, keep the work in the parent.
-8. Use built-in `Task` for ordinary bounded one-shot delegation. The parent turn stays open until each Task returns one final summary. This includes multiple independent Task calls running concurrently.
+It returns instructions for choosing one path. Follow the decision order in the Summary table:
+
+- resolve specialist tools and explicit named-specialist requests first
+- use Oracle for focused expert judgment
+- use Ultra for independent review capability
+- resolve decisive `spawn_subagent` requirements
+- use `create_thread` for normal addressable cross-turn work
+- use `spawn_subagent` as the addressable fallback
+- use built-in `Task` for ordinary bounded one-shot delegation
 
 The skill declares no tool allowlist.
 
@@ -194,7 +196,11 @@ Default Oracle remains the focused expert path for hard judgment calls, tricky r
 
 Ultra mode does not select the child-thread mechanism. The review brief must prohibit edits, state the intended behavior, include exact change-set evidence when line-level fidelity matters, and ask for high-confidence findings only. The parent integrates the result before it treats the review as complete.
 
-It applies the same safety rules to every mechanism. Each brief defines its scope, constraints and non-goals, success criteria, validation, and completion contract. The completion contract requires either a done report with evidence or a blocked report naming the smallest parent input needed.
+It applies the same safety rules to every mechanism:
+
+- define the scope, constraints and non-goals, success criteria, validation, and completion contract in each brief
+- require a done report with evidence or a blocked report that names the smallest parent input needed
+- ask the user when a child is blocked or when only the user can provide the required input
 
 The parent checks the result against the success criteria. If a criterion is not met, the parent closes the gap directly or uses a focused follow-up supported by the mechanism. This feedback is event-driven: agents do not poll spawned children for completion.
 
@@ -202,7 +208,13 @@ The parent checks the result against the success criteria. If a criterion is not
 
 A side question introduced with `btw` or `|btw` always makes delegation worthwhile. Delegating it lets the parent preserve its current task.
 
-Remove the trigger from the delegated brief. Use built-in `Task` by default, including when the parent continues useful work in the same turn. Use `create_thread` when the question must report across parent turns or needs later messaging or follow-up and its executor can see the required state. If it is unavailable or cannot see the state, use `spawn_subagent` when that wrapper can.
+Handle the side question as follows:
+
+- remove the trigger from the delegated brief
+- use built-in `Task` by default, including when the parent continues useful work in the same turn
+- use `create_thread` when the question must report across parent turns or needs later messaging or follow-up
+- use `create_thread` only when its executor can see the required state
+- use `spawn_subagent` when `create_thread` is unavailable or cannot see the required state, but only when the wrapper can see that state
 
 ## Permissions and side effects
 
@@ -255,4 +267,14 @@ An explicit mechanism request wins over the default decision order unless it wou
 
 ## Maintenance notes
 
-This document is the source of truth for the skill artifact. Keep detailed routing rules in the skill and only stable delegation rules in repository instructions. Keep both aligned with default Oracle, mechanism-neutral Ultra reviews, built-in `create_thread`, and the managed-local `spawn_subagent` wrapper. Also keep them aligned with named specialist contracts and the `spawn-subagent` and `subagent-control` capability documents.
+Maintain the delegation guidance as follows:
+
+- use this document as the source of truth for the skill artifact
+- keep detailed routing rules in the skill
+- keep only stable delegation rules in repository instructions
+- align both layers with default Oracle, mechanism-neutral Ultra reviews, built-in `create_thread`, and the managed-local `spawn_subagent` wrapper
+- align both layers with named specialist contracts and the `spawn-subagent` and `subagent-control` capability documents
+- omit lifecycle rules from the skill when built-in tool descriptions already carry them, including the `Task`, `create_thread`, and `wait_for_threads` completion contracts
+- omit the quick-test section from the skill
+- keep only ambiguous stress cases in the skill
+- keep the full maintainer-facing examples in this document
