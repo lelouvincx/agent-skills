@@ -45,6 +45,7 @@ and this project does not currently use versioned releases.
 
 ### Changed
 
+- Use Figma's hosted MCP endpoint for the `figma-design-to-code` skill instead of the retired desktop endpoint.
 - Replace Impeccable's partial companion-file manifest with staged, rollback-safe upstream-directory syncing so Amp can load `scripts/live.mjs` and its transitive modules. [#148](https://github.com/lelouvincx/agent-skills/pull/148)
 - Merge optional `PERSONAL.md` description overrides into remote skill frontmatter and cache overlays by content hash. [#147](https://github.com/lelouvincx/agent-skills/pull/147)
 - Require agents to create Git worktrees inside the current repository root's `.amp/worktrees/` directory and verify their registered paths. [#146](https://github.com/lelouvincx/agent-skills/pull/146)
