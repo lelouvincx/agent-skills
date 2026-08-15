@@ -9,6 +9,7 @@ and this project does not currently use versioned releases.
 
 ### Added
 
+- Add an experimental Gemini 3.5 Flash-backed Amp agent mode.
 - Add the pinned `diagram-design` remote skill with local artifact, branding and browser-based PNG export guidance. [#150](https://github.com/lelouvincx/agent-skills/pull/150)
 - Add Figma's official `figma-design-to-code` skill with a read-only personal route, a minimal Figma MCP toolset and a 1Password-backed REST fallback. [#147](https://github.com/lelouvincx/agent-skills/pull/147)
 - Add `to-questionnaire` for collecting missing knowledge from a stakeholder, and repair failed explanations through the existing `explaining-technical-concepts` skill. [#141](https://github.com/lelouvincx/agent-skills/pull/141)
