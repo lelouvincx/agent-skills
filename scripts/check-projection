@@ -42,8 +42,18 @@ for path in \
 done
 
 conventions="$tmp_home/.config/amp/conventions"
-if [ ! -L "$conventions" ] || [ "$(readlink "$conventions")" != "$REPO_DIR/amp/conventions" ]; then
-	echo "error: projection did not link Amp conventions" >&2
+if [ ! -d "$conventions" ] || [ -L "$conventions" ]; then
+	echo "error: projection did not copy Amp conventions into an independent directory" >&2
+	exit 1
+fi
+
+if ! diff -qr "$REPO_DIR/amp/conventions" "$conventions"; then
+	echo "error: Amp convention projection differs from its source" >&2
+	exit 1
+fi
+
+if [ -e "$conventions/stale.md" ]; then
+	echo "error: projection did not delete a stale Amp convention file" >&2
 	exit 1
 fi
 

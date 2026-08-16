@@ -3,7 +3,7 @@ doc_schema: "amp-artifact/v2"
 title: "DeepSeek V4 Flash"
 slug: "deepseek-v4-flash"
 status: "active"
-summary: "Registers an experimental Amp agent mode that uses DeepSeek V4 Flash and mirrors Amp's deep-classic prompt and tools."
+summary: "Registers an experimental Amp agent mode that uses DeepSeek V4 Flash and mirrors Amp's Fable prompt and tools."
 artifact:
   id: "deepseek-v4-flash"
   type: "agent_mode"
@@ -23,7 +23,7 @@ amp:
   docs_sources:
     api_docs: "amp plugins show-docs"
     agent_options: "amp plugins show-agent-options --json"
-  last_verified: "2026-07-10"
+  last_verified: "2026-08-16"
 contract:
   input_kind: "user_prompt"
   output_kind: "agent_thread"
@@ -45,7 +45,7 @@ runtime:
   reads:
     - "workspace files through selected tools"
   writes:
-    - "workspace files through apply_patch when the agent chooses that tool"
+    - "workspace files through create_file and edit_file when the agent chooses those tools"
     - "shell side effects through shell_command when approved by Amp permissions"
   network:
     - "Baseten DeepSeek V4 Flash model endpoint"
@@ -57,7 +57,7 @@ safety:
   user_gate: "user selects agent mode"
   constraints:
     - "Requires amp.experimental to be available."
-    - "Mirrors Amp's deep-classic prompt and tools."
+    - "Mirrors Amp's Fable prompt and tools."
     - "Reasoning effort is set to xhigh."
   risks:
     - "Experimental agent-mode API may change."
@@ -73,7 +73,7 @@ tags:
 
 ## Summary
 
-`deepseek-v4-flash` registers an experimental Amp agent mode. It uses `baseten/deepseek-ai/DeepSeek-V4-Flash-0731`, mirrors Amp's `deep-classic` prompt and tools, and sets reasoning effort to `xhigh`.
+`deepseek-v4-flash` registers an experimental Amp agent mode. It uses `baseten/deepseek-ai/DeepSeek-V4-Flash-0731`, mirrors Amp's Fable prompt and tools, and sets reasoning effort to `xhigh`.
 
 ## Invocation
 
@@ -99,23 +99,23 @@ Agent definition:
 Tools:
 
 ```text
+finder
 shell_command
 shell_command_status
-apply_patch
+create_file
+edit_file
 web_search
 read_web_page
-Task
-skill
-load_plugin
 read_thread
 find_thread
-librarian
+skill
 oracle
-finder
+librarian
+Task
 view_media
 painter
+read_mcp_resource
 archive_current_thread
-manage_automation
 send_message_to_agg
 mcp__*
 ```
@@ -126,11 +126,15 @@ The static metadata comment includes a matching `@amp-agent-mode` entry. Amp cli
 
 When the plugin loads, it checks `amp.experimental`. If the API is unavailable, it logs `Experimental plugin API is not available.` and does not register the mode.
 
-If the API is available, the plugin creates a custom agent with the DeepSeek V4 Flash model, the Deep prompt and the Deep tool list. It then registers the agent mode.
+If the API is available, the plugin creates a custom agent with the DeepSeek V4 Flash model, the Fable prompt and the Fable tool list. It then registers the agent mode.
+
+The Fable prompt calibrates action to user intent. It answers pure questions without editing files and treats clear requests to build or change something as instructions. It requires a design pass before substantial features or architecture changes unless the user asks for immediate implementation.
+
+For implementation work, the prompt requires source-backed investigation, repository-first conventions, simple designs, explicit side effects and proportional verification. It also requires the agent to state assumptions, protect shared or destructive actions and report results honestly.
 
 ## Permissions and side effects
 
-This is a full coding agent. It can read files, edit files, run shell commands, spawn Task subagents, use web tools, ask Oracle, call Librarian, inspect media, use Painter, archive threads, manage automations, send messages to aggregated threads and use MCP tools.
+This is a full coding agent. It can read and edit files, run shell commands, spawn Task subagents, use web tools, ask Oracle, call Librarian, inspect media, use Painter, read MCP resources, archive threads, send messages to aggregated threads and use MCP tools.
 
 It can modify the workspace when the task needs code changes and Amp permissions allow the tool call.
 
@@ -155,14 +159,14 @@ Fix the failing test in this repository. Read the relevant code first, make the 
 
 This mode uses `amp.experimental`. Refresh this doc after Amp plugin API updates. Keep the `@amp-agent-mode` static metadata in sync with the runtime `registerAgentMode` key and label.
 
-To refresh the Deep prompt and tools, install or update Amp's Deep Classic plugin:
+To refresh the Fable prompt and tools, install or update Amp's Fable plugin:
 
 ```bash
-amp plugins add --auto-update @amp/deep-classic
+amp plugins add --auto-update @amp/fable-mode
 ```
 
-Then compare this plugin with `~/.config/amp/plugins/deep-classic.ts`. Treat that file as the local source for the latest Deep Classic prompt and tools.
+Then compare this plugin with `~/.config/amp/plugins/fable-mode.ts`. Treat `FABLE_AGENT_PROMPT` and `SMART_TOOL_NAMES` in that file as the local source for the latest Fable prompt and tools.
 
-Keep the copied prompt to the static instruction region from Amp's upstream `thread-actors/src/inference/system-prompts/deep.md.njk`. This mode should differ only by model, mode metadata and reasoning effort.
+Copy the complete `FABLE_AGENT_PROMPT` and `SMART_TOOL_NAMES` values. This mode should differ only by model, mode metadata and reasoning effort.
 
 When copying prompt text into the plugin's TypeScript template literal, escape any literal backtick as `\`` and keep the closing template delimiter visible before the tool list. A malformed prompt string prevents the plugin from loading at all.

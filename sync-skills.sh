@@ -412,10 +412,12 @@ sync_amp_artifacts() {
 	fi
 
 	if [ -d "$AMP_DIR/conventions" ]; then
-		mkdir -p "$AMP_CONFIG_DIR"
-		rm -rf "$AMP_CONFIG_DIR/conventions"
-		ln -s "$AMP_DIR/conventions" "$AMP_CONFIG_DIR/conventions"
-		echo "linked: amp/conventions/ -> $AMP_CONFIG_DIR/conventions"
+		if [ -L "$AMP_CONFIG_DIR/conventions" ]; then
+			rm "$AMP_CONFIG_DIR/conventions"
+		fi
+		mkdir -p "$AMP_CONFIG_DIR/conventions"
+		rsync -a --delete "$AMP_DIR/conventions/" "$AMP_CONFIG_DIR/conventions/"
+		echo "synced: amp/conventions/ -> $AMP_CONFIG_DIR/conventions/"
 	fi
 
 	if [ -f "$AMP_DIR/settings.json" ]; then

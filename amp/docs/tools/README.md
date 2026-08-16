@@ -43,7 +43,6 @@ All active documents use `amp-artifact/v2`, which supports skills and plugin cap
 
 ### Agent modes
 
-- [Deep Classic](./deep-classic.md)
 - [DeepSeek V4 Flash](./deepseek-v4-flash.md)
 - [Gemini 3.5 Flash](./gemini-3-5-flash.md)
 - [Smart Classic](./smart-classic.md)
