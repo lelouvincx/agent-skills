@@ -5,8 +5,9 @@
 
 ## Code sync
 
-- `holistics sync-code` synchronizes the entire repository in both directions; `.gitignore` does not limit its scope. Ignored local files can be uploaded, and cloud edits or deletions can be applied locally. Before starting, inspect local files—including ignored files—and move or back up unrelated files outside the synced repository.
-- Code sync skips files larger than 5 MiB (5,242,880 bytes); keep every managed-codebase file at or below that limit.
+- `holistics sync-code` synchronizes the entire repository in both directions; `.gitignore` does not limit its scope. Ignored local files can be uploaded, and cloud edits or deletions can be applied locally.
+- Before starting, inspect local files—including ignored files—and move or back up unrelated files outside the synced repository.
+- Code sync skips files larger than 5 MiB.
 - Diverged non-UTF-8 files, such as images and PDFs, fail automatic merge and remain local; reconcile each reported failure manually.
 - Leave the process running through transient timeout and connection errors so it can recover automatically. Treat a failed session refresh as terminal.
 - Resolve every reported conflict locally before continuing.
