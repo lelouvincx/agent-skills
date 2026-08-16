@@ -109,7 +109,7 @@ Optional inputs:
 | --- | --- | --- | --- |
 | `context` | `string` | none | Pre-processed excerpts, diffs, or decisions. |
 | `provider` | `string` | `deepseek` | Pi provider. |
-| `model` | `string` | `deepseek-v4-pro` | Pi model. |
+| `model` | `string` | `deepseek-v4-flash` | Pi model. |
 | `thinking` | `off \| minimal \| low \| medium \| high \| xhigh` | `high` | Invalid values fall back to `high`. |
 | `timeoutMinutes` | `number` | `10` | Rounded up and capped at `30`. |
 | `workingDirectory` | `string` | plugin process cwd | Must exist. `~` is expanded. |
