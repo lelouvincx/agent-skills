@@ -48,6 +48,7 @@ and this project does not currently use versioned releases.
 
 ### Changed
 
+- Declare and lint skill dependencies, and automatically install `diagram-design` when projecting `showing-code`. [#159](https://github.com/lelouvincx/agent-skills/pull/159)
 - Document repository-wide Holistics code sync behavior, file-size and binary merge limits, recovery, conflict resolution and completion checks. [#158](https://github.com/lelouvincx/agent-skills/pull/158)
 - Project Amp convention files into the runtime config as an independent directory instead of a repository-backed symlink. [#157](https://github.com/lelouvincx/agent-skills/pull/157)
 - Use Amp's Fable prompt and tools as the documented contract for the DeepSeek V4 Flash and Gemini 3.5 Flash modes, and remove the unused Deep Classic capability document. [#157](https://github.com/lelouvincx/agent-skills/pull/157)
