@@ -4,6 +4,7 @@
 
 - Use conventional branches and conventional commits.
 - Open pull requests with the bot token. After opening one, add a separate commit that adds the PR number to the changelog entry.
+- Find historical changes in `CHANGELOG.md` before searching Git or pull request history.
 - Treat this repository as the source of truth; `~/.config/amp` is a runtime projection and must not be edited in place.
 - After changing projected artifacts, run `./sync-skills.sh`. Use `./sync-skills.sh --remote` when remote skill payloads must be fetched.
 - Test projection without writing to live runtime paths: `tmp_home="$(mktemp -d)"; HOME="$tmp_home" AMP_CONFIG_DIR="$tmp_home/.config/amp" ./sync-skills.sh`.
