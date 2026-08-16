@@ -52,8 +52,7 @@ safety:
   risks:
     - "The experimental agent-mode API may change."
     - "The copied prompt and tool list can drift from Amp's former built-in mode."
-related:
-  - "deep-classic-agent-mode"
+related: []
 tags:
   - "agent-mode"
   - "anthropic"
