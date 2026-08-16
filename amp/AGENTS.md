@@ -4,12 +4,10 @@
 
 ## Working style
 
-- Prefer concise and clear communication, but don't be too brief to the point of being vague
-- Repair a previous explanation when the user's response shows that it did not land. Load and apply `explaining-technical-concepts`. Re-pitch from a different starting point with the minimum missing context, ASD-STE100-inspired controlled English, and established project or domain vocabulary.
-- When planning/devising, tell what to do from your side and my side, and what the expected output is
-- When drafting any message or email, always load and apply the `govuk-style` skill
-- Save visual artifacts (screenshots, recordings, and similar media) under `.amp/in/artifacts/`.
-- When `AMP_NO_TUI=1`, recognize this is an Amp remote control thread.
+- When Chinh's response shows that an explanation did not land, load `explaining-technical-concepts`.
+- For plans, separate the actions for the agent and Chinh, then state the expected outcome.
+- Before drafting text that Chinh will send to someone else, including Slack messages and emails, load `govuk-style`.
+- Store screenshots, recordings, and other visual artifacts under `.amp/in/artifacts/`.
 
 ## Delegation
 
@@ -22,12 +20,13 @@
 
 ## Holistics
 
-- When in a directory that has at least one `.aml` file, always activate the `develop-amql` and `search-docs` skill
-- Holistics returns max 1000 rows of data
+- Before reading, creating, or editing `.aml` files, load `develop-amql` and `search-docs`.
+- Treat Holistics query results as capped at 1,000 rows. Do not assume a 1,000-row result is complete unless the query guarantees at most 1,000 rows.
 
 ## SQL
 
-- Preferred SQL style guide: to use lower case, to use leading comma for everything, and to write join and on the same line
+- Write SQL keywords and functions in lowercase.
+- Use leading commas for subsequent items in multiline lists.
 
 ## Amp plugins
 
@@ -38,12 +37,13 @@
 
 ## Linear
 
-- I work mostly in these projects: data (DAT), presales (PS), and docs (DOC)
+- When searching Linear without a project specified, search these projects first: data (`DAT`), presales (`PS`), and docs (`DOC`).
+- When creating or moving an issue, use the project explicitly requested by the user; ask if none is specified.
 
 ## Notion
 
-- When writing any content in notion, prefer writing it as a subpage
-- Do not write to notion unless I explicit ask you in the prompt
+- Treat Notion as read-only unless the user explicitly requests a create, update, comment, or other write action.
+- Create new Notion content as a subpage unless the user requests another structure.
 
 ## Secrets and local env files
 
@@ -55,19 +55,14 @@
 
 ## Version control
 
-- Git worktrees: Create every worktree inside `<repository-root>/.amp/worktrees/`, resolving `<repository-root>` with `git rev-parse --show-toplevel`; finish only after `git worktree list --porcelain` reports the new worktree inside that directory.
-- When creating pull request, GitHub token references are stored at `~/.credentials/github.env` as 1Password `op://...` references only; do not store or read plaintext tokens from local `.env` files:
-  - Resolve with 1Password at execution time, e.g. `op run --env-file ~/.credentials/github.env -- sh -c 'GH_TOKEN="$GH_TOKEN_BOT" gh pr ...'`, or use a repo/helper loader that resolves `op://` values without printing them
-  - If the user explicitly requests the bot token, resolve `GH_TOKEN_BOT` and pass it only in the command environment (`GH_TOKEN=$GH_TOKEN_BOT gh pr ...`); never echo it
-  - If the user explicitly requests the work token, resolve `GH_TOKEN_WORK`
-  - Otherwise, if in holistics-related projects, use `chinh-dm-holistics`, if personal, use `lelouvincx`
-- Actively looking for pull request template and use it
-- After opening a pull request and after every subsequent commit, poll its GitHub Actions runs until they complete. Fix any failures and repeat until all runs pass.
-
-## Presales
-
-- Holistics offer calls with prospects/customers to evaluate the product better
-- When writing internal team updates (Slack/Notion posts), default to prose with minimal section labels ("Updates:" / "Next:"). 3-5 sentences max. Drop context the audience already has (attendees, agenda recap). Credit teammates by @mention. Owner-only next steps, not granular checklists. Match the platform's native format, not markdown doc structure.
+- Create worktrees under `<repository-root>/.amp/worktrees/`, where `<repository-root>` is the output of `git rev-parse --show-toplevel`. Before using a new worktree, verify that `git worktree list --porcelain` reports it under that directory.
+- Before opening a pull request, find and use the repository's pull request template.
+- For GitHub authentication:
+  - Use `GH_TOKEN_BOT` when the user explicitly requests the bot token.
+  - Use `GH_TOKEN_WORK` when the user explicitly requests the work token.
+  - Otherwise, use the `chinh-dm-holistics` GitHub profile for Holistics repositories and the `lelouvincx` GitHub profile for personal repositories.
+  - Resolve token references at execution time from `~/.credentials/github.env`; pass tokens only through the command environment.
+- After opening a pull request and after each later commit, wait for its GitHub Actions runs to complete. Fix failures and repeat until every run passes.
 
 ## Project registry
 
