@@ -124,7 +124,7 @@ and this project does not currently use versioned releases.
 
 ### Removed
 
-- Remove the `ponytail`, `ponytail-review`, and `ponytail-help` remote skills and clean their generated artifacts from existing projections.
+- Remove the `ponytail`, `ponytail-review`, and `ponytail-help` remote skills and clean their generated artifacts from existing projections. [#155](https://github.com/lelouvincx/agent-skills/pull/155)
 - Remove the retired `remotion` remote skill and clean its generated artifacts from existing projections. [#142](https://github.com/lelouvincx/agent-skills/pull/142)
 - Remove the unused Inkling agent mode and its capability documentation. [#135](https://github.com/lelouvincx/agent-skills/pull/135)
 - Remove the redundant agent-callable Logseq logging tool now that its command-palette action is available on Amp Web. [#108](https://github.com/lelouvincx/agent-skills/pull/108)
