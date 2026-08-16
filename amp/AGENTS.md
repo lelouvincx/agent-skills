@@ -18,32 +18,13 @@
 - When a user message starts with `|subagent` or `/subagent`, call `spawn_subagent` with the remaining message as the bounded subagent instructions.
 - Treat side questions introduced with `btw` or triggered with `|btw` as delegation requests so they do not displace the parent's current task. Load the `delegating-subagents` skill to choose the mechanism.
 
-## Holistics
+## Conventions
 
-- Before reading, creating, or editing `.aml` files, load `develop-amql` and `search-docs`.
-- Treat Holistics query results as capped at 1,000 rows. Do not assume a 1,000-row result is complete unless the query guarantees at most 1,000 rows.
-
-## SQL
-
-- Write SQL keywords and functions in lowercase.
-- Use leading commas for subsequent items in multiline lists.
-
-## Amp plugins
-
-- For Amp plugin work, treat `docs/tools/*.md` as the source of truth over `plugins/*.ts`
-- Every plugin code change must originate from a docs change first: update the relevant capability document and metadata, then make the plugin implementation match it
-- If plugin docs and code disagree, do not silently follow the code; update the docs first, or ask for confirmation when changing the documented contract would be material
-- Keep new capability docs aligned with `docs/tools/_schema.md` before changing or adding plugin code
-
-## Linear
-
-- When searching Linear without a project specified, search these projects first: data (`DAT`), presales (`PS`), and docs (`DOC`).
-- When creating or moving an issue, use the project explicitly requested by the user; ask if none is specified.
-
-## Notion
-
-- Treat Notion as read-only unless the user explicitly requests a create, update, comment, or other write action.
-- Create new Notion content as a subpage unless the user requests another structure.
+- Before working with `.aml` files or interpreting Holistics query results, read `{AMP_CONFIG_DIR:~/.config/amp}/conventions/holistics.md`.
+- Before writing or editing SQL, read `{AMP_CONFIG_DIR:~/.config/amp}/conventions/sql.md`.
+- Before changing Amp plugin documentation or code, read `{AMP_CONFIG_DIR:~/.config/amp}/conventions/amp-plugins.md`.
+- Before searching, creating, or moving Linear issues, read `{AMP_CONFIG_DIR:~/.config/amp}/conventions/linear.md`.
+- Before reading or writing Notion content, read `{AMP_CONFIG_DIR:~/.config/amp}/conventions/notion.md`.
 
 ## Secrets and local env files
 

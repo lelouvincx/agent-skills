@@ -13,6 +13,8 @@ trap 'rm -rf "$tmp_home"' EXIT
 
 mkdir -p "$tmp_home/.config/amp/github-thread-events/policies"
 touch "$tmp_home/.config/amp/github-thread-events/policies/stale.json"
+mkdir -p "$tmp_home/.config/amp/conventions"
+touch "$tmp_home/.config/amp/conventions/stale.md"
 mkdir -p "$tmp_home/.config/amp/state"
 printf '%s\n' 'pre-existing runtime state' > "$tmp_home/.config/amp/state/github-thread-events.sqlite"
 
@@ -38,6 +40,12 @@ for path in \
 		exit 1
 	fi
 done
+
+conventions="$tmp_home/.config/amp/conventions"
+if [ ! -L "$conventions" ] || [ "$(readlink "$conventions")" != "$REPO_DIR/amp/conventions" ]; then
+	echo "error: projection did not link Amp conventions" >&2
+	exit 1
+fi
 
 if ! diff -qr "$REPO_DIR/amp/github-thread-events" "$tmp_home/.config/amp/github-thread-events"; then
 	echo "error: GitHub thread event projection differs from its source" >&2

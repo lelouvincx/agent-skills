@@ -411,6 +411,13 @@ sync_amp_artifacts() {
 		echo "copied: amp/AGENTS.md -> $AMP_CONFIG_DIR/AGENTS.md"
 	fi
 
+	if [ -d "$AMP_DIR/conventions" ]; then
+		mkdir -p "$AMP_CONFIG_DIR"
+		rm -rf "$AMP_CONFIG_DIR/conventions"
+		ln -s "$AMP_DIR/conventions" "$AMP_CONFIG_DIR/conventions"
+		echo "linked: amp/conventions/ -> $AMP_CONFIG_DIR/conventions"
+	fi
+
 	if [ -f "$AMP_DIR/settings.json" ]; then
 		mkdir -p "$AMP_CONFIG_DIR"
 		cp "$AMP_DIR/settings.json" "$AMP_CONFIG_DIR/settings.json"
