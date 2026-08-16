@@ -1,6 +1,6 @@
 ---
 name: showing-code
-description: Turns the current technical topic into compact code-shape visuals. Use when the user says "show me", asks to visualize code, architecture, control flow, state, or a diff, or says prose is too much.
+description: Turns the current technical topic into compact code-shape visuals. Use when the user says "show me", "|show-me", or "show-me"; says "use the skill showing-code"; asks to visualize code, architecture, control flow, state, or a diff; or says prose is too much.
 ---
 
 # Showing code
