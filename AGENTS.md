@@ -3,7 +3,9 @@
 ## Maintenance
 
 - Use conventional branches and conventional commits.
-- Open pull requests with the bot token. After opening one, add a separate commit that adds the PR number to the changelog entry.
+- Publish repository maintenance as `lelouvincx-bot` through the `logseq-weekly-report` 1Password service account. Resolve the `logseq` project with `project-resolve`, read its RFC-0010, set `LOGSEQ_REPORT_AUTH=service-account`, and use its repository helpers to resolve `GH_TOKEN_BOT` without printing it.
+- Use the hardened bot SSH identity for commits and pushes, and the service-account-resolved bot PAT for pull requests and other GitHub API writes. If those local service-account artifacts are unavailable, stop and ask Chinh rather than falling back to a personal identity.
+- After opening a pull request, add a separate commit that adds the PR number to the changelog entry.
 - Find historical changes in `CHANGELOG.md` before searching Git or pull request history.
 - Treat this repository as the source of truth; `~/.config/amp` is a runtime projection and must not be edited in place.
 - After changing projected artifacts, run `./sync-skills.sh`. Use `./sync-skills.sh --remote` when remote skill payloads must be fetched.
