@@ -47,7 +47,7 @@ and this project does not currently use versioned releases.
 
 ### Changed
 
-- Document repository-wide Holistics code sync behavior, binary merge limits, recovery, conflict resolution and completion checks. [#158](https://github.com/lelouvincx/agent-skills/pull/158)
+- Document repository-wide Holistics code sync behavior, file-size and binary merge limits, recovery, conflict resolution and completion checks. [#158](https://github.com/lelouvincx/agent-skills/pull/158)
 - Project Amp convention files into the runtime config as an independent directory instead of a repository-backed symlink. [#157](https://github.com/lelouvincx/agent-skills/pull/157)
 - Use Amp's Fable prompt and tools as the documented contract for the DeepSeek V4 Flash and Gemini 3.5 Flash modes, and remove the unused Deep Classic capability document. [#157](https://github.com/lelouvincx/agent-skills/pull/157)
 - Rename the DeepSeek V4 agent mode from Pro to Flash, anchored to `baseten/deepseek-ai/DeepSeek-V4-Flash-0731`, and update the Pi Code subagent default model to match. [#156](https://github.com/lelouvincx/agent-skills/pull/156)
