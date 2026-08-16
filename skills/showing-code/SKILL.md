@@ -59,6 +59,6 @@ Show a proposed change while preserving its existing shape:
 
 Lead with the conclusion in one sentence. Place the visual immediately beside the text it supports. Follow with at most 3 short implications, decisions, or unknowns when they materially help.
 
-For a polished standalone HTML, SVG, or PNG artifact, load `diagram-design` instead of expanding this skill into a design workflow.
+For a polished standalone HTML, SVG, or PNG artifact, use the `/diagram-design` skill after identifying the technical shape. Pass it the verified symbols, relationships, and boundaries instead of expanding this skill into a design workflow.
 
 The answer is complete when the reader can identify the important shape and the visual contains no element that does not help answer the current question.
