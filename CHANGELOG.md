@@ -47,6 +47,7 @@ and this project does not currently use versioned releases.
 
 ### Changed
 
+- Rename the DeepSeek V4 agent mode from Pro to Flash, anchored to `baseten/deepseek-ai/DeepSeek-V4-Flash-0731`, and update the Pi Code subagent default model to match.
 - Guide `teach` lessons to use accessible, print-friendly explanations, concrete examples, Chrome-rendered diagrams, and glossary-derived Leitner flashcards. [#154](https://github.com/lelouvincx/agent-skills/pull/154)
 - Move Holistics, SQL, Amp plugin, Linear and Notion instructions into symlink-projected convention files; scope remaining personal Amp guidance to explicit triggers; and remove Presales-specific guidance from the global projection. [#153](https://github.com/lelouvincx/agent-skills/pull/153)
 - Deduplicate delegation guidance: trim the `delegating-subagents` skill to its unique routing rules, make the capability document's Summary table the single decision-order statement, merge the repository-instruction delegation bullets, and require asking the user when a blocked child or the parent needs user-only input. [#151](https://github.com/lelouvincx/agent-skills/pull/151)

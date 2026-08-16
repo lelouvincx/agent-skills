@@ -140,7 +140,7 @@ Default Pi invocation should allow only the equivalent shared local read-only to
 ```bash
 pi \
   --provider deepseek \
-  --model deepseek-v4-pro \
+  --model deepseek-v4-flash \
   --thinking high \
   --tools read,grep,find,ls \
   --no-extensions \
@@ -193,7 +193,7 @@ Current implementation choices:
 - Pi default tools are `read`, `grep`, `find`, and `ls`.
 - Pi disables context-file discovery with `--no-context-files`.
 - Pi subagent prompts are capped at 500 KB before spawn.
-- Pi uses `deepseek-v4-pro` by default.
+- Pi uses `deepseek-v4-flash` by default.
 - Both wrappers keep Amp as the only agent allowed to apply changes.
 
 ## Permissions and side effects

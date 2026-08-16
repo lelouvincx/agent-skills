@@ -1,24 +1,24 @@
 ---
 doc_schema: "amp-artifact/v2"
-title: "DeepSeek V4 Pro"
-slug: "deepseek-v4-pro"
+title: "DeepSeek V4 Flash"
+slug: "deepseek-v4-flash"
 status: "active"
-summary: "Registers an experimental Amp agent mode that uses DeepSeek V4 Pro and mirrors Amp's deep-classic prompt and tools."
+summary: "Registers an experimental Amp agent mode that uses DeepSeek V4 Flash and mirrors Amp's deep-classic prompt and tools."
 artifact:
-  id: "deepseek-v4-pro"
+  id: "deepseek-v4-flash"
   type: "agent_mode"
   surface: "mode_picker"
   invocation: "new_thread_mode"
   api_stability: "experimental"
 source:
   kind: "plugin"
-  file: "plugins/deepseek-v4-pro-mode.ts"
+  file: "plugins/deepseek-v4-flash-mode.ts"
   scope: "system"
   install_source: "local"
   registration_api: "amp.experimental.registerAgentMode"
   metadata_comments:
-    - "@amp-plugin — DeepSeek V4 Pro agent mode."
-    - "@amp-agent-mode {\"key\":\"deepseek-v4-pro\",\"label\":\"DeepSeek V4 Pro\"}"
+    - "@amp-plugin — DeepSeek V4 Flash agent mode."
+    - "@amp-agent-mode {\"key\":\"deepseek-v4-flash\",\"label\":\"DeepSeek V4 Flash\"}"
 amp:
   docs_sources:
     api_docs: "amp plugins show-docs"
@@ -31,8 +31,8 @@ contract:
   allowed_tools: []
   event: null
   command_id: null
-  agent_mode_key: "deepseek-v4-pro"
-  model: "baseten/deepseek-ai/DeepSeek-V4-Pro"
+  agent_mode_key: "deepseek-v4-flash"
+  model: "baseten/deepseek-ai/DeepSeek-V4-Flash-0731"
 runtime:
   uses:
     - "amp.experimental.createAgent"
@@ -40,7 +40,7 @@ runtime:
     - "custom agent instructions"
   dependencies:
     - "experimental plugin API"
-    - "baseten/deepseek-ai/DeepSeek-V4-Pro model availability"
+    - "baseten/deepseek-ai/DeepSeek-V4-Flash-0731 model availability"
   env: []
   reads:
     - "workspace files through selected tools"
@@ -48,7 +48,7 @@ runtime:
     - "workspace files through apply_patch when the agent chooses that tool"
     - "shell side effects through shell_command when approved by Amp permissions"
   network:
-    - "Baseten DeepSeek V4 Pro model endpoint"
+    - "Baseten DeepSeek V4 Flash model endpoint"
     - "web tools when invoked by the agent"
   logs:
     - "plugin logger on experimental API unavailability"
@@ -69,20 +69,20 @@ tags:
   - "experimental"
 ---
 
-# DeepSeek V4 Pro
+# DeepSeek V4 Flash
 
 ## Summary
 
-`deepseek-v4-pro` registers an experimental Amp agent mode. It uses `baseten/deepseek-ai/DeepSeek-V4-Pro`, mirrors Amp's `deep-classic` prompt and tools, and sets reasoning effort to `xhigh`.
+`deepseek-v4-flash` registers an experimental Amp agent mode. It uses `baseten/deepseek-ai/DeepSeek-V4-Flash-0731`, mirrors Amp's `deep-classic` prompt and tools, and sets reasoning effort to `xhigh`.
 
 ## Invocation
 
 - Surface: Amp mode picker
 - Registered with: `amp.experimental.registerAgentMode`
 - Agent created with: `amp.experimental.createAgent`
-- Mode key: `deepseek-v4-pro`
-- Label: `DeepSeek V4 Pro`
-- Plugin file: `plugins/deepseek-v4-pro-mode.ts`
+- Mode key: `deepseek-v4-flash`
+- Label: `DeepSeek V4 Flash`
+- Plugin file: `plugins/deepseek-v4-flash-mode.ts`
 
 ## Contract
 
@@ -90,10 +90,10 @@ Agent definition:
 
 | Field | Value |
 | --- | --- |
-| `name` | `deepseek-v4-pro` |
-| `model` | `baseten/deepseek-ai/DeepSeek-V4-Pro` |
+| `name` | `deepseek-v4-flash` |
+| `model` | `baseten/deepseek-ai/DeepSeek-V4-Flash-0731` |
 | `reasoningEffort` | `xhigh` |
-| `display.label` | `DeepSeek V4 Pro` |
+| `display.label` | `DeepSeek V4 Flash` |
 | `display.color` | `#2563eb` |
 
 Tools:
@@ -126,7 +126,7 @@ The static metadata comment includes a matching `@amp-agent-mode` entry. Amp cli
 
 When the plugin loads, it checks `amp.experimental`. If the API is unavailable, it logs `Experimental plugin API is not available.` and does not register the mode.
 
-If the API is available, the plugin creates a custom agent with the DeepSeek V4 Pro model, the Deep prompt and the Deep tool list. It then registers the agent mode.
+If the API is available, the plugin creates a custom agent with the DeepSeek V4 Flash model, the Deep prompt and the Deep tool list. It then registers the agent mode.
 
 ## Permissions and side effects
 
@@ -136,7 +136,7 @@ It can modify the workspace when the task needs code changes and Amp permissions
 
 ## Examples
 
-Use this mode when you start a new thread and want DeepSeek V4 Pro with `xhigh` reasoning for coding work. The user prompt becomes the agent turn input. This capability does not take JSON input directly.
+Use this mode when you start a new thread and want DeepSeek V4 Flash with `xhigh` reasoning for coding work. The user prompt becomes the agent turn input. This capability does not take JSON input directly.
 
 Example prompt:
 
@@ -147,9 +147,9 @@ Fix the failing test in this repository. Read the relevant code first, make the 
 ## Troubleshooting
 
 - Mode does not appear: check that `amp.experimental` is available and the plugin loaded successfully.
-- Plugin load errors: run `amp plugins list`; syntax/runtime errors are reported next to `deepseek-v4-pro-mode.ts`.
-- Model errors: check that `baseten/deepseek-ai/DeepSeek-V4-Pro` appears in `amp plugins show-agent-options --json`.
-- Tool unavailable: compare the tool list in `plugins/deepseek-v4-pro-mode.ts` with `amp plugins show-agent-options --json`.
+- Plugin load errors: run `amp plugins list`; syntax/runtime errors are reported next to `deepseek-v4-flash-mode.ts`.
+- Model errors: check that `baseten/deepseek-ai/DeepSeek-V4-Flash-0731` appears in `amp plugins show-agent-options --json`.
+- Tool unavailable: compare the tool list in `plugins/deepseek-v4-flash-mode.ts` with `amp plugins show-agent-options --json`.
 
 ## Maintenance notes
 
