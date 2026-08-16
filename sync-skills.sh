@@ -279,6 +279,9 @@ sync_remote_archive_skill() {
 # --- Remote Skills Sync ---
 
 sync_remote_skills() {
+	local requested_skill="${1:-}"
+	local matched=false
+
 	[ -f "$REMOTE_SKILLS_CONFIG" ] || {
 		echo "No remote-skills.yaml found, skipping remote sync"
 		return 0
@@ -294,6 +297,10 @@ sync_remote_skills() {
 	echo ""
 
 	while IFS='|' read -r name url enabled files archive archive_path; do
+		if [ -n "$requested_skill" ] && [ "$name" != "$requested_skill" ]; then
+			continue
+		fi
+		matched=true
 		[[ "$enabled" != "true" ]] && {
 			echo "⊘ $name: disabled, skipping"
 			continue
@@ -393,6 +400,11 @@ sync_remote_skills() {
 		sync_companion_files "$skill_dir" "$url" "$files" false
 
 	done < <(parse_yaml "$REMOTE_SKILLS_CONFIG")
+
+	if [ -n "$requested_skill" ] && [ "$matched" != true ]; then
+		echo "error: required skill $requested_skill is not in remote-skills.yaml" >&2
+		return 1
+	fi
 
 	echo ""
 }
@@ -497,11 +509,25 @@ sync_skill_links() {
 	done
 }
 
+ensure_skill_dependencies() {
+	local owner dependency
+	local dependency_linter="$REPO_DIR/scripts/check-skill-dependencies"
+
+	"$dependency_linter" --skills-dir "$SKILLS_DIR" --remote-config "$REMOTE_SKILLS_CONFIG"
+	while IFS='|' read -r owner dependency; do
+		[ -f "$SKILLS_DIR/$dependency/SKILL.md" ] && continue
+		echo "Installing $dependency, required by $owner..."
+		sync_remote_skills "$dependency"
+	done < <("$dependency_linter" --skills-dir "$SKILLS_DIR" --remote-config "$REMOTE_SKILLS_CONFIG" --list)
+	"$dependency_linter" --skills-dir "$SKILLS_DIR" --remote-config "$REMOTE_SKILLS_CONFIG" --require-installed
+}
+
 # Check for --remote flag
 if [[ "${1:-}" == "--remote" ]]; then
 	sync_remote_skills
 fi
 
+ensure_skill_dependencies
 sync_amp_artifacts
 
 for target in "$CLAUDE_SKILLS_DIR" "$AGENTS_SKILLS_DIR"; do

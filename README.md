@@ -34,38 +34,73 @@ See [PROJECTS.md](PROJECTS.md) for the generated project list.
 
 ## Skills
 
+Run `amp skill list` to inspect the active runtime inventory. The current inventory contains 52 skills: 40 projected from this repository, 7 provided by Amp, and 5 provided by plugins.
+
+### Repository skills
+
+Local skills are maintained in this repository. Remote skills are fetched and projected by `./sync-skills.sh --remote`.
+
 | Skill | Type | Use it to |
 | --- | --- | --- |
-| [gmail](skills/gmail/SKILL.md) | Local | search and read Gmail through a read-only `gog` account |
-| [slackcli](skills/slackcli/SKILL.md) | Local | read, send, and manage Slack messages from the CLI |
+| [agent-browser](skills/agent-browser/SKILL.md) | Remote | automate browser and UI tasks with `agent-browser` |
+| [analyze-data](skills/analyze-data/SKILL.md) | Remote | explain AQL queries, results, and metric changes |
 | [bigquery-query](skills/bigquery-query/SKILL.md) | Local | query Google BigQuery with the `bq` CLI |
+| [convert-agent-skill-to-holistics](skills/convert-agent-skill-to-holistics/SKILL.md) | Remote | convert skills between Agent Skills and Holistics AML formats |
+| [create-holistics-skill](skills/create-holistics-skill/SKILL.md) | Remote | author and refine Holistics AML skills |
+| [creating-client-design-systems](skills/creating-client-design-systems/SKILL.md) | Local | create Google DESIGN.md files for client brands and Holistics dashboard themes |
+| [delegating-subagents](skills/delegating-subagents/SKILL.md) | Local | choose direct work, named Claude or Pi specialists, built-in `Task`, or `spawn_subagent` |
+| [develop-amql](skills/develop-amql/SKILL.md) | Remote | develop Holistics models, datasets, dashboards, and metrics |
+| [diagram-design](skills/diagram-design/SKILL.md) | Remote | create and export branded diagrams as HTML, SVG, or PNG |
+| [domain-modeling](skills/domain-modeling/SKILL.md) | Remote | define domain terms, context, and architectural decisions |
+| [explaining-technical-concepts](skills/explaining-technical-concepts/SKILL.md) | Local | explain technical concepts so they are easy to understand |
+| [figma-design-to-code](skills/figma-design-to-code/SKILL.md) | Remote | inspect Figma designs and implement them as code |
+| [gmail](skills/gmail/SKILL.md) | Local | search and read Gmail through a read-only `gog` account |
+| [govuk-style](skills/govuk-style/SKILL.md) | Local | write clear plain-English prose |
+| [grill-me](skills/grill-me/SKILL.md) | Remote | sharpen a plan or design through a focused interview |
+| [grill-with-docs](skills/grill-with-docs/SKILL.md) | Remote | sharpen a plan while recording decisions and domain terms |
+| [grilling](skills/grilling/SKILL.md) | Remote | stress-test a plan or design through questions |
+| [handoff](skills/handoff/SKILL.md) | Remote | compact a conversation for another agent to continue |
+| [holistics-migrate-power-bi](skills/holistics-migrate-power-bi/SKILL.md) | Remote | migrate Power BI models and reports to Holistics |
+| [impeccable](skills/impeccable/SKILL.md) | Remote | design, review, and improve frontend interfaces |
+| [linear-cli](skills/linear-cli/SKILL.md) | Remote | manage Linear issues from the command line |
+| [modern-web-guidance](skills/modern-web-guidance/SKILL.md) | Remote | check current web platform guidance before frontend work |
+| [notion](skills/notion/SKILL.md) | Remote | manage Notion pages, databases, and comments |
+| [prototype](skills/prototype/SKILL.md) | Remote | build throwaway logic or UI prototypes to test a design |
+| [readai](skills/readai/SKILL.md) | Local | retrieve speaker-attributed Read AI call transcripts |
 | [reading-social-posts](skills/reading-social-posts/SKILL.md) | Local | read social posts and inspect all attached media through TikHub |
 | [resolving-projects](skills/resolving-projects/SKILL.md) | Local | resolve spoken project names to paths and GitHub repositories |
-| [delegating-subagents](skills/delegating-subagents/SKILL.md) | Local | choose direct work, named Claude or Pi specialists, built-in `Task`, or `spawn_subagent` |
-| [notion](skills/notion/SKILL.md) | Remote | manage Notion pages, databases, and comments |
-| [modern-web-guidance](skills/modern-web-guidance/SKILL.md) | Remote | check current web platform guidance before frontend work |
-| [linear-cli](skills/linear-cli/SKILL.md) | Remote | manage Linear issues from the command line |
-| [agent-browser](skills/agent-browser/SKILL.md) | Remote | automate browser and UI tasks with `agent-browser` |
-| [ponytail](skills/ponytail/SKILL.md) | Remote | choose the simplest code that works |
-| [ponytail-review](skills/ponytail-review/SKILL.md) | Remote | review code for over-engineering only |
-| [ponytail-help](skills/ponytail-help/SKILL.md) | Remote | show ponytail commands and modes |
-| [writing-for-agents](skills/writing-for-agents/SKILL.md) | Remote | write documents for agents, including skills and agent instructions |
-| [writing-investigation-docs](skills/writing-investigation-docs/SKILL.md) | Local | write evidence-first investigation and decision docs |
-| [creating-client-design-systems](skills/creating-client-design-systems/SKILL.md) | Local | create Google DESIGN.md files for client brands and Holistics dashboard themes |
-| [explaining-technical-concepts](skills/explaining-technical-concepts/SKILL.md) | Local | explain technical concepts so they are easy to understand |
-| [technical-precision](skills/technical-precision/SKILL.md) | Local | write unambiguous procedures and technical documentation |
-| [govuk-style](skills/govuk-style/SKILL.md) | Local | write clear plain-English prose |
-| [impeccable](skills/impeccable/SKILL.md) | Remote | design, review, and improve frontend interfaces |
-| [domain-modeling](skills/domain-modeling/SKILL.md) | Remote | define domain terms and decisions |
-| [grilling](skills/grilling/SKILL.md) | Remote | stress-test a plan or design through questions |
-| [to-questionnaire](skills/to-questionnaire/SKILL.md) | Remote | turn missing stakeholder knowledge into a reusable questionnaire |
+| [search-docs](skills/search-docs/SKILL.md) | Remote | search Holistics documentation |
+| [showing-code](skills/showing-code/SKILL.md) | Local | turn technical topics into compact code-shape visuals |
+| [slackcli](skills/slackcli/SKILL.md) | Local | read, send, and manage Slack messages from the CLI |
 | [tdd](skills/tdd/SKILL.md) | Remote | work test-first |
 | [teach](skills/teach/SKILL.md) | Remote | teach a skill or concept in a workspace |
-| [develop-amql](skills/develop-amql/SKILL.md) | Remote | develop Holistics AMQL assets |
-| [write-aql](skills/write-aql/SKILL.md) | Remote | write and run Holistics AQL queries |
-| [search-docs](skills/search-docs/SKILL.md) | Remote | search Holistics documentation |
+| [technical-precision](skills/technical-precision/SKILL.md) | Local | write unambiguous procedures and technical documentation |
+| [to-questionnaire](skills/to-questionnaire/SKILL.md) | Remote | turn missing stakeholder knowledge into a reusable questionnaire |
+| [to-spec](skills/to-spec/SKILL.md) | Remote | turn a conversation into a specification in the project issue tracker |
+| [use-existing-viz](skills/use-existing-viz/SKILL.md) | Remote | answer data questions with existing curated visualizations |
 | [visualize-data](skills/visualize-data/SKILL.md) | Remote | create charts and tables from data |
-| [holistics-migrate-power-bi](skills/holistics-migrate-power-bi/SKILL.md) | Remote | migrate Power BI models and reports to Holistics |
+| [write-aql](skills/write-aql/SKILL.md) | Remote | write and run Holistics AQL queries |
+| [writing-for-agents](skills/writing-for-agents/SKILL.md) | Remote | write documents for agents, including skills and agent instructions |
+| [writing-investigation-docs](skills/writing-investigation-docs/SKILL.md) | Local | write evidence-first investigation and decision docs |
+
+### Amp and plugin skills
+
+These skills are active in Amp but are not maintained by this repository.
+
+| Skill | Source | Use it to |
+| --- | --- | --- |
+| `building-plugins` | Amp | build and maintain Amp plugins |
+| `building-schedules` | Amp | create and manage thread schedules and triggers |
+| `building-skills` | Amp | create, install, move, and publish Agent Skills |
+| `creating-charts` | Amp | render interactive charts in replies |
+| `creating-webhooks` | Amp | create durable webhook handlers in Amp plugins |
+| `orb-setup` | Amp | prepare repositories to run in Amp orbs |
+| `setup-tmux` | Amp | configure tmux for Amp CLI |
+| `holistics-design` | Plugin | create Holistics-branded interfaces and assets |
+| `media-manager` | Plugin | manage files on Media Manager CDN |
+| `setup-amql-development` | Plugin | set up AMQL project development tooling |
+| `setup-holistics-cli` | Plugin | install and configure Holistics CLI |
+| `setup-holistics-mcp` | Plugin | configure Holistics MCP tools |
 
 ## Skill behavior tests
 

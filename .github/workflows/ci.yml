@@ -69,6 +69,7 @@ jobs:
               - "PROJECTS.md"
               - "sync-skills.sh"
               - "scripts/check-projection"
+              - "scripts/check-skill-dependencies"
               - ".pre-commit-config.yaml"
               - ".github/workflows/ci.yml"
             plugins:

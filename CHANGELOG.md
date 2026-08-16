@@ -9,6 +9,7 @@ and this project does not currently use versioned releases.
 
 ### Added
 
+- Add `showing-code` for compact visual explanations of code, architecture, control flow, state, and diffs. [#159](https://github.com/lelouvincx/agent-skills/pull/159)
 - Add an experimental Gemini 3.5 Flash-backed Amp agent mode. [#152](https://github.com/lelouvincx/agent-skills/pull/152)
 - Add the pinned `diagram-design` remote skill with local artifact, branding and browser-based PNG export guidance. [#150](https://github.com/lelouvincx/agent-skills/pull/150)
 - Add Figma's official `figma-design-to-code` skill with a read-only personal route, a minimal Figma MCP toolset and a 1Password-backed REST fallback. [#147](https://github.com/lelouvincx/agent-skills/pull/147)
@@ -47,6 +48,7 @@ and this project does not currently use versioned releases.
 
 ### Changed
 
+- Declare and lint skill dependencies, and automatically install `diagram-design` when projecting `showing-code`. [#159](https://github.com/lelouvincx/agent-skills/pull/159)
 - Document repository-wide Holistics code sync behavior, file-size and binary merge limits, recovery, conflict resolution and completion checks. [#158](https://github.com/lelouvincx/agent-skills/pull/158)
 - Project Amp convention files into the runtime config as an independent directory instead of a repository-backed symlink. [#157](https://github.com/lelouvincx/agent-skills/pull/157)
 - Use Amp's Fable prompt and tools as the documented contract for the DeepSeek V4 Flash and Gemini 3.5 Flash modes, and remove the unused Deep Classic capability document. [#157](https://github.com/lelouvincx/agent-skills/pull/157)
