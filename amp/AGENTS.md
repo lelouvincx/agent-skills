@@ -34,6 +34,14 @@
 - When creating or editing env files, write `KEY=op://<vault>/<item>/<field>` references only. Ask me to create/copy the 1Password item/reference if the correct path is unknown.
 - Treat exported secret-looking environment variables (`*TOKEN*`, `*KEY*`, `*SECRET*`, `*PASSWORD*`, `*CREDENTIAL*`, `*AUTH*`) as runtime-only; do not forward them to subagents unless injected through an explicit 1Password-backed env file.
 
+## Logseq report automation
+
+- Before changing or operating unattended report automation in the `logseq` project, read its `AGENTS.md` and `docs/plans/RFC-0010-unattended-agent-secret-infrastructure.md`.
+- For launchd, remote runs and independent unattended checks, set `LOGSEQ_REPORT_AUTH=service-account`; use the repository helpers so the service-account token remains scoped to 1Password calls.
+- The service-account token file is `~/.local/share/weekly-report/op-service-account-token`. This lane must not trigger a 1Password biometric prompt; if a prompt appears, stop because the command entered the wrong authentication lane.
+- `GH_WORK_TOKEN` in `~/.credentials/weekly-report.env` must reference `op://Logseq Reports/GitHub GH_TOKEN_WORK/credential`; the expected GitHub owner is `chinh-dm-holistics`.
+- Verify this lane with `LOGSEQ_REPORT_AUTH=service-account ./automation/weekly-report.sh --doctor` from the Logseq repository.
+
 ## Version control
 
 - Create worktrees under `<repository-root>/.amp/worktrees/`, where `<repository-root>` is the output of `git rev-parse --show-toplevel`. Before using a new worktree, verify that `git worktree list --porcelain` reports it under that directory.
