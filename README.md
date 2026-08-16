@@ -46,9 +46,6 @@ See [PROJECTS.md](PROJECTS.md) for the generated project list.
 | [modern-web-guidance](skills/modern-web-guidance/SKILL.md) | Remote | check current web platform guidance before frontend work |
 | [linear-cli](skills/linear-cli/SKILL.md) | Remote | manage Linear issues from the command line |
 | [agent-browser](skills/agent-browser/SKILL.md) | Remote | automate browser and UI tasks with `agent-browser` |
-| [ponytail](skills/ponytail/SKILL.md) | Remote | choose the simplest code that works |
-| [ponytail-review](skills/ponytail-review/SKILL.md) | Remote | review code for over-engineering only |
-| [ponytail-help](skills/ponytail-help/SKILL.md) | Remote | show ponytail commands and modes |
 | [writing-for-agents](skills/writing-for-agents/SKILL.md) | Remote | write documents for agents, including skills and agent instructions |
 | [writing-investigation-docs](skills/writing-investigation-docs/SKILL.md) | Local | write evidence-first investigation and decision docs |
 | [creating-client-design-systems](skills/creating-client-design-systems/SKILL.md) | Local | create Google DESIGN.md files for client brands and Holistics dashboard themes |
