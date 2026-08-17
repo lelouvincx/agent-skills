@@ -45,7 +45,7 @@
   - Use `GH_TOKEN_WORK` when the user explicitly requests the work token.
   - Otherwise, use the `chinh-dm-holistics` GitHub profile for Holistics repositories and the `lelouvincx` GitHub profile for personal repositories.
   - Resolve token references at execution time from `~/.credentials/github.env`; pass tokens only through the command environment.
-- After opening a pull request and after each later commit, wait for its GitHub Actions runs to complete. Fix failures and repeat until every run passes.
+- After opening a pull request and after each later commit, check its GitHub Actions runs asynchronously. Fix failures and repeat until every run passes.
 
 ## Project registry
 

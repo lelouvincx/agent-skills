@@ -251,12 +251,6 @@ skills:
     url: https://raw.githubusercontent.com/mattpocock/skills/main/skills/engineering/to-spec/SKILL.md
     enabled: true
 
-  - name: analyze-data
-    url: https://raw.githubusercontent.com/holistics/skills/main/plugins/holistics-development/skills/analyze-data/SKILL.md
-    enabled: true
-    files:
-      - .link
-
   - name: convert-agent-skill-to-holistics
     url: https://raw.githubusercontent.com/holistics/skills/main/plugins/holistics-development/skills/convert-agent-skill-to-holistics/SKILL.md
     enabled: true
@@ -299,18 +293,6 @@ skills:
 
   - name: search-docs
     url: https://raw.githubusercontent.com/holistics/skills/main/plugins/holistics-development/skills/search-docs/SKILL.md
-    enabled: true
-    files:
-      - .link
-
-  - name: use-existing-viz
-    url: https://raw.githubusercontent.com/holistics/skills/main/plugins/holistics-development/skills/use-existing-viz/SKILL.md
-    enabled: true
-    files:
-      - .link
-
-  - name: visualize-data
-    url: https://raw.githubusercontent.com/holistics/skills/main/plugins/holistics-development/skills/visualize-data/SKILL.md
     enabled: true
     files:
       - .link

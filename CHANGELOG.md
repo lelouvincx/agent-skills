@@ -134,6 +134,7 @@ and this project does not currently use versioned releases.
 
 ### Removed
 
+- Remove the redundant Holistics development plugin and the unused `analyze-data`, `use-existing-viz`, and `visualize-data` skills. [#164](https://github.com/lelouvincx/agent-skills/pull/164)
 - Remove the retired `remotion` remote skill and clean its generated artifacts from existing projections. [#142](https://github.com/lelouvincx/agent-skills/pull/142)
 - Remove the unused Inkling agent mode and its capability documentation. [#135](https://github.com/lelouvincx/agent-skills/pull/135)
 - Remove the redundant agent-callable Logseq logging tool now that its command-palette action is available on Amp Web. [#108](https://github.com/lelouvincx/agent-skills/pull/108)

@@ -79,10 +79,6 @@ skills/teach/RESOURCES-FORMAT.md
 skills/to-spec/SKILL.md
 skills/to-spec/.remote-source
 
-skills/analyze-data/SKILL.md
-skills/analyze-data/.remote-source
-skills/analyze-data/.link
-
 skills/convert-agent-skill-to-holistics/SKILL.md
 skills/convert-agent-skill-to-holistics/.remote-source
 
@@ -95,14 +91,6 @@ skills/develop-amql/.remote-source
 skills/search-docs/SKILL.md
 skills/search-docs/.remote-source
 skills/search-docs/.link
-
-skills/use-existing-viz/SKILL.md
-skills/use-existing-viz/.remote-source
-skills/use-existing-viz/.link
-
-skills/visualize-data/SKILL.md
-skills/visualize-data/.remote-source
-skills/visualize-data/.link
 
 skills/write-aql/SKILL.md
 skills/write-aql/.remote-source
