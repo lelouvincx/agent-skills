@@ -211,7 +211,7 @@ projects:
   testing4:
     github: holistics/data-testing4
     owner: holistics
-    dir: holistics/testing4
+    dir: holistics/presales/testing4
     aliases:
       - data testing4
       - testing 4
