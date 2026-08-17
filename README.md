@@ -43,7 +43,6 @@ Local skills are maintained in this repository. Remote skills are fetched and pr
 | Skill | Type | Use it to |
 | --- | --- | --- |
 | [agent-browser](skills/agent-browser/SKILL.md) | Remote | automate browser and UI tasks with `agent-browser` |
-| [analyze-data](skills/analyze-data/SKILL.md) | Remote | explain AQL queries, results, and metric changes |
 | [bigquery-query](skills/bigquery-query/SKILL.md) | Local | query Google BigQuery with the `bq` CLI |
 | [convert-agent-skill-to-holistics](skills/convert-agent-skill-to-holistics/SKILL.md) | Remote | convert skills between Agent Skills and Holistics AML formats |
 | [create-holistics-skill](skills/create-holistics-skill/SKILL.md) | Remote | author and refine Holistics AML skills |
@@ -77,8 +76,6 @@ Local skills are maintained in this repository. Remote skills are fetched and pr
 | [technical-precision](skills/technical-precision/SKILL.md) | Local | write unambiguous procedures and technical documentation |
 | [to-questionnaire](skills/to-questionnaire/SKILL.md) | Remote | turn missing stakeholder knowledge into a reusable questionnaire |
 | [to-spec](skills/to-spec/SKILL.md) | Remote | turn a conversation into a specification in the project issue tracker |
-| [use-existing-viz](skills/use-existing-viz/SKILL.md) | Remote | answer data questions with existing curated visualizations |
-| [visualize-data](skills/visualize-data/SKILL.md) | Remote | create charts and tables from data |
 | [write-aql](skills/write-aql/SKILL.md) | Remote | write and run Holistics AQL queries |
 | [writing-for-agents](skills/writing-for-agents/SKILL.md) | Remote | write documents for agents, including skills and agent instructions |
 | [writing-investigation-docs](skills/writing-investigation-docs/SKILL.md) | Local | write evidence-first investigation and decision docs |
@@ -98,9 +95,6 @@ These skills are active in Amp but are not maintained by this repository.
 | `setup-tmux` | Amp | configure tmux for Amp CLI |
 | `holistics-design` | Plugin | create Holistics-branded interfaces and assets |
 | `media-manager` | Plugin | manage files on Media Manager CDN |
-| `setup-amql-development` | Plugin | set up AMQL project development tooling |
-| `setup-holistics-cli` | Plugin | install and configure Holistics CLI |
-| `setup-holistics-mcp` | Plugin | configure Holistics MCP tools |
 
 ## Skill behavior tests
 
