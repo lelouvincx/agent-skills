@@ -48,6 +48,7 @@ and this project does not currently use versioned releases.
 
 ### Changed
 
+- Let users add a custom numbered option to a grilling question when the listed choices do not fit. [#165](https://github.com/lelouvincx/agent-skills/pull/165)
 - Require Holistics user-attribute operations to use the current API specification and API-key authentication. [#163](https://github.com/lelouvincx/agent-skills/pull/163)
 - Move the local agent-browser workflow into an on-demand Amp convention and require each headed Chrome session to use its persistent local profile on a new, dedicated CDP port, with user-assisted sign-in when authentication is required. [#162](https://github.com/lelouvincx/agent-skills/pull/162)
 - Resolve the `testing4` project from its location under the `presales` workspace. [#161](https://github.com/lelouvincx/agent-skills/pull/161)
