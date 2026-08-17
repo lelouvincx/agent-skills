@@ -3,6 +3,12 @@
 - Before reading, creating, or editing `.aml` files, load `develop-amql` and `search-docs`.
 - Treat Holistics query results as capped at 1,000 rows. Do not assume a 1,000-row result is complete unless the query guarantees at most 1,000 rows.
 
+## User attributes
+
+- Use the Holistics API when reading or modifying user attributes.
+- Fetch the current API specification with `curl https://docs.holistics.io/api/v2.yml` before choosing an endpoint or request shape.
+- In order to interact with user attributes: authenticate with a Holistics API key.
+
 ## Code sync
 
 - `holistics sync-code` synchronizes the entire repository in both directions.
