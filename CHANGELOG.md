@@ -9,7 +9,7 @@ and this project does not currently use versioned releases.
 
 ### Added
 
-- Add the latest Holistics custom chart, dashboard, dashboard control, dashboard theme, and visualization skills.
+- Add the latest Holistics custom chart, dashboard, dashboard control, dashboard theme, and visualization skills. [#166](https://github.com/lelouvincx/agent-skills/pull/166)
 - Add `showing-code` for compact visual explanations of code, architecture, control flow, state, and diffs. [#159](https://github.com/lelouvincx/agent-skills/pull/159)
 - Add an experimental Gemini 3.5 Flash-backed Amp agent mode. [#152](https://github.com/lelouvincx/agent-skills/pull/152)
 - Add the pinned `diagram-design` remote skill with local artifact, branding and browser-based PNG export guidance. [#150](https://github.com/lelouvincx/agent-skills/pull/150)
