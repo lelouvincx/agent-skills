@@ -134,7 +134,7 @@ Use `create_thread` when the work should continue across turns or needs an addre
 
 Choose exactly one completion path:
 
-1. **Asynchronous reply:** ask the child in its initial prompt to reply when finished. Continue useful parent work. Do not also call `wait_for_threads`.
+1. **Asynchronous reply:** ask the child in its initial prompt to reply to the source thread when finished. `create_thread` attaches the authenticated source-thread ID and reply route automatically; the child must use that route instead of leaving the report only in its own final answer. Continue useful parent work. Do not also call `wait_for_threads`.
 2. **Blocking join:** do not ask the child to reply. Call `wait_for_threads` only when the parent cannot progress without the result, then use `read_thread` to inspect the complete outcome.
 
 Use `thread_interact` for later messages, status previews, metadata, and user-authorized archive operations. Use `read_thread` rather than message previews when the parent needs the child's full result, rationale, evidence, or error.

@@ -39,7 +39,7 @@ Ask the user when the child or parent needs input only the user can provide. The
 
 For `create_thread`, choose exactly one result path:
 
-- **Asynchronous reply:** ask the child in its initial prompt to reply when finished. Continue useful parent work. Do not also call `wait_for_threads`.
+- **Asynchronous reply:** ask the child in its initial prompt to reply to the source thread when finished. `create_thread` attaches the source-thread ID and reply route automatically; the child must use that route instead of leaving the report only in its own final answer. Continue useful parent work. Do not also call `wait_for_threads`.
 - **Blocking join:** omit the reply request, call `wait_for_threads` only when the parent cannot progress without the result, then use `read_thread` for the complete outcome.
 
 Use `thread_interact` for follow-up messages and metadata. Use `read_thread`, not message previews, when the result, rationale, evidence, or error matters.
