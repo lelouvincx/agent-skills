@@ -44,6 +44,11 @@ Local skills are maintained in this repository. Remote skills are fetched and pr
 | --- | --- | --- |
 | [agent-browser](skills/agent-browser/SKILL.md) | Remote | automate browser and UI tasks with `agent-browser` |
 | [bigquery-query](skills/bigquery-query/SKILL.md) | Local | query Google BigQuery with the `bq` CLI |
+| [build-custom-chart](skills/build-custom-chart/SKILL.md) | Remote | create reusable Holistics custom chart definitions |
+| [build-dashboard](skills/build-dashboard/SKILL.md) | Remote | build and edit Holistics canvas dashboards |
+| [build-dashboard-controls](skills/build-dashboard-controls/SKILL.md) | Remote | add filters, date drills, and comparisons to Holistics dashboards |
+| [build-dashboard-theme](skills/build-dashboard-theme/SKILL.md) | Remote | create and apply Holistics dashboard themes |
+| [build-visualizations](skills/build-visualizations/SKILL.md) | Remote | author Holistics dashboard visualizations and dynamic content |
 | [convert-agent-skill-to-holistics](skills/convert-agent-skill-to-holistics/SKILL.md) | Remote | convert skills between Agent Skills and Holistics AML formats |
 | [create-holistics-skill](skills/create-holistics-skill/SKILL.md) | Remote | author and refine Holistics AML skills |
 | [creating-client-design-systems](skills/creating-client-design-systems/SKILL.md) | Local | create Google DESIGN.md files for client brands and Holistics dashboard themes |

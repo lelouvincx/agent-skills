@@ -79,6 +79,21 @@ skills/teach/RESOURCES-FORMAT.md
 skills/to-spec/SKILL.md
 skills/to-spec/.remote-source
 
+skills/build-custom-chart/SKILL.md
+skills/build-custom-chart/.remote-source
+
+skills/build-dashboard/SKILL.md
+skills/build-dashboard/.remote-source
+
+skills/build-dashboard-controls/SKILL.md
+skills/build-dashboard-controls/.remote-source
+
+skills/build-dashboard-theme/SKILL.md
+skills/build-dashboard-theme/.remote-source
+
+skills/build-visualizations/SKILL.md
+skills/build-visualizations/.remote-source
+
 skills/convert-agent-skill-to-holistics/SKILL.md
 skills/convert-agent-skill-to-holistics/.remote-source
 
