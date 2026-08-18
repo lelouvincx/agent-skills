@@ -8,7 +8,7 @@ status: "Partially resolved"
 priority: "P0"
 summary: "Explains the incident, command-only scope and reliability decisions behind Logseq task logging."
 created: "2026-07-15"
-updated: "2026-08-02"
+updated: "2026-08-18"
 amp_thread_id:
   T-019f63f5-d4b8-76e8-870e-b6ec96584a2d: "incident thread containing the original Logseq logging request and recovery"
   T-019f6417-0880-755e-bc60-ce2faebe753d: "worker thread that completed Logseq writes after the coordinator reported a timeout"
@@ -25,6 +25,7 @@ pull_requests:
   - "https://github.com/lelouvincx/agent-skills/pull/98"
   - "https://github.com/lelouvincx/agent-skills/pull/108"
   - "https://github.com/lelouvincx/agent-skills/pull/111"
+  - "https://github.com/lelouvincx/agent-skills/pull/167"
 related: []
 tags:
   - "logseq"
@@ -290,6 +291,7 @@ The investigation set these boundaries:
 - keep task identity and user-specific naming rules outside P0
 - recover ownership across plugin reloads only after the disposable parent-to-worker checkpoint is committed
 - do not claim durable ownership before checkpoint commit or that the coordinator independently verifies the graph's meaning
+- let the worker follow Amp's native tool policy; Oracle prohibition is not part of the Logseq reliability contract
 
 ## Resolution status
 
@@ -332,7 +334,7 @@ A P0 implementation must meet these criteria:
 - every create, append, result-consumption, rename, label and archive transition is handled in order
 - ambiguous worker creation or message delivery remains pending without launching duplicate work
 - only a fresh assistant message can satisfy the current worker turn
-- the plugin registers the command and a `tool.call` Oracle guard, but does not add agent-turn routing or automatic logging
+- the plugin registers the command without an agent tool or agent-turn routing; worker tools follow Amp's native policy
 - a failed downstream stage can be retried without another Logseq write
 
 PR #98 added focused tests in `amp/scripts/logseq-manual-log.test.ts`. It also passed document validation, plugin builds, isolated projection and live projection.

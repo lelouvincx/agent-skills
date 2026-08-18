@@ -22,7 +22,7 @@ amp:
   docs_sources:
     api_docs: "amp plugins show-docs"
     agent_options: "amp plugins show-agent-options --json"
-  last_verified: "2026-08-02"
+  last_verified: "2026-08-18"
 contract:
   input_kind: "ui_prompt"
   output_kind: "ui_notification"
@@ -34,7 +34,6 @@ contract:
 runtime:
   uses:
     - "amp.registerCommand"
-    - "amp.on tool.call"
     - "ctx.ui.input"
     - "ctx.ui.notify"
     - "amp.getBuiltinAgent"
@@ -77,13 +76,11 @@ safety:
     - "Worker must re-read and verify both Logseq files before reporting completion."
     - "Coordinator must independently validate the parent-linked task schema and journal block reference before reporting completion."
     - "Worker must return the exact versioned JSON result."
-    - "Oracle calls from the worker are rejected."
   risks:
     - "Worker can edit the configured Logseq graph."
     - "The coordinator validates the documented task fields and journal pointer, but it does not judge whether the worker summary is semantically complete."
     - "A reload before Amp returns a worker ID can still lose ownership of an uncertain worker creation."
-related:
-  - "spawn-subagent"
+related: []
 tags:
   - "command"
   - "logseq"
@@ -155,7 +152,7 @@ The Amp plugin API does not provide typed timeout errors. The plugin keeps the 2
 
 ### The worker writes Backlog first
 
-The worker must call `read_thread` for the parent thread before editing Logseq. If this fails, it returns a structured error without changing the graph. The plugin rejects Oracle calls from the worker.
+The worker must call `read_thread` for the parent thread before editing Logseq. If this fails, it returns a structured error without changing the graph.
 
 The worker reconstructs original user intent and latest coherent outcome. It then updates or creates the parent-linked task in `pages/Backlog.md`. Today's journal contains a short pointer to that task under `Done`, `Tasks` or `Notes`, based on task state.
 
@@ -295,7 +292,7 @@ Update this document when any of these change:
 
 - the command ID, prompt or notifications
 - worker mode or startup timeout
-- context reconstruction or the Oracle guard
+- context reconstruction
 - operation state, worker result or reconciliation
 - Backlog-first behaviour or journal verification
 - parent thread title or labels

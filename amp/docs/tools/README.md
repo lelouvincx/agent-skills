@@ -3,7 +3,7 @@ title: "Amp Plugin Capability Docs"
 slug: "amp-plugin-capability-docs"
 doc_schema: "amp-plugin-doc-index/v1"
 status: "active"
-last_reviewed: "2026-06-24"
+last_reviewed: "2026-08-18"
 ---
 
 # Amp artifact docs
@@ -36,9 +36,6 @@ All active documents use `amp-artifact/v2`, which supports skills and plugin cap
 - [Label Skill/Plugin Usage](./label-skill-plugin-usage.md)
 - [Pi Code Subagent](./pi-code-subagent.md)
 - [Register Thread Event Recipient](./register-thread-event-recipient.md)
-- [Spawn Subagent](./spawn-subagent.md)
-- [Subagent Control](./subagent-control.md)
-- [Send to Thread](./send-to-thread.md)
 - [Transfer PR Thread Owner](./transfer-pr-thread-owner.md)
 
 ### Agent modes

@@ -52,7 +52,7 @@ Local skills are maintained in this repository. Remote skills are fetched and pr
 | [convert-agent-skill-to-holistics](skills/convert-agent-skill-to-holistics/SKILL.md) | Remote | convert skills between Agent Skills and Holistics AML formats |
 | [create-holistics-skill](skills/create-holistics-skill/SKILL.md) | Remote | author and refine Holistics AML skills |
 | [creating-client-design-systems](skills/creating-client-design-systems/SKILL.md) | Local | create Google DESIGN.md files for client brands and Holistics dashboard themes |
-| [delegating-subagents](skills/delegating-subagents/SKILL.md) | Local | choose direct work, named Claude or Pi specialists, built-in `Task`, or `spawn_subagent` |
+| [delegating-subagents](skills/delegating-subagents/SKILL.md) | Local | choose direct work, named Claude or Pi specialists, built-in `Task`, or native `create_thread` |
 | [develop-amql](skills/develop-amql/SKILL.md) | Remote | develop Holistics models, datasets, dashboards, and metrics |
 | [diagram-design](skills/diagram-design/SKILL.md) | Remote | create and export branded diagrams as HTML, SVG, or PNG |
 | [domain-modeling](skills/domain-modeling/SKILL.md) | Remote | define domain terms, context, and architectural decisions |
@@ -153,8 +153,6 @@ Run the relevant repository command directly:
 | [Claude Code subagent](amp/docs/tools/claude-code-subagent.md) | Agent tool | Agent | ask Claude Code for read-only advice |
 | [Label skill and plugin usage](amp/docs/tools/label-skill-plugin-usage.md) | Agent tool | Agent | add or correct usage-event labels |
 | [Pi Code subagent](amp/docs/tools/pi-code-subagent.md) | Agent tool | Agent | ask Pi Coding Agent for read-only advice |
-| [Send to thread](amp/docs/tools/send-to-thread.md) | Agent tool | Agent | send a message to another Amp thread |
-| [Spawn subagent](amp/docs/tools/spawn-subagent.md) | Agent tool | Agent | start a bounded subagent thread that reports back |
 | [DeepSeek V4 Flash](amp/docs/tools/deepseek-v4-flash.md) | Agent mode | Mode picker | run an experimental DeepSeek-backed agent mode |
 | [Gemini 3.5 Flash](amp/docs/tools/gemini-3-5-flash.md) | Agent mode | Mode picker | run an experimental Gemini-backed agent mode |
 | [Codex usage command](amp/docs/tools/codex-usage.md) | Command | Command palette | show Codex usage limits |
