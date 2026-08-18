@@ -82,8 +82,7 @@ safety:
     - "Worker can edit the configured Logseq graph."
     - "The coordinator validates the documented task fields and journal pointer, but it does not judge whether the worker summary is semantically complete."
     - "A reload before Amp returns a worker ID can still lose ownership of an uncertain worker creation."
-related:
-  - "spawn-subagent"
+related: []
 tags:
   - "command"
   - "logseq"
