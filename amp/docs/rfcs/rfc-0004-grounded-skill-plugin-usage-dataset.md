@@ -579,7 +579,7 @@ Deferred until after several captures:
 
 - Run the first usage report from real captured data.
 - Tune canonical prefixes or label taxonomy only if real usage shows friction.
-- Decide whether to track additional tools such as `send_to_thread` or command/agent-mode invocations.
+- Decide whether to track native thread tools or command/agent-mode invocations.
 - Use the first report to update one or two high-confidence instructions in version-controlled source.
 - Add a manual/instruction for Chinh and save it in Logseq.
 

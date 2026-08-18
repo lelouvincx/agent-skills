@@ -9,8 +9,9 @@ test_repo="$tmp/repo"
 source_root="$tmp/source/fixture-main"
 archive="$tmp/fixture.tar.gz"
 home="$tmp/home"
-mkdir -p "$test_repo/skills/demo" "$source_root/plugin/skills/demo/scripts/lib" "$home"
+mkdir -p "$test_repo/scripts" "$test_repo/skills/demo" "$source_root/plugin/skills/demo/scripts/lib" "$home"
 cp "$REPO_DIR/sync-skills.sh" "$test_repo/sync-skills.sh"
+cp "$REPO_DIR/scripts/check-skill-dependencies" "$test_repo/scripts/check-skill-dependencies"
 chmod +x "$test_repo/sync-skills.sh"
 
 cat > "$test_repo/skills/demo/PERSONAL.md" <<'EOF'

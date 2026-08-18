@@ -1017,7 +1017,7 @@ describe('command-only plugin surface', () => {
 		plugin(harness.amp as never, { checkpointDir: null })
 		expect(harness.command).toBeFunction()
 		expect(harness.tool).toBeUndefined()
-		expect([...harness.hooks.keys()]).toEqual(['tool.call'])
+		expect([...harness.hooks.keys()]).toEqual([])
 	})
 
 	test('notifies when the Logseq worker thread is created', async () => {
@@ -1046,20 +1046,4 @@ describe('command-only plugin surface', () => {
 		expect(events).toEqual(['notify-created', 'wait', 'notify-result'])
 	})
 
-	test('keeps the Oracle guard for active command workers', async () => {
-		const { worker, appended } = fakeWorker({ waitForResponse: async () => { throw new Error('Timed out waiting for agent response') } })
-		const harness = fakeAmp({ createThread: () => worker })
-		plugin(harness.amp as never, { checkpointDir: null })
-		await harness.command!({
-			thread: { id: parentID },
-			ui: { input: async () => '', notify: async () => {} },
-		} as never)
-
-		const toolCall = harness.hooks.get('tool.call')!
-		expect(await toolCall({ thread: { id: workerID }, tool: 'oracle' } as never)).toEqual(expect.objectContaining({ action: 'reject-and-continue' }))
-		expect(await toolCall({ thread: { id: workerID }, tool: 'apply_patch' } as never)).toEqual({ action: 'allow' })
-		expect(await toolCall({ thread: { id: parentID }, tool: 'oracle' } as never)).toEqual({ action: 'allow' })
-		expect(harness.createCalls).toBe(1)
-		expect(appended).toHaveLength(1)
-	})
 })

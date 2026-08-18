@@ -15,6 +15,7 @@ fi
 
 plugins=()
 while IFS= read -r plugin; do
+	[ -f "$REPO_DIR/$plugin" ] || continue
 	plugins+=("$plugin")
 done < <(git -C "$REPO_DIR" ls-files 'amp/plugins/*.ts')
 
@@ -35,7 +36,6 @@ trap 'rm -rf "$out_dir"' EXIT
 	bun amp/scripts/test-claude-design-subagent.ts
 	bun test amp/scripts/git-diff-mcp.test.ts
 	bun test amp/scripts/github-thread-events.test.ts
-	bun test amp/scripts/spawn-subagent.test.ts
 	bun test amp/scripts/logseq-manual-log.test.ts
 )
 

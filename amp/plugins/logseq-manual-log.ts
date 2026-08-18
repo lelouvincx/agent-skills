@@ -113,17 +113,6 @@ export default function (amp: PluginAPI, timingOverrides: Partial<Timing> = {}) 
 
 	amp.logger.log(`[logseq-manual-log] plugin loaded → ${LOGSEQ_REPO}`)
 
-	amp.on('tool.call', async (event) => {
-		if (event.tool !== 'oracle') return { action: 'allow' }
-		const worker = isKnownWorker(operations, event.thread.id) || await hasWorkerPromptPrefix(amp, event.thread.id)
-		return worker
-			? {
-				action: 'reject-and-continue',
-				message: 'Oracle is unavailable to Logseq logging workers. Use read_thread and the Logseq canonical pages to complete the logging task.',
-			}
-			: { action: 'allow' }
-	})
-
 	amp.registerCommand(
 		'logseq-log-current-task',
 		{
@@ -928,20 +917,6 @@ function settleWithin<T>(promise: Promise<T>, timeoutMs: number): Promise<Settle
 	})
 }
 
-function isKnownWorker(operations: LogseqOperationStore, threadID: ThreadID): boolean {
-	return [...operations.values()].some((operation) => operation.workerID === threadID)
-}
-
-async function hasWorkerPromptPrefix(amp: PluginAPI, threadID: ThreadID): Promise<boolean> {
-	try {
-		const [initialMessage] = await amp.threads.get(threadID).messages({ full: true, from: 'start', limit: 1 })
-		return initialMessage?.role === 'user'
-			&& initialMessage.content.some((block) => block.type === 'text' && block.text.startsWith(LOGSEQ_WORKER_PROMPT_PREFIX))
-	} catch {
-		return false
-	}
-}
-
 function buildPrompt(parentThreadID: string, workerThreadID: string, hint: string): string {
 	const today = localDateParts()
 	return `${LOGSEQ_WORKER_PROMPT_PREFIX}
@@ -987,10 +962,9 @@ Rules:
 8. Keep the backlog entry short: one task block plus few useful child notes, and one brief journal reference. Do not paste the transcript or your private intent-reconstruction notes.
 9. Determine the parent Amp thread title from the Logseq backlog task/block you wrote or updated, using exactly this pattern: \`[Project] task title\`. Use the Logseq \`project:: [[...]]\` value without brackets for \`Project\`; use the backlog task/block title text without TODO/DONE markers or properties for \`task title\`. If the user hint, parent thread, or matching Backlog task contains a Linear issue ID such as \`DAT-745\`, ensure the Backlog task title contains that ID unchanged and keep it immediately after the project prefix in \`threadTitle\`, for example \`[Internal] DAT-745 Support Quality Overview PR #111\`.
 10. Derive parent Amp thread labels for the backlog project, working project, and customer. Always include the normalized backlog-project label, for example \`Duty Support\` becomes \`duty-support\`. Always include the working-project label for the parent Amp workspace shown in Context: resolve its directory name with \`project-resolve <directory-name> --json\` and use the returned registry \`key\`, such as \`logseq\`, \`agent-skills\`, or \`demo4\`; if resolution fails, use the normalized workspace directory name. Include the customer label only when the backlog task identifies a customer through its title, properties, or canonical project/customer context. Prefix the normalized customer with \`customer-\`, for example \`FanServ\` becomes \`customer-fanserv\` and \`Basata\` becomes \`customer-basata\`. Normalize labels to lowercase words joined with hyphens and omit punctuation. Do not add priority or TODO/DONE state labels.
-11. Do not invoke Oracle. The plugin blocks Oracle calls from this worker.
-12. Do not commit, push, run weekly report automation, or modify unrelated blocks.
-13. Do not send messages to the parent thread. Return your result only as this worker thread's final answer.
-14. After mutation and before final read-back, ask yourself: can a fresh agent safely act on every recorded fact about this task, answer status and history questions, and take the recorded next action without asking the user to restate known context? If a new request changes intent or requires unavailable authority, can it identify that precisely rather than guessing? Repair the task or activity when the answer is no. Then re-read both files. Set backlogVerified true only when a Backlog task linked to parent thread ${parentThreadID} is present. Set journalVerified true only when the journal pointer targets that same task.
+11. Do not commit, push, run weekly report automation, or modify unrelated blocks.
+12. Do not send messages to the parent thread. Return your result only as this worker thread's final answer.
+13. After mutation and before final read-back, ask yourself: can a fresh agent safely act on every recorded fact about this task, answer status and history questions, and take the recorded next action without asking the user to restate known context? If a new request changes intent or requires unavailable authority, can it identify that precisely rather than guessing? Repair the task or activity when the answer is no. Then re-read both files. Set backlogVerified true only when a Backlog task linked to parent thread ${parentThreadID} is present. Set journalVerified true only when the journal pointer targets that same task.
 
 User instruction: ${hint || '(none, infer the best target from this thread)'}
 

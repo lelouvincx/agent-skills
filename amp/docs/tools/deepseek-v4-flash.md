@@ -1,24 +1,24 @@
 ---
 doc_schema: "amp-artifact/v2"
-title: "Gemini 3.5 Flash"
-slug: "gemini-3-5-flash"
+title: "DeepSeek V4 Flash"
+slug: "deepseek-v4-flash"
 status: "active"
-summary: "Registers an experimental Amp agent mode that uses Gemini 3.5 Flash and mirrors Amp's Fable prompt and tools."
+summary: "Registers an experimental Amp agent mode that uses DeepSeek V4 Flash and mirrors Amp's Fable prompt and tools."
 artifact:
-  id: "gemini-3-5-flash"
+  id: "deepseek-v4-flash"
   type: "agent_mode"
   surface: "mode_picker"
   invocation: "new_thread_mode"
   api_stability: "experimental"
 source:
   kind: "plugin"
-  file: "plugins/gemini-3-5-flash-mode.ts"
+  file: "plugins/deepseek-v4-flash-mode.ts"
   scope: "system"
   install_source: "local"
   registration_api: "amp.experimental.registerAgentMode"
   metadata_comments:
-    - "@amp-plugin — Gemini 3.5 Flash agent mode."
-    - "@amp-agent-mode {\"key\":\"gemini-3-5-flash\",\"label\":\"Gemini 3.5 Flash\"}"
+    - "@amp-plugin — DeepSeek V4 Flash agent mode."
+    - "@amp-agent-mode {\"key\":\"deepseek-v4-flash\",\"label\":\"DeepSeek V4 Flash\"}"
 amp:
   docs_sources:
     api_docs: "amp plugins show-docs"
@@ -31,8 +31,8 @@ contract:
   allowed_tools: []
   event: null
   command_id: null
-  agent_mode_key: "gemini-3-5-flash"
-  model: "google-vertex/gemini-3.5-flash"
+  agent_mode_key: "deepseek-v4-flash"
+  model: "baseten/deepseek-ai/DeepSeek-V4-Flash-0731"
 runtime:
   uses:
     - "amp.experimental.createAgent"
@@ -40,7 +40,7 @@ runtime:
     - "custom agent instructions"
   dependencies:
     - "experimental plugin API"
-    - "google-vertex/gemini-3.5-flash model availability"
+    - "baseten/deepseek-ai/DeepSeek-V4-Flash-0731 model availability"
   env: []
   reads:
     - "workspace files through selected tools"
@@ -48,7 +48,7 @@ runtime:
     - "workspace files through create_file and edit_file when the agent chooses those tools"
     - "shell side effects through shell_command when approved by Amp permissions"
   network:
-    - "Google Vertex Gemini 3.5 Flash model endpoint"
+    - "Baseten DeepSeek V4 Flash model endpoint"
     - "web tools when invoked by the agent"
   logs:
     - "plugin logger on experimental API unavailability"
@@ -65,24 +65,24 @@ safety:
 related: []
 tags:
   - "agent-mode"
-  - "gemini"
+  - "deepseek"
   - "experimental"
 ---
 
-# Gemini 3.5 Flash
+# DeepSeek V4 Flash
 
 ## Summary
 
-`gemini-3-5-flash` registers an experimental Amp agent mode. It uses `google-vertex/gemini-3.5-flash`, mirrors Amp's Fable prompt and tools, and sets reasoning effort to `xhigh`.
+`deepseek-v4-flash` registers an experimental Amp agent mode. It uses `baseten/deepseek-ai/DeepSeek-V4-Flash-0731`, mirrors Amp's Fable prompt and tools, and sets reasoning effort to `xhigh`.
 
 ## Invocation
 
 - Surface: Amp mode picker
 - Registered with: `amp.experimental.registerAgentMode`
 - Agent created with: `amp.experimental.createAgent`
-- Mode key: `gemini-3-5-flash`
-- Label: `Gemini 3.5 Flash`
-- Plugin file: `plugins/gemini-3-5-flash-mode.ts`
+- Mode key: `deepseek-v4-flash`
+- Label: `DeepSeek V4 Flash`
+- Plugin file: `plugins/deepseek-v4-flash-mode.ts`
 
 ## Contract
 
@@ -90,11 +90,11 @@ Agent definition:
 
 | Field | Value |
 | --- | --- |
-| `name` | `gemini-3-5-flash` |
-| `model` | `google-vertex/gemini-3.5-flash` |
+| `name` | `deepseek-v4-flash` |
+| `model` | `baseten/deepseek-ai/DeepSeek-V4-Flash-0731` |
 | `reasoningEffort` | `xhigh` |
-| `display.label` | `Gemini 3.5 Flash` |
-| `display.color` | `#4285f4` |
+| `display.label` | `DeepSeek V4 Flash` |
+| `display.color` | `#2563eb` |
 
 Tools:
 
@@ -126,7 +126,7 @@ The static metadata comment includes a matching `@amp-agent-mode` entry. Amp cli
 
 When the plugin loads, it checks `amp.experimental`. If the API is unavailable, it logs `Experimental plugin API is not available.` and does not register the mode.
 
-If the API is available, the plugin creates a custom agent with the Gemini 3.5 Flash model, the Fable prompt and the Fable tool list. It then registers the agent mode.
+If the API is available, the plugin creates a custom agent with the DeepSeek V4 Flash model, the Fable prompt and the Fable tool list. It then registers the agent mode.
 
 The Fable prompt calibrates action to user intent. It answers pure questions without editing files and treats clear requests to build or change something as instructions. It requires a design pass before substantial features or architecture changes unless the user asks for immediate implementation.
 
@@ -140,7 +140,7 @@ It can modify the workspace when the task needs code changes and Amp permissions
 
 ## Examples
 
-Use this mode when you start a new thread and want Gemini 3.5 Flash with `xhigh` reasoning for coding work. The user prompt becomes the agent turn input. This capability does not take JSON input directly.
+Use this mode when you start a new thread and want DeepSeek V4 Flash with `xhigh` reasoning for coding work. The user prompt becomes the agent turn input. This capability does not take JSON input directly.
 
 Example prompt:
 
@@ -151,13 +151,13 @@ Fix the failing test in this repository. Read the relevant code first, make the 
 ## Troubleshooting
 
 - Mode does not appear: check that `amp.experimental` is available and the plugin loaded successfully.
-- Plugin load errors: run `amp plugins list`; syntax or runtime errors appear next to `gemini-3-5-flash-mode.ts`.
-- Model errors: check that `google-vertex/gemini-3.5-flash` appears in `amp plugins show-agent-options --json`.
-- Tool unavailable: compare the tool list in `plugins/gemini-3-5-flash-mode.ts` with `amp plugins show-agent-options --json`.
+- Plugin load errors: run `amp plugins list`; syntax/runtime errors are reported next to `deepseek-v4-flash-mode.ts`.
+- Model errors: check that `baseten/deepseek-ai/DeepSeek-V4-Flash-0731` appears in `amp plugins show-agent-options --json`.
+- Tool unavailable: compare the tool list in `plugins/deepseek-v4-flash-mode.ts` with `amp plugins show-agent-options --json`.
 
 ## Maintenance notes
 
-This mode uses `amp.experimental`. Refresh this document after Amp plugin API updates. Keep the `@amp-agent-mode` static metadata in sync with the runtime `registerAgentMode` key and label.
+This mode uses `amp.experimental`. Refresh this doc after Amp plugin API updates. Keep the `@amp-agent-mode` static metadata in sync with the runtime `registerAgentMode` key and label.
 
 To refresh the Fable prompt and tools, install or update Amp's Fable plugin:
 
@@ -169,4 +169,4 @@ Then compare this plugin with `~/.config/amp/plugins/fable-mode.ts`. Treat `FABL
 
 Copy the complete `FABLE_AGENT_PROMPT` and `SMART_TOOL_NAMES` values. This mode should differ only by model, mode metadata and reasoning effort.
 
-When copying prompt text into the plugin's TypeScript template literal, escape any literal backtick as `\`` and keep the closing template delimiter visible before the tool list. A malformed prompt string prevents the plugin from loading.
+When copying prompt text into the plugin's TypeScript template literal, escape any literal backtick as `\`` and keep the closing template delimiter visible before the tool list. A malformed prompt string prevents the plugin from loading at all.

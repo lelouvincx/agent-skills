@@ -45,7 +45,7 @@ interface TokenUsage {
 const DEFAULT_TIMEOUT_MINUTES = 10
 const MAX_TIMEOUT_MINUTES = 30
 const DEFAULT_PROVIDER = 'deepseek'
-const DEFAULT_MODEL = 'deepseek-v4-pro'
+const DEFAULT_MODEL = 'deepseek-v4-flash'
 const DEFAULT_THINKING: Thinking = 'high'
 const AUDIT_DIR = process.env.AMP_PI_CODE_SUBAGENT_AUDIT_DIR ?? join(homedir(), '.config', 'amp', 'logs', 'pi-code-subagent')
 const TOKEN_USAGE_LOG_PATH = process.env.AMP_AGENT_TOKEN_USAGE_LOG ?? join(homedir(), '.config', 'amp', 'logs', 'agent-token-usage.jsonl')
@@ -64,7 +64,7 @@ export default function (amp: PluginAPI) {
 			'Use Pi Coding Agent (pi.dev) as a manual, read-only advisor.',
 			'Call this tool ONLY when the user explicitly mentions Pi, pi.dev, or Pi Coding Agent.',
 			'Pi must not edit files: its toolkit is limited to read-only operations (read, grep, find, ls — equivalent to Claude Read, Grep, Glob, LS). Extensions, skills, prompt templates, themes, context files, and session persistence are disabled; output is structured JSON only.',
-			'Default model is DeepSeek V4 Pro via --provider deepseek --model deepseek-v4-pro.',
+			'Default model is DeepSeek V4 Flash via --provider deepseek --model deepseek-v4-flash.',
 			'Use mode=review for reviewing a diff/implementation, mode=patch for a small-to-medium patch proposal, and mode=research for read-only investigation.',
 			'Pass a pre-processed summary in brief/context; avoid dumping the raw Amp thread.',
 		].join(' '),

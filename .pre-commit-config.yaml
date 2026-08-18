@@ -82,13 +82,20 @@ repos:
         pass_filenames: false
         files: ^(?:projects\.yaml|PROJECTS\.md|bin/project-resolve|scripts/check-project-registry|\.pre-commit-config\.yaml)$
 
+      - id: check-skill-dependencies
+        name: Check skill dependencies
+        entry: scripts/check-skill-dependencies
+        language: system
+        pass_filenames: false
+        files: ^(?:skills/|remote-skills\.yaml$|sync-skills\.sh$|scripts/check-skill-dependencies$|\.pre-commit-config\.yaml$)
+
       - id: check-projection
         name: Check isolated runtime projection
         entry: scripts/check-projection
         language: system
         pass_filenames: false
         stages: [pre-push]
-        files: ^(?:\.agents/|amp/|bin/|skills/|projects\.yaml$|PROJECTS\.md$|remote-skills\.yaml$|sync-skills\.sh$|scripts/check-projection$|\.pre-commit-config\.yaml$)
+        files: ^(?:\.agents/|amp/|bin/|skills/|projects\.yaml$|PROJECTS\.md$|remote-skills\.yaml$|sync-skills\.sh$|scripts/(?:check-projection|check-skill-dependencies)$|\.pre-commit-config\.yaml$)
 
       - id: check-remote-archive-sync
         name: Check rollback-safe remote archive syncing

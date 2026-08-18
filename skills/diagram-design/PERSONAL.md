@@ -17,14 +17,14 @@ Apply this section before conflicting upstream setup, onboarding, export, or val
 A **project branding source** is an existing project-owned `DESIGN.md`, `design.md`, or local style/token file.
 
 1. When a project branding source exists, treat it as the single source of truth and apply its tokens directly to generated output.
-2. When the user requests website-derived branding, load `agent-browser` and follow its Local Chrome workflow. Use `references/onboarding.md` for semantic-role mapping, contrast checks, exact-font checks, and the brand fidelity receipt; `agent-browser` owns website inspection.
+2. When the user requests website-derived branding, load `agent-browser` and follow the Agent Browser convention. Use `references/onboarding.md` for semantic-role mapping, contrast checks, exact-font checks, and the brand fidelity receipt; `agent-browser` owns website inspection.
 3. Apply one-off branding directly to the requested output. Persist approved branding only when the user requests reusable branding, and write it to a project branding source whose path the user has provided or confirmed.
 4. When creating or structurally updating `DESIGN.md` or `design.md`, load `creating-client-design-systems`; that skill owns the contract structure and validation.
 5. When no project branding source exists and no branding was requested, apply the packaged defaults directly to the output. This completes the first-run branding gate without user confirmation.
 
 ### Browser inspection and PNG export
 
-For website branding, rendered-output inspection, and PNG export, load `agent-browser` before the first browser action and follow its Local Chrome workflow. Use its connected system Chrome and persistent profile. This workflow replaces the Playwright detection, Playwright rasterization, separate Chromium installation, and stale fetch commands in the generated references.
+For website branding, rendered-output inspection, and PNG export, load `agent-browser` before the first browser action and follow the Agent Browser convention. Use its dedicated headed Chrome instance and persistent local profile. This workflow replaces the Playwright detection, Playwright rasterization, separate Chromium installation, and stale fetch commands in the generated references.
 
 For PNG export:
 

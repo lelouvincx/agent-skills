@@ -3,7 +3,7 @@ doc_schema: "amp-artifact/v2"
 title: "Delegating Subagents"
 slug: "delegating-subagents"
 status: "active"
-summary: "Guides agents to choose direct work, a specialist, built-in Task, create_thread, or spawn_subagent based on user intent and delegation needs."
+summary: "Guides agents to choose direct work, specialist tools, Task, or create_thread, then manage native child-thread follow-up and completion."
 artifact:
   id: "delegating-subagents"
   type: "skill"
@@ -21,7 +21,7 @@ amp:
   docs_sources:
     api_docs: null
     agent_options: null
-  last_verified: "2026-08-10"
+  last_verified: "2026-08-18"
 contract:
   input_kind: "natural_language"
   output_kind: "instructions"
@@ -39,15 +39,13 @@ runtime:
     - "pi_code_subagent"
     - "built-in Task"
     - "built-in create_thread"
-    - "spawn_subagent"
-    - "subagent_control"
+    - "built-in thread_interact"
+    - "built-in wait_for_threads"
+    - "built-in read_thread"
   dependencies:
-    - "Claude Code subagent capability contract"
-    - "Claude Design subagent capability contract"
-    - "Pi Code subagent capability contract"
+    - "built-in Task contract"
     - "built-in create_thread contract"
-    - "spawn-subagent capability contract"
-    - "subagent-control capability contract"
+    - "built-in thread lifecycle tools"
   env: []
   reads:
     - "current task scope and coordination requirements"
@@ -58,32 +56,25 @@ safety:
   permission_level: "guidance-only"
   user_gate: "description match, explicit skill load, or repository instruction to evaluate delegation"
   constraints:
-    - "Before non-trivial work, consider whether independent bounded workstreams make delegation worthwhile."
     - "Prefer direct or specialist tools when delegation overhead exceeds the task."
-    - "Keep the default oracle available for focused expert judgment; Ultra review complements rather than replaces it."
-    - "When diversity matters, choose the reviewer whose current model or provider differs from the parent to reduce correlated model bias; do not assume routing stays fixed."
-    - "Treat Ultra as a mode choice, not a reason to select spawn_subagent."
-    - "An ultra review brief must be read-only and include the exact change-set evidence when line-level fidelity matters."
-    - "Give every delegated task a bounded brief with scope, constraints and non-goals, success criteria, validation, and a completion contract."
-    - "Require a done report with evidence or a blocked report naming the smallest parent input needed; verify the result and close gaps directly or through a focused follow-up."
-    - "Ask the user when a blocked child or the parent needs input only the user can provide; neither the parent nor the child may guess."
+    - "Give every delegated task a bounded brief with scope, constraints, non-goals, success criteria, validation, and a completion contract."
+    - "Use Task for bounded work whose result is needed in the current parent turn."
+    - "Use create_thread for addressable cross-turn work whose selected executor can see the required state."
+    - "Choose exactly one create_thread result path: asynchronous reply or blocking wait."
+    - "Use thread_interact for native follow-up and metadata operations."
+    - "Use wait_for_threads and read_thread when the parent must block for and inspect a complete child result."
+    - "Ask the user when a child or parent needs input only the user can provide."
     - "Use Claude Code, Claude Design, and Pi subagents only when the user explicitly requests the named specialist."
-    - "Treat Claude Code and Pi as read-only advisers; Amp applies and verifies any proposed changes."
-    - "Treat Claude Design as a cloud design write tool, not a read-only adviser or local implementation worker."
-    - "Treat side questions introduced with 'btw' or triggered with '|btw' as delegation requests so the parent can preserve its current task."
-    - "Use built-in Task by default for bounded one-shot work, including independent Task calls that run concurrently within one parent turn."
-    - "Use built-in create_thread for normal addressable cross-turn work when it is available and its executor can see the required state."
-    - "Use spawn_subagent when its managed-local controls or an explicit spawn request are required, or as the addressable fallback when create_thread is unavailable and the selected executor can see the required state."
-    - "Use subagent_control only for explicit inspection, diagnosis, or cancellation; do not poll spawned children for completion."
     - "The parent remains responsible for synthesis, integration, and final verification."
   risks:
     - "Choosing a cross-turn child thread for ordinary in-turn work adds unnecessary coordination overhead."
+    - "An Orb cannot see uncommitted local state unless that state is transferred or otherwise made available."
     - "Concurrent agents editing overlapping files can create conflicting changes."
+    - "Native thread_interact does not currently expose active-turn cancellation."
 related:
   - "claude-code-subagent"
   - "claude-design-subagent"
   - "pi-code-subagent"
-  - "spawn-subagent"
 tags:
   - "skill"
   - "delegation"
@@ -95,23 +86,17 @@ tags:
 
 ## Summary
 
-Choose the delegation mechanism from what the parent needs next:
+Choose the smallest mechanism that gives the parent the result and lifecycle it needs:
 
 | Parent need | Choice |
 | --- | --- |
-| The task is small or a specialist tool already covers it | work directly or use the specialist tool |
-| The user explicitly asks for Claude or Claude Code advice | use `claude_code_subagent` |
-| The user explicitly asks to use Claude Design | use `claude_design_subagent` |
-| The user explicitly asks for Pi, pi.dev or Pi Coding Agent advice | use `pi_code_subagent` |
-| The parent needs a focused expert second opinion on a hard judgment call, tricky review, alternative analysis or complex plan | use `oracle` |
-| The parent needs a full independent review of completed work using Ultra's current model routing | use an Ultra-mode child thread and choose its mechanism from the required controls |
-| The parent needs bounded one-shot work, including concurrent independent calls within this turn | use built-in `Task` |
-| The work needs a normal addressable child thread, cross-turn reporting, later messaging, an Orb, a runner or another project | use built-in `create_thread` when its executor can see the required state |
-| The work needs local workspace state, an arbitrary local `cwd`, Oracle rejection, active cancellation, mandatory parent-intent reconstruction, managed reporting and archiving, or an addressable fallback when `create_thread` is unavailable | use `spawn_subagent` when its executor can see the required state |
+| The task is small or a specialist tool already owns it | work directly or use the specialist tool |
+| The result is needed before the current parent turn can finish | built-in `Task` |
+| The work needs an addressable thread, later messaging, cross-turn reporting, another project, an Orb, or a runner | built-in `create_thread` |
+| The parent needs a focused expert judgment on one unresolved high-impact decision | `oracle` |
+| The user explicitly asks for Claude Code, Claude Design, or Pi | the matching named specialist |
 
-Default Oracle and an Ultra reviewer are complementary. Use Oracle for a focused expert opinion. Use Ultra for a full review of completed work when its current routing provides an independent perspective. When diversity matters, choose the reviewer whose current model or provider differs from the parent. This can reduce correlated model bias. Do not assume routing stays fixed.
-
-Ultra selects review capability, not thread creation. Choose `create_thread` or `spawn_subagent` from lifecycle and control needs. Do not choose `spawn_subagent` only because the child uses Ultra mode.
+`Task` and `create_thread` are the generic delegation paths. Do not add a wrapper when the native tools cover the lifecycle.
 
 ## Invocation
 
@@ -120,161 +105,115 @@ Ultra selects review capability, not thread creation. Choose `create_thread` or 
 - Invocation: description match or explicit skill load
 - ID: `delegating-subagents`
 
-Repository instructions require agents to consider delegation before non-trivial work. Agents load this skill when delegation could reduce latency or preserve the parent thread's focus.
+Repository instructions require agents to consider delegation before non-trivial work. They also route explicit `/subagent`, `|subagent`, and “spawn a subagent” requests to native `create_thread`.
 
 ## Contract
 
-The skill receives the current task and its coordination needs from conversation context.
+Every delegated brief must state:
 
-It returns instructions for choosing one path. Follow the decision order in the Summary table:
+- the outcome and why it matters
+- the bounded scope and useful starting evidence
+- constraints and non-goals
+- success criteria
+- validation to run
+- the expected done report, or the smallest input to request when blocked
 
-- resolve specialist tools and explicit named-specialist requests first
-- use Oracle for focused expert judgment
-- use Ultra for independent review capability
-- resolve decisive `spawn_subagent` requirements
-- use `create_thread` for normal addressable cross-turn work
-- use `spawn_subagent` as the addressable fallback
-- use built-in `Task` for ordinary bounded one-shot delegation
+The parent must inspect the result, verify it against the success criteria, and close any gap directly or through one focused follow-up.
 
-The skill declares no tool allowlist.
+### Use Task for current-turn results
 
-### Use named specialist subagents
+Use `Task` when the parent cannot complete its current response without the delegated result. This includes independent workstreams that can run concurrently and bounded work whose intermediate detail would crowd the parent context.
 
-Named specialist subagents are explicit-only exceptions to the normal delegation choice:
+Do not use `Task` for simple reads, exact searches, one localized edit, ordinary self-review, or work already owned by `finder`, `librarian`, or another specialist.
+
+`Task` returns one final result to the parent. It does not expose a durable child-thread lifecycle for later messaging.
+
+### Use create_thread for addressable work
+
+Use `create_thread` when the work should continue across turns or needs an addressable thread for later follow-up. Choose an executor and project that can see the required workspace state. Do not assume a new Orb can see the current machine's uncommitted changes.
+
+Choose exactly one completion path:
+
+1. **Asynchronous reply:** ask the child in its initial prompt to reply to the source thread when finished. `create_thread` attaches the authenticated source-thread ID and reply route automatically; the child must use that route instead of leaving the report only in its own final answer. Continue useful parent work. Do not also call `wait_for_threads`.
+2. **Blocking join:** do not ask the child to reply. Call `wait_for_threads` only when the parent cannot progress without the result, then use `read_thread` to inspect the complete outcome.
+
+Use `thread_interact` for later messages, status previews, metadata, and user-authorized archive operations. Use `read_thread` rather than message previews when the parent needs the child's full result, rationale, evidence, or error.
+
+Set `archive_when_done` only for a disposable one-off task that will not need review or follow-up. Do not archive a reviewable implementation merely because its current turn finished.
+
+### Native control boundary
+
+The native `thread_interact` contract does not currently expose active-turn cancellation. Archiving a thread is not a substitute: it changes visibility but does not mean the active turn stopped.
+
+Do not add a custom cancellation subsystem for occasional use. If active-turn cancellation becomes a recurring need, request a native `thread_interact` cancellation action from Amp.
+
+### Use named specialists only when requested
 
 | User request | Tool | Boundary |
 | --- | --- | --- |
-| Use Claude or Claude Code | `claude_code_subagent` | Read-only review, patch proposal or research. Amp makes and verifies edits. |
-| Use Claude Design | `claude_design_subagent` | May create or modify a cloud-hosted Claude Design project. It cannot edit local files. |
-| Use Pi, pi.dev or Pi Coding Agent | `pi_code_subagent` | Read-only review, patch proposal or research. Amp makes and verifies edits. |
+| Use Claude or Claude Code | `claude_code_subagent` | Read-only review, patch proposal, or research. Amp makes and verifies local edits. |
+| Use Claude Design | `claude_design_subagent` | May modify a cloud-hosted design project. It cannot edit local files. |
+| Use Pi, pi.dev, or Pi Coding Agent | `pi_code_subagent` | Read-only review, patch proposal, or research. Amp makes and verifies local edits. |
 
-Do not substitute one named specialist for another. Do not invoke any of them without the matching explicit user request.
-
-### Choose an addressable child mechanism
-
-Choose the mechanism from the controls the task needs. Ultra mode does not decide this choice.
-
-| Need | Mechanism |
-| --- | --- |
-| Normal cross-turn work, later messaging, an Orb, a runner, another project or an Ultra review whose state is available there | built-in `create_thread` |
-| Local workspace state, an arbitrary local `cwd`, hard Oracle rejection, active-turn cancellation, mandatory `read_thread` reconstruction or managed reporting and archiving | `spawn_subagent` |
-| An explicit `/subagent`, `|subagent` or “spawn a subagent” request | `spawn_subagent` |
-
-Use the native route only when `create_thread` is available in the current surface and its executor can see the required workspace state. If either condition fails, use `spawn_subagent` when its executor can see that state. Otherwise, keep the work in the parent.
-
-For a native child, use one completion path: ask the child to reply and continue without waiting, or omit the reply request and use `wait_for_threads` when progress depends on its result. Never combine both paths. Inspect the outcome with `read_thread` before treating it as successful.
-
-### Choose where a managed child runs
-
-Choose the execution target only after choosing `spawn_subagent`:
-
-| Need | Target |
-| --- | --- |
-| Use the parent's current machine and working directory | local execution, which is the default |
-| Use an Amp cloud sandbox | Orb execution |
-| Use a known live Amp runner | runner execution with its stable ID |
-
-Orb children use the Orb workspace. Runner children use the selected runner's workspace. Do not pass a parent-machine `cwd` to either remote target.
-
-`spawn_subagent` cannot discover runners. Use only a stable runner ID supplied by the user or existing context.
-
-See [Choose where the subagent runs](./spawn-subagent.md#choose-where-the-subagent-runs) for the full `executor` and `cwd` contract.
-
-### Control a child
-
-Use `thread_interact` for native child messaging and metadata. Use `subagent_control` only for a child created by `spawn_subagent` when the user asks to inspect, diagnose or cancel it.
-
-Normal managed-child completion arrives through `send_to_thread`. Do not poll while waiting.
-
-## Behavior
-
-Repository instructions contain the stable delegation rules that agents need before loading this skill. Agents consider independent, bounded workstreams before non-trivial work. They keep simple reads, searches, localised edits and unresolved design decisions in the parent. They also recognise explicit subagent and side-question triggers.
-
-The skill contains the detailed routing rules. It first checks whether direct work or a specialist already covers the task. For child work, it resolves decisive `spawn_subagent` requirements before the broader `create_thread` branch. It uses built-in `Task` for ordinary bounded work that does not need an addressable thread.
-
-Default Oracle remains the focused expert path for hard judgment calls, tricky reviews, alternative analysis and complex plans. An Ultra child provides a full review of completed work with an isolated agent. Its current routing can also add an independent perspective. Neither path replaces the other. When diversity matters, choose the reviewer whose current model or provider differs from the parent. This can reduce correlated model bias. Do not assume routing stays fixed.
-
-Ultra mode does not select the child-thread mechanism. The review brief must prohibit edits, state the intended behavior, include exact change-set evidence when line-level fidelity matters, and ask for high-confidence findings only. The parent integrates the result before it treats the review as complete.
-
-It applies the same safety rules to every mechanism:
-
-- define the scope, constraints and non-goals, success criteria, validation, and completion contract in each brief
-- require a done report with evidence or a blocked report that names the smallest parent input needed
-- ask the user when a child is blocked or when only the user can provide the required input
-
-The parent checks the result against the success criteria. If a criterion is not met, the parent closes the gap directly or uses a focused follow-up supported by the mechanism. This feedback is event-driven: agents do not poll spawned children for completion.
+Do not infer a named specialist from generic “agent” or “subagent” wording, and do not substitute one named specialist for another.
 
 ### Delegate side questions
 
-A side question introduced with `btw` or `|btw` always makes delegation worthwhile. Delegating it lets the parent preserve its current task.
-
-Handle the side question as follows:
+When the user introduces a side question with `btw` or `|btw`, delegate it so it does not displace the parent's current task:
 
 - remove the trigger from the delegated brief
-- use built-in `Task` by default, including when the parent continues useful work in the same turn
-- use `create_thread` when the question must report across parent turns or needs later messaging or follow-up
-- use `create_thread` only when its executor can see the required state
-- use `spawn_subagent` when `create_thread` is unavailable or cannot see the required state, but only when the wrapper can see that state
+- use `Task` by default
+- use `create_thread` when the question should report across turns or may need follow-up
+
+## Behavior
+
+The skill applies this order:
+
+1. Keep direct, simple, overlapping, or unresolved design work in the parent.
+2. Prefer a specialist tool when one owns the task.
+3. Honor explicit named-specialist requests.
+4. Use `oracle` only for a specific unresolved high-impact judgment.
+5. Use `Task` for bounded work needed in the current turn.
+6. Use `create_thread` for addressable cross-turn work.
+
+An explicit request to “spawn a subagent”, `/subagent`, or `|subagent` means the user wants an addressable native child thread, so use `create_thread`. Prefer `|subagent` at the start of an Amp prompt because `/` is reserved for the command palette.
+
+Ultra is a mode choice, not a separate lifecycle. Use it only for a genuinely hard independent review of completed work. Make the brief read-only, state the intended behavior, include exact change-set evidence when line-level fidelity matters, and ask for high-confidence findings only. Do not assume model routing stays fixed.
 
 ## Permissions and side effects
 
-Loading the skill only adds instructions to agent context. The skill does not create threads, invoke tools, edit files, access the network or write logs.
+Loading the skill only adds instructions to agent context. Side effects begin when the agent invokes a selected tool.
 
-Side effects start only when the agent invokes a delegation mechanism.
+- `Task` performs delegated work within the parent turn.
+- `create_thread` creates and prompts another Amp thread.
+- `thread_interact` can message or change metadata for an existing thread.
+- archive and external shared-state operations still require the user authorization defined by their native tool contracts.
 
 ## Examples
 
-### Test the decision
-
 | Scenario | Choice | Why |
 | --- | --- | --- |
-| Read one known file, find one exact symbol, or make one localized edit | Direct work | Delegation costs more than the task. |
-| Trace a behavior across several local modules | `finder` | A specialist search tool already owns the job. |
+| Read one known file or make one localized edit | Direct work | Delegation costs more than the task. |
+| Trace behavior across several local modules | `finder` | A specialist search tool owns codebase discovery. |
 | Explain architecture in an external repository | `librarian` | External codebase understanding is specialist work. |
-| Get a focused second opinion on a genuinely hard judgment call, tricky review or complex plan | `oracle` | Expert judgment is needed without the lifecycle of a full child thread. |
-| Review completed work with Ultra's current model routing | Ultra-mode child thread | Choose `create_thread` or `spawn_subagent` from the required lifecycle and controls. |
-| "Ask Claude Code to review this diff" | `claude_code_subagent` | The user explicitly selected the read-only Claude Code adviser. |
-| "Use Claude Design to create this design" | `claude_design_subagent` | The user explicitly authorised the cloud design workflow and its possible cloud writes. |
-| "Ask Pi to propose a patch" | `pi_code_subagent` | The user explicitly selected the read-only Pi adviser. |
-| Investigate a bounded failure whose result determines the current response | Built-in `Task` | The parent needs the result before this turn can finish. |
-| Run two independent checks while the parent does other useful work in the same turn | Concurrent built-in `Task` calls | Each Task returns one final summary before the parent turn ends. |
-| Implement a bounded independent slice while the parent continues shaping the design in the same turn | Built-in `Task` | Concurrent work within a turn does not need an addressable child thread. |
-| Run durable delegated work in an Amp Orb, on a known live runner or in another project | Built-in `create_thread` | Native threads support these normal execution targets. |
-| Investigate a slice that may require a later product or architecture decision from the parent | Built-in `create_thread` | The child can remain open for required follow-up. |
-| "Ask an agent to check this" or "run this in parallel" | Built-in `Task` | Generic agent wording and concurrency alone do not imply an addressable child thread. |
-| “Btw, why does this test use a fake clock?” or `\|btw why does this test use a fake clock?` | Built-in `Task` by default | The aside must not displace the parent's current task; delegate the question after removing the trigger. |
-| A `btw` aside that can report later or may need parent follow-up | Built-in `create_thread` | The aside benefits from a normal addressable child thread. |
-| "Spawn a subagent", `/subagent`, or `\|subagent` | `spawn_subagent` | The user explicitly selected an addressable child thread. Bound the brief before invoking it. |
-| "Which subagents are running?" | `subagent_control` with `list` | Return a point-in-time view of child states and report statuses without waiting. |
-| "Check that subagent" | `subagent_control` with `status` | Return that child's point-in-time state, report status, and report summary without waiting. |
-| "Stop that subagent" | `subagent_control` with `cancel` | Stop the owned child's active turn without archiving or deleting its thread. |
-| Two workers would edit the same file or depend on each other's uncommitted changes | Do not parallelize | Overlapping writes are not independent; use one worker or work directly. |
-| The parent has not decided what should be built | Keep designing in the parent | Do not delegate understanding or ask a worker to choose the product direction. |
-| The result is neither needed now nor useful as durable follow-up | Do not delegate | There is no useful coordination outcome. |
-
-An explicit mechanism request wins over the default decision order unless it would create unsafe or overlapping work. An explicit `spawn_subagent` request still needs a bounded brief.
+| Investigate two independent failures needed for the current response | Parallel `Task` calls | Both results are required in this turn. |
+| Run durable work in an Orb, on a runner, or in another project | `create_thread` | The work needs an addressable cross-turn lifecycle. |
+| “Spawn a subagent to review this later” or `|subagent ...` | `create_thread` | The user explicitly selected an addressable child thread. |
+| “Ask Claude Code to review this diff” | `claude_code_subagent` | The user explicitly selected the named adviser. |
+| Two workers would edit the same file | Do not parallelize | The write targets overlap. |
+| Product direction is undecided | Keep designing in the parent | Do not delegate understanding or product ownership. |
 
 ## Troubleshooting
 
-- Skill unavailable: confirm `skills/delegating-subagents/SKILL.md` exists and run `./sync-skills.sh`.
-- Hard judgment used the wrong review path: use default Oracle for a focused expert opinion. Use an Ultra-mode child for a full independent review of completed work, then choose its mechanism from the required controls.
-- Review lacks model diversity: choose the reviewer whose current model or provider differs from the parent. Do not assume routing stays fixed.
-- Named specialist not selected: confirm the user explicitly requested Claude Code, Claude Design or Pi. Generic agent wording does not qualify.
-- Wrong delegation mechanism selected: resolve `spawn_subagent` requirements first. Otherwise use `create_thread` for normal addressable work when it is available and can see the required state, falling back to `spawn_subagent` when that wrapper can see the state. Use `Task` for ordinary one-turn work.
-- Native child completion is ambiguous: choose either an asynchronous reply or `wait_for_threads`. Never use both, and inspect the outcome with `read_thread`.
-- Spawned child needs inspection or cancellation: use `subagent_control`; do not repeatedly query it for completion.
+- A native child cannot see required local state: select an executor that can, transfer the required files, or use `Task` when the result belongs in the current turn.
+- Native completion is ambiguous: choose either an asynchronous reply or a blocking `wait_for_threads` join, never both. Use `read_thread` for the complete result.
+- A child needs more context: send one focused follow-up with `thread_interact`.
+- A child is active but should stop: native `thread_interact` has no cancellation action. Do not claim archive cancels it.
 - Parallel edits conflict: delegate only independent slices with non-overlapping write targets.
 
 ## Maintenance notes
 
-Maintain the delegation guidance as follows:
-
-- use this document as the source of truth for the skill artifact
-- keep detailed routing rules in the skill
-- keep only stable delegation rules in repository instructions
-- align both layers with default Oracle, mechanism-neutral Ultra reviews, built-in `create_thread`, and the managed-local `spawn_subagent` wrapper
-- align both layers with named specialist contracts and the `spawn-subagent` and `subagent-control` capability documents
-- omit lifecycle rules from the skill when built-in tool descriptions already carry them, including the `Task`, `create_thread`, and `wait_for_threads` completion contracts
-- omit the quick-test section from the skill
-- keep only ambiguous stress cases in the skill
-- keep the full maintainer-facing examples in this document
+- Keep this document as the source of truth for `skills/delegating-subagents/SKILL.md`.
+- Keep stable routing rules in `amp/AGENTS.md` and detailed lifecycle guidance here and in the skill.
+- Prefer native Amp tools over custom wrappers.
+- Re-check the contract when Amp changes `Task`, `create_thread`, `thread_interact`, `wait_for_threads`, or `read_thread`.

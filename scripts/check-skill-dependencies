@@ -1,0 +1,130 @@
+#!/usr/bin/env python3
+"""Validate skill dependencies declared in SKILL.md frontmatter."""
+
+from __future__ import annotations
+
+import argparse
+import re
+import sys
+from pathlib import Path
+
+
+NAME_PATTERN = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*")
+
+
+def frontmatter_lines(skill_file: Path) -> list[str]:
+    lines = skill_file.read_text().splitlines()
+    if not lines or lines[0] != "---":
+        return []
+    try:
+        end = lines.index("---", 1)
+    except ValueError:
+        return []
+    return lines[1:end]
+
+
+def declared_dependencies(skill_file: Path) -> list[str]:
+    dependencies: list[str] = []
+    in_metadata = False
+    in_requires = False
+
+    for line in frontmatter_lines(skill_file):
+        if line == "metadata:":
+            in_metadata = True
+            in_requires = False
+            continue
+        if in_metadata and line and not line.startswith("  "):
+            in_metadata = False
+            in_requires = False
+        if not in_metadata:
+            continue
+        if line == "  requires:":
+            in_requires = True
+            continue
+        if in_requires:
+            match = re.fullmatch(r"    -\s+(.+?)\s*", line)
+            if match:
+                dependencies.append(match.group(1))
+            elif line and not line.startswith("    "):
+                in_requires = False
+
+    return dependencies
+
+
+def enabled_remote_skills(config_file: Path) -> set[str]:
+    if not config_file.is_file():
+        return set()
+
+    enabled: set[str] = set()
+    current_name: str | None = None
+    current_enabled = False
+
+    def flush() -> None:
+        if current_name and current_enabled:
+            enabled.add(current_name)
+
+    for line in config_file.read_text().splitlines():
+        name_match = re.match(r"^\s*-\s+name:\s*(\S+)\s*$", line)
+        if name_match:
+            flush()
+            current_name = name_match.group(1)
+            current_enabled = False
+            continue
+        enabled_match = re.match(r"^\s+enabled:\s*(true|false)\s*$", line)
+        if enabled_match and current_name:
+            current_enabled = enabled_match.group(1) == "true"
+    flush()
+    return enabled
+
+
+def main() -> int:
+    repo_dir = Path(__file__).resolve().parent.parent
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--skills-dir", type=Path, default=repo_dir / "skills")
+    parser.add_argument(
+        "--remote-config", type=Path, default=repo_dir / "remote-skills.yaml"
+    )
+    parser.add_argument("--list", action="store_true", dest="list_dependencies")
+    parser.add_argument("--require-installed", action="store_true")
+    args = parser.parse_args()
+
+    declarations: list[tuple[str, str]] = []
+    errors: list[str] = []
+    remote_skills = enabled_remote_skills(args.remote_config)
+
+    for skill_file in sorted(args.skills_dir.glob("*/SKILL.md")):
+        owner = skill_file.parent.name
+        dependencies = declared_dependencies(skill_file)
+        if len(dependencies) != len(set(dependencies)):
+            errors.append(f"{owner}: dependencies contain duplicates")
+        for dependency in dependencies:
+            declarations.append((owner, dependency))
+            if not NAME_PATTERN.fullmatch(dependency):
+                errors.append(f"{owner}: invalid dependency name {dependency!r}")
+                continue
+            if dependency == owner:
+                errors.append(f"{owner}: cannot depend on itself")
+                continue
+            installed = (args.skills_dir / dependency / "SKILL.md").is_file()
+            if args.require_installed and not installed:
+                errors.append(f"{owner}: required skill {dependency} is not installed")
+            elif not installed and dependency not in remote_skills:
+                errors.append(
+                    f"{owner}: required skill {dependency} has no local or enabled remote source"
+                )
+
+    if errors:
+        for error in errors:
+            print(f"error: {error}", file=sys.stderr)
+        return 1
+
+    if args.list_dependencies:
+        for owner, dependency in declarations:
+            print(f"{owner}|{dependency}")
+    else:
+        print(f"Skill dependency check passed ({len(declarations)} declared)")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

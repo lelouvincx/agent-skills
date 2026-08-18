@@ -239,11 +239,25 @@ skills:
     url: https://raw.githubusercontent.com/mattpocock/skills/main/skills/engineering/to-spec/SKILL.md
     enabled: true
 
-  - name: analyze-data
-    url: https://raw.githubusercontent.com/holistics/skills/main/plugins/holistics-development/skills/analyze-data/SKILL.md
+  - name: build-custom-chart
+    url: https://raw.githubusercontent.com/holistics/skills/main/plugins/holistics-development/skills/build-custom-chart/SKILL.md
     enabled: true
-    files:
-      - .link
+
+  - name: build-dashboard
+    url: https://raw.githubusercontent.com/holistics/skills/main/plugins/holistics-development/skills/build-dashboard/SKILL.md
+    enabled: true
+
+  - name: build-dashboard-controls
+    url: https://raw.githubusercontent.com/holistics/skills/main/plugins/holistics-development/skills/build-dashboard-controls/SKILL.md
+    enabled: true
+
+  - name: build-dashboard-theme
+    url: https://raw.githubusercontent.com/holistics/skills/main/plugins/holistics-development/skills/build-dashboard-theme/SKILL.md
+    enabled: true
+
+  - name: build-visualizations
+    url: https://raw.githubusercontent.com/holistics/skills/main/plugins/holistics-development/skills/build-visualizations/SKILL.md
+    enabled: true
 
   - name: convert-agent-skill-to-holistics
     url: https://raw.githubusercontent.com/holistics/skills/main/plugins/holistics-development/skills/convert-agent-skill-to-holistics/SKILL.md
@@ -287,18 +301,6 @@ skills:
 
   - name: search-docs
     url: https://raw.githubusercontent.com/holistics/skills/main/plugins/holistics-development/skills/search-docs/SKILL.md
-    enabled: true
-    files:
-      - .link
-
-  - name: use-existing-viz
-    url: https://raw.githubusercontent.com/holistics/skills/main/plugins/holistics-development/skills/use-existing-viz/SKILL.md
-    enabled: true
-    files:
-      - .link
-
-  - name: visualize-data
-    url: https://raw.githubusercontent.com/holistics/skills/main/plugins/holistics-development/skills/visualize-data/SKILL.md
     enabled: true
     files:
       - .link

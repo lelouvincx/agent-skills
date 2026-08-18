@@ -1,8 +1,8 @@
-// @amp-plugin — DeepSeek V4 Pro agent mode.
-// @amp-agent-mode {"key":"deepseek-v4-pro","label":"DeepSeek V4 Pro"}
+// @amp-plugin — DeepSeek V4 Flash agent mode.
+// @amp-agent-mode {"key":"deepseek-v4-flash","label":"DeepSeek V4 Flash"}
 
 // Uses the same system prompt and tool list as the deprecated built-in Deep
-// mode (deep-classic.ts), but backed by DeepSeek V4 Pro with xhigh reasoning.
+// mode (deep-classic.ts), but backed by DeepSeek V4 Flash with xhigh reasoning.
 // The prompt is the static instruction region of
 // thread-actors/src/inference/system-prompts/deep.md.njk (everything before
 // the dynamic workspace/environment sections, which Amp appends to plugin
@@ -94,18 +94,18 @@ export default function(amp: PluginAPI) {
 	}
 
 	const agent = amp.experimental.createAgent({
-		name: 'deepseek-v4-pro',
-		model: 'baseten/deepseek-ai/DeepSeek-V4-Pro',
+		name: 'deepseek-v4-flash',
+		model: 'baseten/deepseek-ai/DeepSeek-V4-Flash-0731',
 		instructions: DEEP_PROMPT,
 		tools: DEEP_TOOLS,
 		reasoningEffort: 'xhigh',
-		display: { label: 'DeepSeek V4 Pro', color: '#2563eb' },
+		display: { label: 'DeepSeek V4 Flash', color: '#2563eb' },
 	})
 
 	amp.experimental.registerAgentMode({
-		key: 'deepseek-v4-pro',
-		label: 'DeepSeek V4 Pro',
-		description: 'DeepSeek V4 Pro-driven agent mode with xhigh reasoning.',
+		key: 'deepseek-v4-flash',
+		label: 'DeepSeek V4 Flash',
+		description: 'DeepSeek V4 Flash-driven agent mode with xhigh reasoning.',
 		color: '#2563eb',
 		agent: agent.definition,
 	})

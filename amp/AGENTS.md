@@ -15,16 +15,18 @@
 - Load `delegating-subagents` before delegating and when hard review or expert judgment could use default Oracle or an Ultra child. The skill selects the reviewer and child-thread mechanism separately.
 - Every delegated task needs a bounded brief with scope, constraints and non-goals, success criteria, validation, and a completion contract. Require a done report with evidence or a blocked report naming the smallest parent input needed. The parent verifies the result and closes any gap directly or through a focused follow-up.
 - Ask the user when a blocked subagent or the parent needs input only the user can provide. Subagents must report the required input rather than guess.
-- When a user message starts with `|subagent` or `/subagent`, call `spawn_subagent` with the remaining message as the bounded subagent instructions.
+- When a user message starts with `|subagent` or `/subagent`, call `create_thread` with the remaining message as the bounded subagent instructions.
 - Treat side questions introduced with `btw` or triggered with `|btw` as delegation requests so they do not displace the parent's current task. Load the `delegating-subagents` skill to choose the mechanism.
 
 ## Conventions
 
+- Before using `agent-browser`, read `{AMP_CONFIG_DIR:~/.config/amp}/conventions/agent-browser.md`.
 - Before working with `.aml` files or interpreting Holistics query results, read `{AMP_CONFIG_DIR:~/.config/amp}/conventions/holistics.md`.
 - Before writing or editing SQL, read `{AMP_CONFIG_DIR:~/.config/amp}/conventions/sql.md`.
 - Before changing Amp plugin documentation or code, read `{AMP_CONFIG_DIR:~/.config/amp}/conventions/amp-plugins.md`.
 - Before searching, creating, or moving Linear issues, read `{AMP_CONFIG_DIR:~/.config/amp}/conventions/linear.md`.
 - Before reading or writing Notion content, read `{AMP_CONFIG_DIR:~/.config/amp}/conventions/notion.md`.
+- Before changing or operating Logseq report automation, its service-account authentication, or its bot repository allowlist, read `{AMP_CONFIG_DIR:~/.config/amp}/conventions/logseq-report-automation.md`.
 
 ## Secrets and local env files
 
@@ -43,7 +45,7 @@
   - Use `GH_TOKEN_WORK` when the user explicitly requests the work token.
   - Otherwise, use the `chinh-dm-holistics` GitHub profile for Holistics repositories and the `lelouvincx` GitHub profile for personal repositories.
   - Resolve token references at execution time from `~/.credentials/github.env`; pass tokens only through the command environment.
-- After opening a pull request and after each later commit, wait for its GitHub Actions runs to complete. Fix failures and repeat until every run passes.
+- After opening a pull request and after each later commit, check its GitHub Actions runs asynchronously. Fix failures and repeat until every run passes.
 
 ## Project registry
 

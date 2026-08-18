@@ -9,6 +9,8 @@ and this project does not currently use versioned releases.
 
 ### Added
 
+- Add the latest Holistics custom chart, dashboard, dashboard control, dashboard theme, and visualization skills. [#166](https://github.com/lelouvincx/agent-skills/pull/166)
+- Add `showing-code` for compact visual explanations of code, architecture, control flow, state, and diffs. [#159](https://github.com/lelouvincx/agent-skills/pull/159)
 - Add an experimental Gemini 3.5 Flash-backed Amp agent mode. [#152](https://github.com/lelouvincx/agent-skills/pull/152)
 - Add the pinned `diagram-design` remote skill with local artifact, branding and browser-based PNG export guidance. [#150](https://github.com/lelouvincx/agent-skills/pull/150)
 - Add Figma's official `figma-design-to-code` skill with a read-only personal route, a minimal Figma MCP toolset and a 1Password-backed REST fallback. [#147](https://github.com/lelouvincx/agent-skills/pull/147)
@@ -47,6 +49,17 @@ and this project does not currently use versioned releases.
 
 ### Changed
 
+- Replace the custom `spawn_subagent`, `subagent_control`, and `send_to_thread` plugins with native `Task`, `create_thread`, and thread lifecycle tools, and remove obsolete Oracle rejection from Logseq logging workers. [#167](https://github.com/lelouvincx/agent-skills/pull/167)
+- Let users add a custom numbered option to a grilling question when the listed choices do not fit. [#165](https://github.com/lelouvincx/agent-skills/pull/165)
+- Require Holistics user-attribute operations to use the current API specification and API-key authentication. [#163](https://github.com/lelouvincx/agent-skills/pull/163)
+- Move the local agent-browser workflow into an on-demand Amp convention and require each headed Chrome session to use its persistent local profile on a new, dedicated CDP port, with user-assisted sign-in when authentication is required. [#162](https://github.com/lelouvincx/agent-skills/pull/162)
+- Resolve the `testing4` project from its location under the `presales` workspace. [#161](https://github.com/lelouvincx/agent-skills/pull/161)
+- Document Logseq report service-account authentication, biometric-free verification and the fail-closed bot repository allowlist in an on-demand Amp convention, and require bot-only publishing for this repository. [#160](https://github.com/lelouvincx/agent-skills/pull/160)
+- Declare and lint skill dependencies, and automatically install `diagram-design` when projecting `showing-code`. [#159](https://github.com/lelouvincx/agent-skills/pull/159)
+- Document repository-wide Holistics code sync behavior, file-size and binary merge limits, recovery, conflict resolution and completion checks. [#158](https://github.com/lelouvincx/agent-skills/pull/158)
+- Project Amp convention files into the runtime config as an independent directory instead of a repository-backed symlink. [#157](https://github.com/lelouvincx/agent-skills/pull/157)
+- Use Amp's Fable prompt and tools as the documented contract for the DeepSeek V4 Flash and Gemini 3.5 Flash modes, and remove the unused Deep Classic capability document. [#157](https://github.com/lelouvincx/agent-skills/pull/157)
+- Rename the DeepSeek V4 agent mode from Pro to Flash, anchored to `baseten/deepseek-ai/DeepSeek-V4-Flash-0731`, and update the Pi Code subagent default model to match. [#156](https://github.com/lelouvincx/agent-skills/pull/156)
 - Guide `teach` lessons to use accessible, print-friendly explanations, concrete examples, Chrome-rendered diagrams, and glossary-derived Leitner flashcards. [#154](https://github.com/lelouvincx/agent-skills/pull/154)
 - Move Holistics, SQL, Amp plugin, Linear and Notion instructions into symlink-projected convention files; scope remaining personal Amp guidance to explicit triggers; and remove Presales-specific guidance from the global projection. [#153](https://github.com/lelouvincx/agent-skills/pull/153)
 - Deduplicate delegation guidance: trim the `delegating-subagents` skill to its unique routing rules, make the capability document's Summary table the single decision-order statement, merge the repository-instruction delegation bullets, and require asking the user when a blocked child or the parent needs user-only input. [#151](https://github.com/lelouvincx/agent-skills/pull/151)
@@ -124,6 +137,7 @@ and this project does not currently use versioned releases.
 
 ### Removed
 
+- Remove the redundant Holistics development plugin and the unused `analyze-data`, `use-existing-viz`, and `visualize-data` skills. [#164](https://github.com/lelouvincx/agent-skills/pull/164)
 - Remove the `ponytail`, `ponytail-review`, and `ponytail-help` remote skills and clean their generated artifacts from existing projections. [#155](https://github.com/lelouvincx/agent-skills/pull/155)
 - Remove the retired `remotion` remote skill and clean its generated artifacts from existing projections. [#142](https://github.com/lelouvincx/agent-skills/pull/142)
 - Remove the unused Inkling agent mode and its capability documentation. [#135](https://github.com/lelouvincx/agent-skills/pull/135)
