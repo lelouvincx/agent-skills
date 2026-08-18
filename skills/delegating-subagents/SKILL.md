@@ -18,9 +18,11 @@ The [Delegating Subagents artifact document](../../amp/docs/tools/delegating-sub
 5. Use built-in `Task` for bounded work whose result is needed in the current parent turn. This includes independent concurrent workstreams.
 6. Use built-in `create_thread` for addressable cross-turn work, later follow-up, another project, an Orb, or a runner. Choose an executor that can see the required workspace state.
 
-Ultra is a mode choice, not a separate lifecycle. Reserve it for a genuinely hard independent review of completed parent work. Make the brief read-only, state the intended behavior, include exact change-set evidence when line-level fidelity matters, and request high-confidence findings only. Do not assume model routing stays fixed.
-
-Claude Code and Pi are read-only advisers. Amp applies and verifies local changes. Claude Design may modify a cloud-hosted design project, but it cannot edit local files.
+| Choice | Boundary |
+| --- | --- |
+| Ultra | A mode, not a lifecycle. Reserve it for hard independent review of completed parent work. Use a read-only brief with intended behavior and exact change-set evidence. Request high-confidence findings and do not assume model routing stays fixed. |
+| Claude Code or Pi | Read-only advice. Amp applies and verifies local changes. |
+| Claude Design | May modify a cloud-hosted design project, but cannot edit local files. |
 
 ## Brief every delegated task
 
