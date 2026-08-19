@@ -7,7 +7,7 @@ description: "Routes delegation to direct work, specialist tools, Task, or creat
 
 Choose the smallest mechanism that gives the parent the result and lifecycle it needs.
 
-The [Delegating Subagents artifact document](../../amp/docs/tools/delegating-subagents.md) is the source of truth for these rules.
+Before calling `create_thread`, read and follow the [artifact document's “Use create_thread for addressable work” section](../../amp/docs/tools/delegating-subagents.md#use-create_thread-for-addressable-work). That section is the source of truth for runner placement and native child-thread lifecycle.
 
 ## Route the work
 
@@ -16,7 +16,7 @@ The [Delegating Subagents artifact document](../../amp/docs/tools/delegating-sub
 3. If the user explicitly requests Claude or Claude Code, use `claude_code_subagent`. If they explicitly request Claude Design, use `claude_design_subagent`. If they explicitly request Pi, pi.dev, or Pi Coding Agent, use `pi_code_subagent`. Do not infer a named specialist from generic agent wording or substitute one named specialist for another.
 4. Use `oracle` only for one specific unresolved high-impact judgment after direct investigation.
 5. Use built-in `Task` for bounded work whose result is needed in the current parent turn. This includes independent concurrent workstreams.
-6. Use built-in `create_thread` for addressable cross-turn work, later follow-up, another project, an Orb, or a runner. Choose an executor that can see the required workspace state.
+6. Use built-in `create_thread` for addressable cross-turn work or later follow-up.
 
 | Choice | Boundary |
 | --- | --- |

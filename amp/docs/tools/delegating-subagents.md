@@ -21,7 +21,7 @@ amp:
   docs_sources:
     api_docs: null
     agent_options: null
-  last_verified: "2026-08-18"
+  last_verified: "2026-08-19"
 contract:
   input_kind: "natural_language"
   output_kind: "instructions"
@@ -38,12 +38,14 @@ runtime:
     - "claude_design_subagent"
     - "pi_code_subagent"
     - "built-in Task"
+    - "built-in list_runners"
     - "built-in create_thread"
     - "built-in thread_interact"
     - "built-in wait_for_threads"
     - "built-in read_thread"
   dependencies:
     - "built-in Task contract"
+    - "built-in list_runners contract"
     - "built-in create_thread contract"
     - "built-in thread lifecycle tools"
   env: []
@@ -59,7 +61,7 @@ safety:
     - "Prefer direct or specialist tools when delegation overhead exceeds the task."
     - "Give every delegated task a bounded brief with scope, constraints, non-goals, success criteria, validation, and a completion contract."
     - "Use Task for bounded work whose result is needed in the current parent turn."
-    - "Use create_thread for addressable cross-turn work whose selected executor can see the required state."
+    - "create_thread may create a child only when its runner_id exactly matches the verified live parent runner ID; otherwise ask the user."
     - "Choose exactly one create_thread result path: asynchronous reply or blocking wait."
     - "Use thread_interact for native follow-up and metadata operations."
     - "Use wait_for_threads and read_thread when the parent must block for and inspect a complete child result."
@@ -68,7 +70,7 @@ safety:
     - "The parent remains responsible for synthesis, integration, and final verification."
   risks:
     - "Choosing a cross-turn child thread for ordinary in-turn work adds unnecessary coordination overhead."
-    - "An Orb cannot see uncommitted local state unless that state is transferred or otherwise made available."
+    - "Choosing another runner gives the child a different checkout or workspace state."
     - "Concurrent agents editing overlapping files can create conflicting changes."
     - "Native thread_interact does not currently expose active-turn cancellation."
 related:
@@ -92,7 +94,7 @@ Choose the smallest mechanism that gives the parent the result and lifecycle it 
 | --- | --- |
 | The task is small or a specialist tool already owns it | work directly or use the specialist tool |
 | The result is needed before the current parent turn can finish | built-in `Task` |
-| The work needs an addressable thread, later messaging, cross-turn reporting, another project, an Orb, or a runner | built-in `create_thread` |
+| The work needs an addressable thread, later messaging, or cross-turn reporting | built-in `create_thread` |
 | The parent needs a focused expert judgment on one unresolved high-impact decision | `oracle` |
 | The user explicitly asks for Claude Code, Claude Design, or Pi | the matching named specialist |
 
@@ -130,7 +132,15 @@ Do not use `Task` for simple reads, exact searches, one localized edit, ordinary
 
 ### Use create_thread for addressable work
 
-Use `create_thread` when the work should continue across turns or needs an addressable thread for later follow-up. Choose an executor and project that can see the required workspace state. Do not assume a new Orb can see the current machine's uncommitted changes.
+Use `create_thread` when the work should continue across turns or needs an addressable thread for later follow-up.
+
+Before `create_thread`:
+
+1. Obtain the parent thread's runner ID from thread or runtime context, or from explicit user input. A matching repository, working directory, or machine is insufficient evidence.
+2. Immediately before creation, call `list_runners` and confirm that exact ID is live.
+3. Call `create_thread` with `executor: "runner"` and `runner_id` equal to that exact ID.
+
+Runner placement is complete only when the passed `runner_id` exactly matches the verified live parent runner ID. If the ID is unknown or is not live, ask the user to identify or restart the parent runner and leave the child uncreated.
 
 Choose exactly one completion path:
 
@@ -197,7 +207,7 @@ Loading the skill only adds instructions to agent context. Side effects begin wh
 | Trace behavior across several local modules | `finder` | A specialist search tool owns codebase discovery. |
 | Explain architecture in an external repository | `librarian` | External codebase understanding is specialist work. |
 | Investigate two independent failures needed for the current response | Parallel `Task` calls | Both results are required in this turn. |
-| Run durable work in an Orb, on a runner, or in another project | `create_thread` | The work needs an addressable cross-turn lifecycle. |
+| Run durable work that needs later follow-up | `create_thread` | The work needs an addressable cross-turn lifecycle. |
 | “Spawn a subagent to review this later” or `|subagent ...` | `create_thread` | The user explicitly selected an addressable child thread. |
 | “Ask Claude Code to review this diff” | `claude_code_subagent` | The user explicitly selected the named adviser. |
 | Two workers would edit the same file | Do not parallelize | The write targets overlap. |
@@ -205,7 +215,6 @@ Loading the skill only adds instructions to agent context. Side effects begin wh
 
 ## Troubleshooting
 
-- A native child cannot see required local state: select an executor that can, transfer the required files, or use `Task` when the result belongs in the current turn.
 - Native completion is ambiguous: choose either an asynchronous reply or a blocking `wait_for_threads` join, never both. Use `read_thread` for the complete result.
 - A child needs more context: send one focused follow-up with `thread_interact`.
 - A child is active but should stop: native `thread_interact` has no cancellation action. Do not claim archive cancels it.
