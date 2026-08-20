@@ -67,10 +67,10 @@ Local skills are maintained in this repository. Remote skills are fetched and pr
 | [holistics-migrate-power-bi](skills/holistics-migrate-power-bi/SKILL.md) | Remote | migrate Power BI models and reports to Holistics |
 | [impeccable](skills/impeccable/SKILL.md) | Remote | design, review, and improve frontend interfaces |
 | [linear-cli](skills/linear-cli/SKILL.md) | Remote | manage Linear issues from the command line |
-| [managing-proto-image-deployments](skills/managing-proto-image-deployments/SKILL.md) | Local | deploy proto images with verified secrets and bounded acceptance checks |
 | [modern-web-guidance](skills/modern-web-guidance/SKILL.md) | Remote | check current web platform guidance before frontend work |
 | [notion](skills/notion/SKILL.md) | Remote | manage Notion pages, databases, and comments |
 | [prototype](skills/prototype/SKILL.md) | Remote | build throwaway logic or UI prototypes to test a design |
+| [proto](skills/proto/SKILL.md) | Local | deploy proto images with verified secrets and bounded acceptance checks |
 | [readai](skills/readai/SKILL.md) | Local | retrieve speaker-attributed Read AI call transcripts |
 | [reading-social-posts](skills/reading-social-posts/SKILL.md) | Local | read social posts and inspect all attached media through TikHub |
 | [resolving-projects](skills/resolving-projects/SKILL.md) | Local | resolve spoken project names to paths and GitHub repositories |

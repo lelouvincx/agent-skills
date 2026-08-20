@@ -1,9 +1,9 @@
 ---
-name: managing-proto-image-deployments
+name: proto
 description: Guides safe, bounded `proto deploy --image` workflows. Use when an agent prepares or reviews a proto image deployment, configures its 1Password-backed secrets, verifies preview or live behavior, or explains deployment elapsed time.
 ---
 
-# Managing Proto Image Deployments
+# Proto Deployments
 
 Treat a proto image deployment as a preview-PR workflow with two gates: verified secret inputs before deployment and explicit approval before merge.
 
