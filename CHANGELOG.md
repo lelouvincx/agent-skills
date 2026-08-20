@@ -9,6 +9,7 @@ and this project does not currently use versioned releases.
 
 ### Added
 
+- Add `managing-proto-image-deployments` for verified secret handoffs, bounded preview acceptance, explicit merge approval, and evidence-based deployment reviews.
 - Ask for permission before `slackcli` sends messages or files, creates drafts, or adds reactions. [#170](https://github.com/lelouvincx/agent-skills/pull/170)
 - Add the latest Holistics custom chart, dashboard, dashboard control, dashboard theme, and visualization skills. [#166](https://github.com/lelouvincx/agent-skills/pull/166)
 - Add `showing-code` for compact visual explanations of code, architecture, control flow, state, and diffs. [#159](https://github.com/lelouvincx/agent-skills/pull/159)

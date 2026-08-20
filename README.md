@@ -34,7 +34,7 @@ See [PROJECTS.md](PROJECTS.md) for the generated project list.
 
 ## Skills
 
-Run `amp skill list` to inspect the active runtime inventory. The current inventory contains 52 skills: 40 projected from this repository, 7 provided by Amp, and 5 provided by plugins.
+Run `amp skill list` to inspect the active runtime inventory. The current inventory contains 53 skills: 41 projected from this repository, 7 provided by Amp, and 5 provided by plugins.
 
 ### Repository skills
 
@@ -67,6 +67,7 @@ Local skills are maintained in this repository. Remote skills are fetched and pr
 | [holistics-migrate-power-bi](skills/holistics-migrate-power-bi/SKILL.md) | Remote | migrate Power BI models and reports to Holistics |
 | [impeccable](skills/impeccable/SKILL.md) | Remote | design, review, and improve frontend interfaces |
 | [linear-cli](skills/linear-cli/SKILL.md) | Remote | manage Linear issues from the command line |
+| [managing-proto-image-deployments](skills/managing-proto-image-deployments/SKILL.md) | Local | deploy proto images with verified secrets and bounded acceptance checks |
 | [modern-web-guidance](skills/modern-web-guidance/SKILL.md) | Remote | check current web platform guidance before frontend work |
 | [notion](skills/notion/SKILL.md) | Remote | manage Notion pages, databases, and comments |
 | [prototype](skills/prototype/SKILL.md) | Remote | build throwaway logic or UI prototypes to test a design |
