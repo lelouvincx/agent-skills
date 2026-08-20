@@ -9,6 +9,7 @@ and this project does not currently use versioned releases.
 
 ### Added
 
+- Ask for permission before `slackcli` sends messages or files, creates drafts, or adds reactions. [#170](https://github.com/lelouvincx/agent-skills/pull/170)
 - Add the latest Holistics custom chart, dashboard, dashboard control, dashboard theme, and visualization skills. [#166](https://github.com/lelouvincx/agent-skills/pull/166)
 - Add `showing-code` for compact visual explanations of code, architecture, control flow, state, and diffs. [#159](https://github.com/lelouvincx/agent-skills/pull/159)
 - Add an experimental Gemini 3.5 Flash-backed Amp agent mode. [#152](https://github.com/lelouvincx/agent-skills/pull/152)

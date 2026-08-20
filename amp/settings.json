@@ -1,5 +1,18 @@
 {
   "amp.dangerouslyAllowAll": true,
+  "amp.permissions": [
+    {
+      "tool": "Bash",
+      "matches": {
+        "cmd": "/(^|[\\s;&|()])(?:[^\\s;&|()]*\\/)?slackcli\\s+messages\\s+(send|draft|react)(?=\\s|$)/"
+      },
+      "action": "ask"
+    },
+    {
+      "tool": "*",
+      "action": "allow"
+    }
+  ],
   "amp.gauge": "tokens",
   "amp.git.commit.ampThread.enabled": false,
   "amp.git.commit.coauthor.enabled": false,
