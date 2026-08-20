@@ -188,6 +188,7 @@ describe('worker result protocol', () => {
 		['unverified backlog with title', JSON.stringify({ ...failedResult, threadTitle: 'invalid' })],
 		['unverified backlog with labels', JSON.stringify({ ...failedResult, threadLabels: ['presales'] })],
 		['multiline title', JSON.stringify({ ...completeResult, threadTitle: '[Presales] Bad\ntitle' })],
+		['label longer than 32 characters', JSON.stringify({ ...completeResult, threadLabels: ['customer-name-that-exceeds-32-chars'] })],
 	])('rejects %s', (_label, value) => {
 		expect(parseWorkerResult(value).ok).toBe(false)
 	})

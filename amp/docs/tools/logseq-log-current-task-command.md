@@ -76,6 +76,7 @@ safety:
     - "Worker must re-read and verify both Logseq files before reporting completion."
     - "Coordinator must independently validate the parent-linked task schema and journal block reference before reporting completion."
     - "Worker must return the exact versioned JSON result."
+    - "Each parent Amp thread label must not exceed 32 characters."
   risks:
     - "Worker can edit the configured Logseq graph."
     - "The coordinator validates the documented task fields and journal pointer, but it does not judge whether the worker summary is semantically complete."
@@ -235,7 +236,7 @@ The result also includes:
 
 If the hint, parent thread or matching Backlog task contains a Linear issue ID, the worker keeps that ID unchanged after the project prefix in `threadTitle`. For example, it uses `[Internal] DAT-745 Support Quality Overview PR #111` rather than dropping `DAT-745`.
 
-The coordinator normalises and removes duplicate labels. A verified Backlog task needs at least one usable label. An unverified Backlog result must return an empty label list.
+The coordinator normalises and removes duplicate labels. Each label must contain no more than 32 characters after normalisation. A verified Backlog task needs at least one usable label. An unverified Backlog result must return an empty label list.
 
 The coordinator rejects extra keys, prose, code fences, invalid field types and contradictory verification results. Malformed output remains `unverified`. It never counts as complete or as a terminal failure.
 
