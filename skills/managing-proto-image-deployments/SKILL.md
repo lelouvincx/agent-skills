@@ -16,7 +16,7 @@ Before deploying:
 1. Confirm the intended repository, worktree, commit, application, environment, image, and immutable digest.
 2. Inspect Git status and preserve unrelated work. Do not deploy from or rewrite an unintended branch.
 3. State that `proto deploy` creates or updates a preview pull request; it does not publish production immediately.
-4. Record the acceptance checks and who can approve the merge. A request to prepare or verify a deployment is not merge approval.
+4. Record the acceptance checks, separate preview and production rollout deadlines, and who can approve the merge. A request to prepare or verify a deployment is not merge approval.
 
 ## Preflight secret provenance
 
@@ -32,25 +32,25 @@ If a vault, item, or field is missing, stop before creating a preview and ask on
 
 ## Deploy and verify once
 
-Run the deploy only after preflight passes. Follow one rollout to completion, then apply the declared acceptance checks:
+Run the deploy only after preflight passes. Follow one rollout until it becomes healthy, reaches terminal failure, or exceeds its declared deadline. On failure or deadline expiry, capture status once, stop, and require new evidence or approval before retrying.
 
-1. deployment status reports healthy;
-2. the HTTP health endpoint succeeds;
-3. signed payload claims and scopes are correct when relevant;
-4. one deterministic browser pass succeeds for each required identity;
-5. one screenshot per identity is captured when evidence is required;
-6. the preview references the expected immutable image digest.
+Always confirm that deployment status is healthy and the preview references the expected immutable image digest. Apply the remaining checks only when the application acceptance contract declares them:
+
+- an HTTP health endpoint succeeds;
+- signed payload claims and scopes are correct;
+- one deterministic browser pass succeeds for each required identity;
+- one screenshot per identity is captured when evidence is required.
 
 Re-snapshot the browser after navigation or page-state changes; stale element references are not evidence. Stop when the declared checks pass. Extra screenshots, registry lookups, repeated dry-runs, and broad source inspection need a specific unresolved question.
 
-Send the evidence and request merge approval immediately after preview acceptance passes. Merge only after explicit approval. After merge, follow one production rollout, confirm health and the immutable digest, and run only the live checks needed to show that the accepted behavior carried over.
+Send the evidence and request merge approval immediately after preview acceptance passes. Merge only after explicit approval. After merge, follow one production rollout to health, terminal failure, or its deadline. Confirm the immutable digest and run only the live checks needed to show that the accepted behavior carried over; apply the same stop-and-escalate rule on failure or deadline expiry.
 
 ## Give precise proto feedback
 
 Separate an observed incident cause from a product improvement:
 
 - If proto assumes the 1Password item name equals the application name, an item override such as `--secret-item <existing-item>` could avoid a generated-config patch when the two names differ. The override should select and persist a verified existing item; it must not imply that proto created the item.
-- An item-level override does not solve a wrong vault, missing fields, or keys sourced from multiple items. Explicit per-key references are the more complete design for those cases.
+- An item-level override does not solve keys sourced from multiple items or a wrong vault/store. Per-key item and field references handle multiple-item mappings; a wrong vault/store also requires an explicit vault or secret-store selector. Neither design supplies a field that is genuinely absent.
 - Missing required secrets should fail preflight before pull-request creation by default. Continuing should require an explicit override.
 - User-facing vault names, generated references, and operator configuration should use the same terminology.
 
