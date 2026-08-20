@@ -49,6 +49,7 @@ and this project does not currently use versioned releases.
 
 ### Changed
 
+- Limit labels produced by `Logseq: Log Current Task` to 32 characters.
 - Require every native `create_thread` child to run on the same live runner as its parent. [#168](https://github.com/lelouvincx/agent-skills/pull/168)
 - Replace the custom `spawn_subagent`, `subagent_control`, and `send_to_thread` plugins with native `Task`, `create_thread`, and thread lifecycle tools, and remove obsolete Oracle rejection from Logseq logging workers. [#167](https://github.com/lelouvincx/agent-skills/pull/167)
 - Let users add a custom numbered option to a grilling question when the listed choices do not fit. [#165](https://github.com/lelouvincx/agent-skills/pull/165)
