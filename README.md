@@ -70,7 +70,7 @@ Local skills are maintained in this repository. Remote skills are fetched and pr
 | [modern-web-guidance](skills/modern-web-guidance/SKILL.md) | Remote | check current web platform guidance before frontend work |
 | [notion](skills/notion/SKILL.md) | Remote | manage Notion pages, databases, and comments |
 | [prototype](skills/prototype/SKILL.md) | Remote | build throwaway logic or UI prototypes to test a design |
-| [proto](skills/proto/SKILL.md) | Local | deploy proto images with verified secrets and bounded acceptance checks |
+| [proto](skills/proto/SKILL.md) | Local | deploy static sites, SPAs, and images with route-specific preflight and verification |
 | [readai](skills/readai/SKILL.md) | Local | retrieve speaker-attributed Read AI call transcripts |
 | [reading-social-posts](skills/reading-social-posts/SKILL.md) | Local | read social posts and inspect all attached media through TikHub |
 | [resolving-projects](skills/resolving-projects/SKILL.md) | Local | resolve spoken project names to paths and GitHub repositories |
