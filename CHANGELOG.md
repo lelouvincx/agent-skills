@@ -51,6 +51,7 @@ and this project does not currently use versioned releases.
 
 ### Changed
 
+- Use the current Git working tree by default and create a worktree only when Chinh explicitly requests one. [#171](https://github.com/lelouvincx/agent-skills/pull/171)
 - Limit labels produced by `Logseq: Log Current Task` to 32 characters. [#169](https://github.com/lelouvincx/agent-skills/pull/169)
 - Require every native `create_thread` child to run on the same live runner as its parent. [#168](https://github.com/lelouvincx/agent-skills/pull/168)
 - Replace the custom `spawn_subagent`, `subagent_control`, and `send_to_thread` plugins with native `Task`, `create_thread`, and thread lifecycle tools, and remove obsolete Oracle rejection from Logseq logging workers. [#167](https://github.com/lelouvincx/agent-skills/pull/167)
