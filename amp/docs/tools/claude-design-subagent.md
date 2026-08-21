@@ -200,11 +200,49 @@ Sufficiency for multi-file or design-system-bound projects remains qualified.
 
 ### Supervised user and Amp workflow
 
-Load the `collaborating-with-claude-design` skill for the end-to-end workflow. It owns briefing, visual review, iteration, and the machine-readable handoff contract.
+The `collaborating-with-claude-design` skill implements this workflow at runtime.
+
+```text
+╭─────────────╮    brief     ╭──────────────╮    narrow proxy    ╭───────────────╮
+│    User     │─────────────▶│     Amp      │───────────────────▶│  Claude Code  │
+│ reviews UI  │◀─────────────│ coordinates  │◀───────────────────│ authenticated │
+╰──────┬──────╯   project URL╰──────┬───────╯  session + audit  ╰───────┬───────╯
+       │                            │                                  │
+       │ visual feedback            │ read-back                        │ Design MCP
+       │                            │                                  ▼
+       │                     ╭──────▼───────╮                  ╭───────────────╮
+       ╰────────────────────▶│ Render gate  │                  │ Claude Design │
+          acceptance         │ and handoff  │◀── project URL ──┤ cloud project │
+                             ╰──────────────╯                  ╰───────────────╯
+```
+
+| Stage | User | Amp completion criterion |
+| --- | --- | --- |
+| Brief | Provides the goal, users, screens or states, constraints, and acceptance criteria. Explicitly opts into Claude Design. | Confirms new versus existing project. Limits `workingDirectory` and local reads to relevant paths. Separates observed style evidence from interpretation. |
+| Identity | Confirms the intended project and design system. | Records exact project, deliverable and design-system identities, Claude Code session ID, and audit path. Does not rely only on default design-system status. |
+| Cloud operation | Authorizes creation or refinement. | Keeps inspection read-only. Applies one bounded delta for creation or refinement. Broad, destructive, shared-project, or multi-project work gets fresh confirmation. |
+| Render gate | Provides browser sign-in when the deliverable requires it. | Opens Present → Fullscreen in dedicated Chrome. Inspects a current, non-blank screenshot at the intended viewport. |
+| Iteration | Accepts a direction or names concrete defects. | Sends evidence-based deltas to the same project. Repeats the render gate after every mutation. |
+| Handoff | Accepts any remaining limitation. | Writes the versioned handoff manifest and returns it with the deliverable URL and latest verified screenshot. |
 
 The plugin stores no Amp-thread-to-Claude-session mapping.
 
 For each iteration, pass the prior `sessionId` and project ID or URL. Tell Claude to reopen the identified project before applying a delta. The project URL recovers canvas identity. Only the session ID resumes the prior Claude Code conversation.
+
+The handoff manifest records:
+
+- schema version
+- project name, ID and URL
+- deliverable name, nullable ID and URL
+- nullable design-system name and ID
+- nullable Claude Code session ID and audit path
+- viewport width, height and device-scale factor
+- separate Claude subscription, Design consent and browser-access states
+- approval state, decisions and unresolved feedback
+- screenshot path, capture time, `present-fullscreen` mode and review status
+- each defect and its `open`, `fixed` or `accepted` status
+
+Use real JSON values and `null` for unavailable fields. Record authentication state only. Do not record credentials or browser state.
 
 If a mutating call times out or is ambiguous:
 
