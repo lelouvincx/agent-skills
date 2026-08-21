@@ -22,7 +22,7 @@ amp:
   docs_sources:
     api_docs: "amp plugins show-docs"
     agent_options: null
-  last_verified: "2026-07-15"
+  last_verified: "2026-08-21"
 contract:
   input_kind: "json_schema"
   output_kind: "json_text"
