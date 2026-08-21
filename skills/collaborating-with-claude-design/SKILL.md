@@ -1,9 +1,7 @@
 ---
 name: collaborating-with-claude-design
 description: Claude Design orchestration for explicit requests to create, inspect, or refine a cloud design. Coordinates bounded cloud work, Present → Fullscreen visual QA, evidence-based iteration, and machine-readable handoff.
-metadata:
-  requires:
-    - agent-browser
+compatibility: Requires Amp with the claude_design_subagent tool and the agent-browser skill.
 ---
 
 # Collaborating with Claude Design
@@ -54,9 +52,14 @@ Complete this step when the returned project and deliverable identities match th
 
 ### 3. Run the render gate
 
-Load `agent-browser` and follow the local Agent Browser convention. Use a headed Chrome instance with the persistent local profile and a CDP port dedicated to the current Amp thread.
+Load `agent-browser`, then follow this convention:
 
-Open the deliverable URL at the intended viewport. If the deliverable UI redirects to sign-in, ask the user to sign in in that Chrome window, then continue through the same CDP session.
+- start a new, separate instance of the installed system Google Chrome in headed mode with the persistent local profile at `~/.local/state/agent-browser/profiles/local`
+- assign an unused CDP port to the current Amp thread, connect `agent-browser` only to that port, and never attach to or reuse another thread's Chrome or CDP endpoint
+- bring Chrome to the foreground and verify the current URL and page title before continuing
+- treat the profile as sensitive authentication state; when sign-in is required, ask the user to sign in and tell you when they have finished, then continue in the same browser session
+
+Open the deliverable URL at the intended viewport.
 
 Claude Design's editor iframe can appear blank in browser screenshots even when its accessibility tree contains the design. Open **Present → Fullscreen** before capturing verification evidence. Save screenshots under `.amp/in/artifacts/`.
 
