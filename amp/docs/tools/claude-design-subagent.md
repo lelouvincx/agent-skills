@@ -198,51 +198,13 @@ Amp then materializes that response with normal local tools in a separately auth
 
 Sufficiency for multi-file or design-system-bound projects remains qualified.
 
-### Supervised user-Amp workflow
+### Supervised user and Amp workflow
 
-```text
-╭─────────────╮    brief     ╭──────────────╮    narrow proxy    ╭───────────────╮
-│    User     │─────────────▶│     Amp      │───────────────────▶│  Claude Code  │
-│ reviews UI  │◀─────────────│ coordinates  │◀───────────────────│ authenticated │
-╰──────┬──────╯   project URL╰──────┬───────╯  session + audit  ╰───────┬───────╯
-       │                            │                                  │
-       │ visual feedback            │ read-back                        │ Design MCP
-       │                            │                                  ▼
-       │                     ╭──────▼───────╮                  ╭───────────────╮
-       ╰────────────────────▶│ Local source │                  │ Claude Design │
-             approval        │ implementation│◀── exact source ┤ cloud project │
-                             ╰──────────────╯    via response   ╰───────────────╯
-```
-
-| Stage | User | Amp completion criterion |
-| --- | --- | --- |
-| Brief | Provides the goal, users, screens or states, constraints, and acceptance criteria; explicitly opts into Claude Design. | Confirms new versus existing project and limits `workingDirectory` and local reads to relevant paths. |
-| Identity | Confirms the intended project and design system. | Records exact project name, ID or URL, design-system name and ID, Claude Code session ID, and audit path. Do not rely only on default design-system status. |
-| Cloud write | Approves the stated mutation. | Applies one bounded delta. Broad, destructive, shared-project, or multi-project work gets fresh confirmation. |
-| Review | Inspects the canvas and reports concrete deltas, including any direct canvas edits or comments. | Reads back the same project ID and reports verified files or markers. A prose success response alone does not verify cloud state. |
-| Approval | Accepts a direction and names exceptions. | Records project identity, design-system ID, revision or time, criteria, decisions, and unresolved feedback in the handoff packet. |
-| Implementation | Authorizes the local implementation scope. | Requests exact source in the proxy response, writes it with normal Amp tools, and validates the local result. |
-
-For each iteration:
-
-1. Pass the prior `sessionId`, project ID or URL, and a concise decision summary.
-2. Tell Claude to reopen the identified project before applying the next delta.
-3. Ask the user to summarize direct canvas edits and comments until synchronization is verified.
+Load the `collaborating-with-claude-design` skill for the end-to-end workflow. It owns briefing, visual review, iteration, and the machine-readable handoff contract.
 
 The plugin stores no Amp-thread-to-Claude-session mapping.
 
-For a new Amp thread or fresh Claude session, provide a handoff packet containing:
-
-- project ID or URL
-- design-system ID
-- approval state
-- revision or time
-- key decisions
-- unresolved feedback
-- expected files or markers
-- the prior `sessionId`, only when conversational continuity is required
-
-The project URL recovers canvas identity. Only the session ID resumes the prior Claude Code conversation.
+For each iteration, pass the prior `sessionId` and project ID or URL. Tell Claude to reopen the identified project before applying a delta. The project URL recovers canvas identity. Only the session ID resumes the prior Claude Code conversation.
 
 If a mutating call times out or is ambiguous:
 
