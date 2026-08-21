@@ -1,5 +1,4 @@
-#!/usr/bin/env bun
-
+import { createHash } from 'node:crypto'
 import { chmodSync, existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
@@ -10,12 +9,20 @@ const bin = join(temp, 'bin')
 const capturePath = join(temp, 'capture.json')
 const auditDir = join(temp, 'audit')
 const fakeClaude = join(bin, 'claude')
+const designSkillDir = join(temp, '.agents', 'skills', 'collaborating-with-claude-design')
+const designSkillPath = join(designSkillDir, 'SKILL.md')
+const designSkillMarker = 'DESIGN_SKILL_TEST_MARKER'
+const designSkillContent = `---\nname: collaborating-with-claude-design\ndescription: Test fixture.\n---\n\n# ${designSkillMarker}\n`
+const designSkillSha256 = createHash('sha256').update(designSkillContent, 'utf8').digest('hex')
 const sessionId = '123e4567-e89b-42d3-a456-426614174000'
 const mismatchSessionId = '223e4567-e89b-42d3-a456-426614174000'
 const secret = ['sk', 'abcdefghijklmnopqrstuvwxyz123456'].join('-')
+const originalHome = process.env.HOME
 
 try {
 	mkdirSync(bin)
+	mkdirSync(designSkillDir, { recursive: true })
+	writeFileSync(designSkillPath, designSkillContent)
 	writeFileSync(fakeClaude, `#!/usr/bin/env node
 const fs = require('node:fs')
 const args = process.argv.slice(2)
@@ -52,6 +59,8 @@ else {
 `)
 	chmodSync(fakeClaude, 0o700)
 
+	process.env.HOME = temp
+	process.env.AMP_CLAUDE_DESIGN_SKILL_PATH = designSkillPath
 	process.env.PATH = `${bin}:${process.env.PATH}`
 	process.env.AMP_CLAUDE_CODE_SUBAGENT_AUDIT_DIR = auditDir
 	process.env.AMP_AGENT_TOKEN_USAGE_LOG = join(temp, 'usage.jsonl')
@@ -70,6 +79,13 @@ else {
 	assert(code, 'claude_code_subagent must remain registered')
 
 	rmSync(capturePath, { force: true })
+	const missingSkillHash = JSON.parse(await design.execute({ prompt: 'test' }, { thread: { id: 'T-missing-skill-hash' } })) as Record<string, unknown>
+	assert(!missingSkillHash.ok && String(missingSkillHash.error).includes('skillSha256 is required'), 'design must require Amp skill trace evidence')
+	assert(!existsSync(capturePath), 'missing skill trace evidence must fail before spawning Claude')
+	const mismatchedSkillHash = await invoke({ prompt: 'test', skillSha256: '0'.repeat(64) }, 'mismatched-skill-hash')
+	assert(!mismatchedSkillHash.ok && String(mismatchedSkillHash.error).includes('does not match'), 'design must reject a different Amp skill hash')
+	assert(!existsSync(capturePath), 'mismatched skill trace evidence must fail before spawning Claude')
+
 	const invalidSession = await invoke({ prompt: 'test', sessionId: 'not-a-uuid' }, 'invalid-session')
 	assert(!invalidSession.ok, 'invalid session ID must fail')
 	assert(!existsSync(capturePath), 'invalid session ID must fail before spawning Claude')
@@ -150,10 +166,23 @@ else {
 	assert(capture.args.includes('Bash,Edit,Write,NotebookEdit'), 'local execution and edit tools must be denied')
 	assert(!capture.args.includes('--mcp-config') && !capture.args.includes('--strict-mcp-config'), 'arbitrary MCP config must not load')
 	assert(capture.args.at(-2) === '--', 'prompt must be separated from variadic flags')
+	const capturedPrompt = capture.args.at(-1)
+	assert(capturedPrompt?.includes(designSkillContent), 'design prompt must include the complete collaboration skill')
+	assert(capturedPrompt.includes(`sha256="${designSkillSha256}"`), 'design prompt must identify the injected skill revision')
+	assert(capturedPrompt.includes('Amp has already loaded and hashed the skill and invoked this tool'), 'design prompt must exclude recursive caller actions')
+	assert(capturedPrompt.includes('Execute only the bounded Claude Design cloud operation'), 'design prompt must preserve the Amp and Claude Design role boundary')
 	assert(capture.safeMarker === 'safe-marker', 'safe AMP variables should reach Claude')
 	assert(!capture.hasAnthropicKey && !capture.hasAmpToken && !capture.hasRandomCredential, 'secret-looking ambient variables must be stripped')
+	const skillTrace = success.skillTrace as Record<string, unknown>
+	assert(skillTrace.skillSha256 === designSkillSha256 && skillTrace.ampProvidedSkillSha256 === designSkillSha256, 'result must correlate Amp and proxy skill hashes')
+	assert(skillTrace.skillHashMatched === true && skillTrace.claudePromptIncludedSkill === true, 'result must record hash matching and prompt containment')
+	const capturedPromptSha256 = createHash('sha256').update(capturedPrompt).digest('hex')
+	assert(skillTrace.claudePromptSha256 === capturedPromptSha256, 'result must contain the SHA-256 of the exact assembled Claude prompt')
 	const audit = readFileSync(String(success.auditLogPath), 'utf8')
 	assert(audit.includes('[REDACTED:API_KEY]') && !audit.includes(secret), 'normal audit must redact API-key-shaped text')
+	const auditPayload = JSON.parse(audit) as { skillTrace?: Record<string, unknown> }
+	assert(auditPayload.skillTrace?.skillSha256 === designSkillSha256, 'audit must retain the verified skill hash')
+	assert(auditPayload.skillTrace?.claudePromptSha256 === skillTrace.claudePromptSha256, 'audit and result must correlate the assembled prompt hash')
 
 	const rawSuccess = await invoke({ prompt: 'raw test', includeRawTranscript: true, workingDirectory: root }, 'raw-success')
 	assert(rawSuccess.ok && existsSync(String(rawSuccess.rawTranscriptPath)), 'opt-in raw transcript must be returned and written')
@@ -203,10 +232,17 @@ else {
 		globalThis.setTimeout = realSetTimeout
 	}
 
+	rmSync(designSkillPath)
+	rmSync(capturePath, { force: true })
+	const missingSkill = await invoke({ prompt: 'missing skill test', workingDirectory: root }, 'missing-skill')
+	assert(!missingSkill.ok && String(missingSkill.error).includes('collaboration skill cannot be read'), 'missing collaboration skill must fail explicitly')
+	assert(!existsSync(capturePath), 'missing collaboration skill must fail before spawning Claude')
+
 	console.log('Claude Design subagent regression tests passed')
 
 	async function invoke(input: Record<string, unknown>, thread: string): Promise<Record<string, unknown>> {
-		return JSON.parse(await design!.execute(input, { thread: { id: `T-${thread}` } })) as Record<string, unknown>
+		const tracedInput = Object.hasOwn(input, 'skillSha256') ? input : { ...input, skillSha256: designSkillSha256 }
+		return JSON.parse(await design!.execute(tracedInput, { thread: { id: `T-${thread}` } })) as Record<string, unknown>
 	}
 
 	async function invokeCode(input: Record<string, unknown>, thread: string): Promise<Record<string, unknown>> {
@@ -223,6 +259,8 @@ else {
 		return JSON.parse(readFileSync(capturePath, 'utf8'))
 	}
 } finally {
+	if (originalHome === undefined) delete process.env.HOME
+	else process.env.HOME = originalHome
 	rmSync(temp, { recursive: true, force: true })
 }
 

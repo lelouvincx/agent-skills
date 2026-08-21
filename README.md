@@ -34,8 +34,6 @@ See [PROJECTS.md](PROJECTS.md) for the generated project list.
 
 ## Skills
 
-Run `amp skill list` to inspect the active runtime inventory. The current inventory contains 53 skills: 41 projected from this repository, 7 provided by Amp, and 5 provided by plugins.
-
 ### Repository skills
 
 Local skills are maintained in this repository. Remote skills are fetched and projected by `./sync-skills.sh --remote`.
@@ -49,6 +47,7 @@ Local skills are maintained in this repository. Remote skills are fetched and pr
 | [build-dashboard-controls](skills/build-dashboard-controls/SKILL.md) | Remote | add filters, date drills, and comparisons to Holistics dashboards |
 | [build-dashboard-theme](skills/build-dashboard-theme/SKILL.md) | Remote | create and apply Holistics dashboard themes |
 | [build-visualizations](skills/build-visualizations/SKILL.md) | Remote | author Holistics dashboard visualizations and dynamic content |
+| [collaborating-with-claude-design](skills/collaborating-with-claude-design/SKILL.md) | Local | coordinate Claude Design creation, browser verification, and evidence-based iteration |
 | [convert-agent-skill-to-holistics](skills/convert-agent-skill-to-holistics/SKILL.md) | Remote | convert skills between Agent Skills and Holistics AML formats |
 | [create-holistics-skill](skills/create-holistics-skill/SKILL.md) | Remote | author and refine Holistics AML skills |
 | [creating-client-design-systems](skills/creating-client-design-systems/SKILL.md) | Local | create Google DESIGN.md files for client brands and Holistics dashboard themes |

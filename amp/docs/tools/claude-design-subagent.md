@@ -22,7 +22,7 @@ amp:
   docs_sources:
     api_docs: "amp plugins show-docs"
     agent_options: null
-  last_verified: "2026-07-15"
+  last_verified: "2026-08-21"
 contract:
   input_kind: "json_schema"
   output_kind: "json_text"
@@ -33,23 +33,28 @@ contract:
   agent_mode_key: null
   required_inputs:
     - "prompt"
+    - "skillSha256"
 runtime:
   uses:
     - "spawn: claude"
+    - "collaborating-with-claude-design skill instructions"
     - "Claude Code ToolSearch"
     - "Claude Code DesignSync"
     - "Claude Design MCP tools"
     - "ctx.thread.id"
   dependencies:
     - "Claude Code 2.1.181 or newer on PATH"
+    - "~/.agents/skills/collaborating-with-claude-design/SKILL.md"
     - "Claude Code signed in with a Claude subscription"
     - "Claude Design enabled for the account or organization"
     - "Claude Design consent granted with /design consent"
   env:
     - "AMP_CLAUDE_CODE_SUBAGENT_AUDIT_DIR"
     - "AMP_CLAUDE_CODE_SUBAGENT_DEBUG"
+    - "AMP_CLAUDE_DESIGN_SKILL_PATH"
   reads:
     - "workingDirectory"
+    - "~/.agents/skills/collaborating-with-claude-design/SKILL.md"
     - "Claude Design projects"
     - "Claude Code session state when sessionId is supplied"
   writes:
@@ -59,7 +64,7 @@ runtime:
     - "Claude Code model provider via claude CLI"
     - "Claude Design MCP through Claude Code"
   logs:
-    - "redacted audit log"
+    - "redacted audit log with skill and assembled-prompt hashes"
     - "optional raw transcript"
 safety:
   permission_level: "design-write"
@@ -69,6 +74,8 @@ safety:
     - "Allows Read, Grep, Glob, ToolSearch, DesignSync, and mcp__claude-design__* only."
     - "Denies Bash, Edit, Write, and NotebookEdit."
     - "Loads only Claude Code user settings; project and local settings cannot add hooks, plugins, skills, or permission rules."
+    - "Injects the collaborating-with-claude-design skill into the child prompt independently of Claude Code setting sources."
+    - "Fails before starting Claude when the skill cannot be read."
     - "Does not load caller-supplied MCP configuration or arbitrary MCP tools."
     - "The spawned Claude process receives a sanitized environment so ambient API keys do not disable claude.ai connectors."
   risks:
@@ -127,6 +134,7 @@ Required input:
 | Field | Type | Notes |
 | --- | --- | --- |
 | `prompt` | `string` | The design task or feedback for Claude Code to execute through Claude Design. |
+| `skillSha256` | `string` | SHA-256 of the `collaborating-with-claude-design` skill that Amp loaded. The tool rejects a missing or different hash before starting Claude. |
 
 Optional inputs:
 
@@ -145,6 +153,7 @@ Output is JSON containing:
 - `sessionId`
 - model metadata
 - `auditLogPath`
+- `skillTrace`, containing the verified skill hash and assembled child-prompt hash
 
 A fresh call assigns its Claude Code session ID before the child starts. A resumed call retains the supplied session ID. The known ID is returned on success, timeout, output-limit failure, non-zero exit, and invalid JSON so an ambiguous cloud mutation can be inspected. A pre-start failure can still leave an ID with no persisted session.
 
@@ -152,7 +161,22 @@ A call is complete when Amp has recorded the audit path and session ID. For proj
 
 ## Behavior
 
-The tool runs `claude -p` with Claude Code user settings only. This keeps its first-party Claude Design integration and account consent available without loading repository-controlled project or local settings.
+The tool reads `~/.agents/skills/collaborating-with-claude-design/SKILL.md` and injects it into every child prompt. `AMP_CLAUDE_DESIGN_SKILL_PATH` overrides this path for isolated tests or non-standard projections. The tool fails before starting Claude when the selected skill is missing or unreadable.
+
+Amp hashes the raw bytes of the projected skill it loaded immediately before each call. Amp passes the lowercase digest as `skillSha256`. The standard projected path is `~/.agents/skills/collaborating-with-claude-design/SKILL.md`; a non-standard skill loader can report another path. The tool compares Amp's digest with the raw bytes it reads. A mismatch fails before Claude starts.
+
+The prompt limits Claude to the cloud-operation part of the shared workflow. Amp retains briefing, browser review, iteration control and handoff ownership.
+
+Each post-start result and audit record contains a `skillTrace` with:
+
+- skill name, selected path, byte count and SHA-256
+- Amp's supplied SHA-256 and whether it matched the projected bytes read by the plugin
+- SHA-256 of the assembled prompt passed to Claude Code
+- whether the assembled prompt contained the complete skill bytes
+
+These fields correlate Amp's supplied digest, the projected bytes read by the plugin, and the wrapper-assembled prompt hash. The containment flag records a wrapper-side check. These fields do not prove provider receipt, instruction use, or private model reasoning.
+
+The tool runs `claude -p` with Claude Code user settings only. This keeps its first-party Claude Design integration and account consent available without loading repository-controlled project or local settings. The injected skill does not depend on Claude Code loading filesystem skills from those setting sources.
 
 Fresh calls receive a wrapper-generated UUID through `--session-id`; iterative calls use `--resume`. Claude's final session ID must match the expected ID. The child is terminated and the call fails explicitly if combined stdout and stderr exceed 5 MiB.
 
@@ -184,7 +208,7 @@ As of 2026-07-13, the following cloud lifecycle capabilities are verified:
 
 Registration, command construction and session validation are also verified. Permission boundaries, environment sanitization, audit behavior and authentication are verified.
 
-Deterministic regression coverage verifies preassigned fresh-session IDs, resumed-session IDs, user-only setting sources, session-ID preservation on timeout and failure, and the shared output limit.
+Deterministic regression coverage verifies skill-hash matching, complete skill injection, assembled-prompt trace hashes, preassigned fresh-session IDs, resumed-session IDs, user-only setting sources, session-ID preservation on timeout and failure, and the shared output limit.
 
 Design-system attachment remains qualified. The ID was requested during creation and reflected in the project-bound design prompt. However, Claude Design exposes no independent project field for reading the attachment back.
 
@@ -198,7 +222,9 @@ Amp then materializes that response with normal local tools in a separately auth
 
 Sufficiency for multi-file or design-system-bound projects remains qualified.
 
-### Supervised user-Amp workflow
+### Supervised user and Amp workflow
+
+The `collaborating-with-claude-design` skill implements this workflow at runtime.
 
 ```text
 ╭─────────────╮    brief     ╭──────────────╮    narrow proxy    ╭───────────────╮
@@ -209,40 +235,39 @@ Sufficiency for multi-file or design-system-bound projects remains qualified.
        │ visual feedback            │ read-back                        │ Design MCP
        │                            │                                  ▼
        │                     ╭──────▼───────╮                  ╭───────────────╮
-       ╰────────────────────▶│ Local source │                  │ Claude Design │
-             approval        │ implementation│◀── exact source ┤ cloud project │
-                             ╰──────────────╯    via response   ╰───────────────╯
+       ╰────────────────────▶│ Render gate  │                  │ Claude Design │
+          acceptance         │ and handoff  │◀── project URL ──┤ cloud project │
+                             ╰──────────────╯                  ╰───────────────╯
 ```
 
 | Stage | User | Amp completion criterion |
 | --- | --- | --- |
-| Brief | Provides the goal, users, screens or states, constraints, and acceptance criteria; explicitly opts into Claude Design. | Confirms new versus existing project and limits `workingDirectory` and local reads to relevant paths. |
-| Identity | Confirms the intended project and design system. | Records exact project name, ID or URL, design-system name and ID, Claude Code session ID, and audit path. Do not rely only on default design-system status. |
-| Cloud write | Approves the stated mutation. | Applies one bounded delta. Broad, destructive, shared-project, or multi-project work gets fresh confirmation. |
-| Review | Inspects the canvas and reports concrete deltas, including any direct canvas edits or comments. | Reads back the same project ID and reports verified files or markers. A prose success response alone does not verify cloud state. |
-| Approval | Accepts a direction and names exceptions. | Records project identity, design-system ID, revision or time, criteria, decisions, and unresolved feedback in the handoff packet. |
-| Implementation | Authorizes the local implementation scope. | Requests exact source in the proxy response, writes it with normal Amp tools, and validates the local result. |
-
-For each iteration:
-
-1. Pass the prior `sessionId`, project ID or URL, and a concise decision summary.
-2. Tell Claude to reopen the identified project before applying the next delta.
-3. Ask the user to summarize direct canvas edits and comments until synchronization is verified.
+| Brief | Provides the goal, users, screens or states, constraints, and acceptance criteria. Explicitly opts into Claude Design. | Confirms new versus existing project. Limits `workingDirectory` and local reads to relevant paths. Separates observed style evidence from interpretation. |
+| Identity | Confirms the intended project and design system. | Records exact project, deliverable and design-system identities, Claude Code session ID, and audit path. Does not rely only on default design-system status. |
+| Cloud operation | Authorizes creation or refinement. | Keeps inspection read-only. Applies one bounded delta for creation or refinement. Broad, destructive, shared-project, or multi-project work gets fresh confirmation. |
+| Render gate | Provides browser sign-in when the deliverable requires it. | Opens Present → Fullscreen in dedicated Chrome. Inspects a current, non-blank screenshot at the intended viewport. |
+| Iteration | Accepts a direction or names concrete defects. | Sends evidence-based deltas to the same project. Repeats the render gate after every mutation. |
+| Handoff | Accepts any remaining limitation. | Writes the versioned handoff manifest and returns it with the deliverable URL and latest verified screenshot. |
 
 The plugin stores no Amp-thread-to-Claude-session mapping.
 
-For a new Amp thread or fresh Claude session, provide a handoff packet containing:
+For each iteration, pass the prior `sessionId` and project ID or URL. Tell Claude to reopen the identified project before applying a delta. The project URL recovers canvas identity. Only the session ID resumes the prior Claude Code conversation.
 
-- project ID or URL
-- design-system ID
-- approval state
-- revision or time
-- key decisions
-- unresolved feedback
-- expected files or markers
-- the prior `sessionId`, only when conversational continuity is required
+The handoff manifest records:
 
-The project URL recovers canvas identity. Only the session ID resumes the prior Claude Code conversation.
+- schema version
+- project name, ID and URL
+- deliverable name, nullable ID and URL
+- nullable design-system name and ID
+- nullable Claude Code session ID and audit path
+- verified skill SHA-256 and assembled Claude Code prompt SHA-256
+- viewport width, height and device-scale factor
+- separate Claude subscription, Design consent and browser-access states
+- approval state, decisions and unresolved feedback
+- screenshot path, capture time, `present-fullscreen` mode and review status
+- each defect and its `open`, `fixed` or `accepted` status
+
+Use real JSON values and `null` for unavailable fields. Record authentication state only. Do not record credentials or browser state.
 
 If a mutating call times out or is ambiguous:
 
@@ -280,6 +305,7 @@ Create one identified project and establish the review loop:
 ```json
 {
   "prompt": "Use Claude Design to create exactly one project named <project name> with design-system ID <ID>. Read only <paths> for context. Before writing, summarize the cloud mutation. Return the stable project ID and URL, then read back the project files for review.",
+  "skillSha256": "<64-character SHA-256 of the loaded projected skill>",
   "workingDirectory": "/path/to/project"
 }
 ```
@@ -289,6 +315,7 @@ Apply one delta after visual review:
 ```json
 {
   "prompt": "Reopen project <ID or URL>. The approved direction is <decision>. Apply only this delta: tighten information density and improve keyboard focus states. Read back the changed files or markers.",
+  "skillSha256": "<64-character SHA-256 of the loaded projected skill>",
   "sessionId": "<session ID returned by the first call>",
   "workingDirectory": "/path/to/project"
 }
@@ -299,6 +326,7 @@ Recover source in a fresh session for an authorized local handoff:
 ```json
 {
   "prompt": "Open project <ID or URL>. Current approval: <state>; decisions: <summary>; unresolved feedback: <items>. Return the exact complete content of <file> in the response. Do not attempt a local export.",
+  "skillSha256": "<64-character SHA-256 of the loaded projected skill>",
   "workingDirectory": "/path/to/project"
 }
 ```

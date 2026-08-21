@@ -6,7 +6,7 @@
 // responsible for applying/adapting changes and verification.
 
 import { spawn } from 'node:child_process'
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
@@ -34,11 +34,30 @@ interface ToolInput {
 
 interface DesignToolInput {
 	prompt: string
+	skillSha256: string
 	sessionId?: string
 	model: Model
 	timeoutMinutes: number
 	workingDirectory: string
 	includeRawTranscript: boolean
+}
+
+interface DesignSkill {
+	content: string
+	path: string
+	sha256: string
+	bytes: number
+}
+
+interface DesignSkillTrace {
+	name: string
+	path: string
+	bytes: number
+	skillSha256: string
+	ampProvidedSkillSha256: string
+	skillHashMatched: boolean
+	claudePromptSha256: string
+	claudePromptIncludedSkill: boolean
 }
 
 interface ClaudeRunResult {
@@ -73,6 +92,8 @@ const DEFAULT_GITHUB_PROFILE_CONFIG_PATH = join(homedir(), '.config', 'amp', 'gi
 const AUDIT_DIR = process.env.AMP_CLAUDE_CODE_SUBAGENT_AUDIT_DIR ?? join(homedir(), '.config', 'amp', 'logs', 'claude-code-subagent')
 const TOKEN_USAGE_LOG_PATH = process.env.AMP_AGENT_TOKEN_USAGE_LOG ?? join(homedir(), '.config', 'amp', 'logs', 'agent-token-usage.jsonl')
 const SUBAGENT_ENV_FILE = process.env.AMP_CLAUDE_CODE_SUBAGENT_ENV_FILE
+const DESIGN_SKILL_NAME = 'collaborating-with-claude-design'
+const DESIGN_SKILL_PATH = process.env.AMP_CLAUDE_DESIGN_SKILL_PATH ?? join(homedir(), '.agents', 'skills', DESIGN_SKILL_NAME, 'SKILL.md')
 
 const BUILTIN_ALLOWED_TOOLS = ['Read', 'Grep', 'Glob']
 const BUILTIN_DENIED_TOOLS = ['Bash', 'Edit', 'Write', 'NotebookEdit']
@@ -302,6 +323,7 @@ export default function (amp: PluginAPI) {
 			'Use Claude Code as a narrow authenticated proxy for Claude Design.',
 			'Call this tool ONLY when the user explicitly asks to use Claude Design.',
 			'It may create or modify cloud-hosted Claude Design projects, but it cannot run Bash or edit local files.',
+			'Pass the SHA-256 of the loaded collaborating-with-claude-design skill; the proxy verifies and injects that exact revision.',
 			'Pass the returned sessionId to continue the same design conversation after the user reviews the canvas.',
 			'Requires Claude Code 2.1.181+, Claude subscription login, and prior /design consent.',
 		].join(' '),
@@ -311,6 +333,10 @@ export default function (amp: PluginAPI) {
 				prompt: {
 					type: 'string',
 					description: 'Design task or feedback for Claude Code to execute through Claude Design.',
+				},
+				skillSha256: {
+					type: 'string',
+					description: 'SHA-256 of the collaborating-with-claude-design SKILL.md loaded by Amp. The proxy rejects a missing or different hash.',
 				},
 				sessionId: {
 					type: 'string',
@@ -334,28 +360,45 @@ export default function (amp: PluginAPI) {
 					description: 'If true, store raw Claude CLI stdout/stderr in addition to the redacted audit log.',
 				},
 			},
-			required: ['prompt'],
+			required: ['prompt', 'skillSha256'],
 		},
 		async execute(rawInput, ctx) {
 			const input = normalizeDesignInput(rawInput)
 			if ('error' in input) return failureJson(input.error)
+			const skill = loadDesignSkill()
+			if ('error' in skill) return failureJson(skill.error)
+			if (input.skillSha256 !== skill.sha256) {
+				return failureJson('skillSha256 does not match the collaboration skill loaded by the Claude Design proxy. Re-read the skill and pass its current SHA-256.')
+			}
 
 			const expectedSessionId = input.sessionId ?? randomUUID()
 			const args = buildDesignCommand(input, expectedSessionId)
+			const prompt = buildDesignPrompt(input, skill)
+			const skillTrace: DesignSkillTrace = {
+				name: DESIGN_SKILL_NAME,
+				path: skill.path,
+				bytes: skill.bytes,
+				skillSha256: skill.sha256,
+				ampProvidedSkillSha256: input.skillSha256,
+				skillHashMatched: true,
+				claudePromptSha256: sha256(prompt),
+				claudePromptIncludedSkill: prompt.includes(skill.content),
+			}
 			const startedAt = new Date()
-			const result = await runClaude(args, buildDesignPrompt(input), resolve(input.workingDirectory), input.timeoutMinutes * 60_000, undefined, false)
+			const result = await runClaude(args, prompt, resolve(input.workingDirectory), input.timeoutMinutes * 60_000, undefined, false)
 			const finishedAt = new Date()
 			const parsed = parseJson(result.stdout)
 			const output = parsed.ok ? extractResultCandidate(parsed.value) : undefined
 			const returnedSessionId = parsed.ok ? extractClaudeSessionId(parsed.value) : undefined
 			const sessionId = expectedSessionId
-			const audit = writeDesignAuditLog({ threadID: ctx.thread.id, input, args, result, output, sessionId, startedAt, finishedAt })
+			const audit = writeDesignAuditLog({ threadID: ctx.thread.id, input, args, result, output, sessionId, skillTrace, startedAt, finishedAt })
 
 			if (result.outputLimitExceeded) {
 				return JSON.stringify({
 					ok: false,
 					error: 'Claude Code output exceeded the 5 MiB limit.',
 					sessionId,
+					skillTrace,
 					auditLogPath: audit.auditPath,
 					rawTranscriptPath: audit.rawPath,
 				}, null, 2)
@@ -366,6 +409,7 @@ export default function (amp: PluginAPI) {
 					ok: false,
 					error: `Claude Design proxy timed out after ${input.timeoutMinutes} minute(s).`,
 					sessionId,
+					skillTrace,
 					auditLogPath: audit.auditPath,
 					rawTranscriptPath: audit.rawPath,
 				}, null, 2)
@@ -376,6 +420,7 @@ export default function (amp: PluginAPI) {
 					error: `Claude Code exited with code ${result.exitCode}.`,
 					stderr: truncate(result.stderr, 4_000),
 					sessionId,
+					skillTrace,
 					auditLogPath: audit.auditPath,
 					rawTranscriptPath: audit.rawPath,
 				}, null, 2)
@@ -386,6 +431,7 @@ export default function (amp: PluginAPI) {
 					error: `Could not parse Claude CLI JSON: ${parsed.error}`,
 					stdout: truncate(result.stdout, 4_000),
 					sessionId,
+					skillTrace,
 					auditLogPath: audit.auditPath,
 					rawTranscriptPath: audit.rawPath,
 				}, null, 2)
@@ -395,6 +441,7 @@ export default function (amp: PluginAPI) {
 					ok: false,
 					error: 'Claude Code result did not include a session ID.',
 					sessionId,
+					skillTrace,
 					auditLogPath: audit.auditPath,
 					rawTranscriptPath: audit.rawPath,
 				}, null, 2)
@@ -404,6 +451,7 @@ export default function (amp: PluginAPI) {
 					ok: false,
 					error: 'Claude Code returned an unexpected session ID.',
 					sessionId,
+					skillTrace,
 					auditLogPath: audit.auditPath,
 					rawTranscriptPath: audit.rawPath,
 				}, null, 2)
@@ -414,6 +462,7 @@ export default function (amp: PluginAPI) {
 				model: input.model,
 				result: output,
 				sessionId,
+				skillTrace,
 				auditLogPath: audit.auditPath,
 				rawTranscriptPath: audit.rawPath,
 			}, null, 2)
@@ -424,6 +473,9 @@ export default function (amp: PluginAPI) {
 function normalizeDesignInput(raw: Record<string, unknown>): DesignToolInput | { error: string } {
 	if (typeof raw.prompt !== 'string' || raw.prompt.trim().length === 0) {
 		return { error: 'prompt is required and must be a non-empty string.' }
+	}
+	if (typeof raw.skillSha256 !== 'string' || !/^[0-9a-f]{64}$/i.test(raw.skillSha256.trim())) {
+		return { error: 'skillSha256 is required and must be a 64-character SHA-256 hex digest.' }
 	}
 	const workingDirectory = typeof raw.workingDirectory === 'string' && raw.workingDirectory.trim()
 		? expandHome(raw.workingDirectory.trim())
@@ -437,6 +489,7 @@ function normalizeDesignInput(raw: Record<string, unknown>): DesignToolInput | {
 
 	return {
 		prompt: raw.prompt.trim(),
+		skillSha256: raw.skillSha256.trim().toLowerCase(),
 		sessionId,
 		model: raw.model === 'fable' || raw.model === 'sonnet' ? raw.model : DEFAULT_MODEL,
 		timeoutMinutes: clampTimeout(raw.timeoutMinutes),
@@ -461,16 +514,43 @@ function buildDesignCommand(input: DesignToolInput, sessionId: string): string[]
 	return args
 }
 
-function buildDesignPrompt(input: DesignToolInput): string {
+function loadDesignSkill(): DesignSkill | { error: string } {
+	try {
+		const rawBytes = readFileSync(DESIGN_SKILL_PATH)
+		const content = rawBytes.toString('utf8')
+		if (!content.trim()) return { error: `Claude Design collaboration skill is empty: ${DESIGN_SKILL_PATH}. Run ./sync-skills.sh.` }
+		return {
+			content,
+			path: DESIGN_SKILL_PATH,
+			sha256: sha256(rawBytes),
+			bytes: rawBytes.byteLength,
+		}
+	} catch {
+		return { error: `Claude Design collaboration skill cannot be read: ${DESIGN_SKILL_PATH}. Run ./sync-skills.sh.` }
+	}
+}
+
+function buildDesignPrompt(input: DesignToolInput, skill: DesignSkill): string {
 	return [
 		'You are Claude Code acting as a narrow proxy between Amp and Claude Design.',
 		'Use ToolSearch and Claude Design tools to complete the requested design task.',
 		'You may read local files and use DesignSync when needed, but do not run Bash or modify local files.',
+		`Treat the shared ${DESIGN_SKILL_NAME} skill below as collaboration context, not as a sequence for you to run.`,
+		'Amp has already loaded and hashed the skill and invoked this tool. Execute only the bounded Claude Design cloud operation in "Design task from Amp".',
+		'Amp owns briefing, browser review, iteration control, and handoff. Do not attempt Amp-owned steps or claim the full collaboration is complete.',
 		'Return a concise summary of what changed, plus every relevant Claude Design project URL and ID.',
+		'',
+		`<skill_content name="${DESIGN_SKILL_NAME}" sha256="${skill.sha256}">`,
+		skill.content,
+		'</skill_content>',
 		'',
 		'Design task from Amp:',
 		input.prompt,
 	].join('\n')
+}
+
+function sha256(value: string | Buffer): string {
+	return createHash('sha256').update(value).digest('hex')
 }
 
 function normalizeInput(raw: Record<string, unknown>): ToolInput | { error: string } {
@@ -985,6 +1065,7 @@ function writeDesignAuditLog(details: {
 	result: ClaudeRunResult
 	output: unknown
 	sessionId?: string
+	skillTrace: DesignSkillTrace
 	startedAt: Date
 	finishedAt: Date
 }): { auditPath: string; rawPath?: string } {
@@ -1000,6 +1081,7 @@ function writeDesignAuditLog(details: {
 		model: details.input.model,
 		cwd: resolve(details.input.workingDirectory),
 		sessionId: details.sessionId,
+		skillTrace: details.skillTrace,
 		timeoutMinutes: details.input.timeoutMinutes,
 		startedAt: details.startedAt.toISOString(),
 		finishedAt: details.finishedAt.toISOString(),
