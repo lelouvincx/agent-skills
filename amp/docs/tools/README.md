@@ -3,7 +3,7 @@ title: "Amp Plugin Capability Docs"
 slug: "amp-plugin-capability-docs"
 doc_schema: "amp-plugin-doc-index/v1"
 status: "active"
-last_reviewed: "2026-08-18"
+last_reviewed: "2026-08-21"
 ---
 
 # Amp artifact docs
@@ -42,6 +42,8 @@ All active documents use `amp-artifact/v2`, which supports skills and plugin cap
 
 - [DeepSeek V4 Flash](./deepseek-v4-flash.md)
 - [Gemini 3.5 Flash](./gemini-3-5-flash.md)
+- [GPT-5.5 Medium](./gpt-5-5-medium.md)
+- [GPT-5.5 XHigh](./gpt-5-5-xhigh.md)
 - [Smart Classic](./smart-classic.md)
 
 ### Commands

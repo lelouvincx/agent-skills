@@ -155,6 +155,8 @@ Run the relevant repository command directly:
 | [Pi Code subagent](amp/docs/tools/pi-code-subagent.md) | Agent tool | Agent | ask Pi Coding Agent for read-only advice |
 | [DeepSeek V4 Flash](amp/docs/tools/deepseek-v4-flash.md) | Agent mode | Mode picker | run an experimental DeepSeek-backed agent mode |
 | [Gemini 3.5 Flash](amp/docs/tools/gemini-3-5-flash.md) | Agent mode | Mode picker | run an experimental Gemini-backed agent mode |
+| [GPT-5.5 Medium](amp/docs/tools/gpt-5-5-medium.md) | Agent mode | Mode picker | run an experimental GPT-5.5 agent mode with medium reasoning effort |
+| [GPT-5.5 XHigh](amp/docs/tools/gpt-5-5-xhigh.md) | Agent mode | Mode picker | run an experimental GPT-5.5 agent mode with xhigh reasoning effort |
 | [Codex usage command](amp/docs/tools/codex-usage.md) | Command | Command palette | show Codex usage limits |
 | [Logseq log current task](amp/docs/tools/logseq-log-current-task-command.md) | Command | Command palette | log the current Amp task into Logseq |
 | [Track event](amp/docs/tools/track-event.md) | Command | Command palette | record skill or plugin usage manually |
