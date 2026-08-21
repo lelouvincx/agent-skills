@@ -3,7 +3,7 @@ doc_schema: "amp-artifact/v2"
 title: "GPT-5.5 Medium"
 slug: "gpt-5-5-medium"
 status: "active"
-summary: "Registers an experimental Amp agent mode that uses GPT-5.5 with medium reasoning effort."
+summary: "Registers an experimental GPT-5.5 mode with medium reasoning effort and the latest Fable 5 prompt and tools."
 artifact:
   id: "gpt-5-5-medium"
   type: "agent_mode"
@@ -36,7 +36,7 @@ runtime:
   uses:
     - "amp.experimental.createAgent"
     - "amp.experimental.registerAgentMode"
-    - "Deep Classic agent instructions and tools"
+    - "Fable 5 agent instructions and tools"
   dependencies:
     - "experimental plugin API"
     - "openai/gpt-5.5 model availability"
@@ -56,7 +56,7 @@ safety:
   user_gate: "user selects agent mode"
   constraints:
     - "Requires amp.experimental."
-    - "Uses the Deep Classic prompt and tools."
+    - "Uses the Fable 5 prompt and tools."
     - "Sets reasoning effort to medium."
   risks:
     - "The experimental agent-mode API may change."
@@ -73,7 +73,7 @@ tags:
 
 ## Summary
 
-`gpt-5-5-medium` adds GPT-5.5 with `medium` reasoning effort to Amp's mode picker. It uses the Deep Classic prompt and tools.
+`gpt-5-5-medium` adds GPT-5.5 with `medium` reasoning effort to Amp's mode picker. It uses the latest prompt and tools from `@amp/fable-mode`.
 
 ## Invocation
 
@@ -106,6 +106,8 @@ Select `GPT-5.5 Medium` when starting a thread, then enter a normal coding reque
 
 ## Maintenance notes
 
-`plugins/gpt-5-5-modes.ts` registers both modes. Keep `model`, `instructions`, and `tools` shared. Only mode metadata and `reasoningEffort` may differ. `DEEP_PROMPT` and `DEEP_TOOLS` in `plugins/deep-classic.ts` own the shared implementation.
+`plugins/gpt-5-5-modes.ts` registers both modes. Keep `model`, `instructions`, and `tools` shared. Only mode metadata and `reasoningEffort` may differ. `FABLE_AGENT_PROMPT` and `FABLE_TOOL_NAMES` in that file own the shared implementation.
 
 Update both capability documents before changing shared behavior. Update only the affected document for mode-specific metadata or reasoning effort. Finish by running the repository validation checks, `./sync-skills.sh`, and confirming that `amp plugins list` reports both modes active.
+
+To refresh the prompt and tools, run `amp plugins add --auto-update @amp/fable-mode`. Compare `FABLE_AGENT_PROMPT` and `SMART_TOOL_NAMES` in `~/.config/amp/plugins/fable-mode.ts`, then update the repository-owned values. Do not depend on the installed plugin at runtime.

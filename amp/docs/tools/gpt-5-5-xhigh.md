@@ -3,7 +3,7 @@ doc_schema: "amp-artifact/v2"
 title: "GPT-5.5 XHigh"
 slug: "gpt-5-5-xhigh"
 status: "active"
-summary: "Registers an experimental Amp agent mode that uses GPT-5.5 with xhigh reasoning effort."
+summary: "Registers an experimental GPT-5.5 mode with xhigh reasoning effort and the latest Fable 5 prompt and tools."
 artifact:
   id: "gpt-5-5-xhigh"
   type: "agent_mode"
@@ -36,7 +36,7 @@ runtime:
   uses:
     - "amp.experimental.createAgent"
     - "amp.experimental.registerAgentMode"
-    - "Deep Classic agent instructions and tools"
+    - "Fable 5 agent instructions and tools"
   dependencies:
     - "experimental plugin API"
     - "openai/gpt-5.5 model availability"
@@ -56,7 +56,7 @@ safety:
   user_gate: "user selects agent mode"
   constraints:
     - "Requires amp.experimental."
-    - "Uses the Deep Classic prompt and tools."
+    - "Uses the Fable 5 prompt and tools."
     - "Sets reasoning effort to xhigh."
   risks:
     - "The experimental agent-mode API may change."
@@ -73,7 +73,7 @@ tags:
 
 ## Summary
 
-`gpt-5-5-xhigh` adds GPT-5.5 with `xhigh` reasoning effort to Amp's mode picker. It uses the Deep Classic prompt and tools.
+`gpt-5-5-xhigh` adds GPT-5.5 with `xhigh` reasoning effort to Amp's mode picker. It uses the latest prompt and tools from `@amp/fable-mode`.
 
 ## Invocation
 
