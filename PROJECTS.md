@@ -49,13 +49,14 @@ AGENTS_REGISTRY_ENV=vps project-resolve prefect --path
 | `agent-skills` | `lelouvincx` | `~/Developer/agent-skills` | `lelouvincx/agent-skills` |
 | `dotfiles` | `lelouvincx` | `~/Developer/dotfiles` | `lelouvincx/dotfiles` |
 | `nvim` | `lelouvincx` | `~/Developer/dotfiles/nvim` | `lelouvincx/dotfiles` |
+| `contribute` | `open-source` | `~/Developer/contribute` | `null` |
 | `data` | `holistics` | `~/Developer/holistics/data` | `null` |
 | `presales` | `holistics` | `~/Developer/holistics/presales` | `null` |
 | `presales-calls` | `holistics` | `~/Developer/holistics/presales/presales-calls` | `null` |
 | `demo-ai` | `holistics` | `~/Developer/holistics/presales/demo-ai` | `holistics/demo-ai` |
 | `holistics-embed-demo` | `holistics` | `~/Developer/holistics/presales/holistics-embed-demo` | `holistics/holistics-embed-demo` |
 | `demo-amql-sl-benchmark` | `holistics` | `~/Developer/holistics/presales/demo-amql-sl-benchmark` | `holistics/demo-amql-sl-benchmark` |
-| `open-semantic-layer-sheets-demo` | `holistics` | `~/Developer/holistics/presales/open-semantic-layer-sheets-demo` | `null` |
+| `demo-open-semantic-layer-sheets` | `holistics` | `~/Developer/holistics/presales/demo-open-semantic-layer-sheets` | `holistics/demo-open-semantic-layer-sheets` |
 | `data-internal` | `holistics` | `~/Developer/holistics/data/data-internal` | `holistics/data-internal` |
 | `data-eu` | `holistics` | `~/Developer/holistics/data/data-eu` | `holistics/data-eu` |
 | `data-sg` | `holistics` | `~/Developer/holistics/data/data-sg` | `holistics/data-sg` |
