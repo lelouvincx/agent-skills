@@ -35,6 +35,8 @@ Complete this step when every style claim is classified, every exact value cites
 
 Before the operation, classify Claude subscription login, Design consent, and browser access separately as `ready`, `blocked`, or `unknown`. Resolve a known blocker through its matching recovery branch. Do not treat one ready state as evidence for another.
 
+Resolve this loaded skill's projected file. Use the path reported by the skill loader when available; otherwise use `~/.agents/skills/collaborating-with-claude-design/SKILL.md`. Hash its raw bytes immediately before every `claude_design_subagent` call. Pass the lowercase digest as `skillSha256`.
+
 Call `claude_design_subagent` only after the user explicitly requests Claude Design. Give it the design contract and relevant local read scope. Keep an inspection request read-only. For creation or refinement, apply exactly one user-authorized bounded mutation.
 
 Ask Claude to return:
@@ -46,7 +48,7 @@ Ask Claude to return:
 - concise change summary
 - anything it could not render or verify
 
-Record the returned `sessionId` and audit path. Reuse the session ID for subsequent work on the same direction. Keep the project ID or URL in every iteration prompt; conversation continuity does not replace project identity.
+Record the returned `sessionId`, audit path, verified skill SHA-256, and assembled Claude Code prompt SHA-256. Reuse the session ID for subsequent work on the same direction. Keep the project ID or URL in every iteration prompt; conversation continuity does not replace project identity.
 
 Complete this step when the returned project and deliverable identities match the intended target. Claude's prose report does not verify the rendered design.
 
@@ -107,6 +109,13 @@ Write `.amp/in/artifacts/claude-design-handoff.json` with this versioned contrac
   },
   "designSystem": { "name": null, "id": null },
   "claude": { "sessionId": null, "auditLogPath": null },
+  "trace": {
+    "skillName": "collaborating-with-claude-design",
+    "skillSha256": null,
+    "skillHashMatched": false,
+    "claudePromptSha256": null,
+    "claudePromptIncludedSkill": false
+  },
   "viewport": { "width": 1440, "height": 900, "deviceScaleFactor": 1 },
   "auth": {
     "claudeSubscription": "ready",
