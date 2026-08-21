@@ -51,7 +51,7 @@ and this project does not currently use versioned releases.
 
 ### Changed
 
-- Clarify the source of global agent instructions and explicitly identify `delegating-subagents` as a skill.
+- Clarify the source of global agent instructions and explicitly identify `delegating-subagents` as a skill. [#172](https://github.com/lelouvincx/agent-skills/pull/172)
 - Use the current Git working tree by default and create a worktree only when Chinh explicitly requests one. [#171](https://github.com/lelouvincx/agent-skills/pull/171)
 - Limit labels produced by `Logseq: Log Current Task` to 32 characters. [#169](https://github.com/lelouvincx/agent-skills/pull/169)
 - Require every native `create_thread` child to run on the same live runner as its parent. [#168](https://github.com/lelouvincx/agent-skills/pull/168)
