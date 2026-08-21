@@ -34,8 +34,6 @@ See [PROJECTS.md](PROJECTS.md) for the generated project list.
 
 ## Skills
 
-Run `amp skill list` to inspect the active runtime inventory. The current inventory contains 54 skills: 42 projected from this repository, 7 provided by Amp, and 5 provided by plugins.
-
 ### Repository skills
 
 Local skills are maintained in this repository. Remote skills are fetched and projected by `./sync-skills.sh --remote`.
