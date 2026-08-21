@@ -77,6 +77,15 @@ projects:
       - neovim config
     description: Neovim configuration stored inside dotfiles.
 
+  contribute:
+    github: null
+    owner: open-source
+    dir: contribute
+    aliases:
+      - contributions
+      - open source contributions
+    description: Parent workspace containing open-source contribution repositories.
+
   data:
     github: null
     owner: holistics
@@ -129,11 +138,13 @@ projects:
       - semantic layer benchmark
     description: AMQL and open-source semantic layer AI analytics benchmark.
 
-  open-semantic-layer-sheets-demo:
-    github: null
+  demo-open-semantic-layer-sheets:
+    github: holistics/demo-open-semantic-layer-sheets
     owner: holistics
-    dir: holistics/presales/open-semantic-layer-sheets-demo
+    dir: holistics/presales/demo-open-semantic-layer-sheets
     aliases:
+      - open-semantic-layer-sheets-demo
+      - open semantic layer sheets demo
       - semantic layer sheets demo
       - google sheets semantic layer demo
     description: Holistics Semantic Layer for Google Sheets presales demo.

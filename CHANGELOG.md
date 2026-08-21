@@ -9,6 +9,7 @@ and this project does not currently use versioned releases.
 
 ### Added
 
+- Add `contribute` as the parent workspace for open-source contribution repositories.
 - Add `proto` for route-aware static, SPA, single-HTML and image deployments with verified secret handoffs, bounded preview acceptance, explicit merge approval, and evidence-based reviews. [#171](https://github.com/lelouvincx/agent-skills/pull/171)
 - Ask for permission before `slackcli` sends messages or files, creates drafts, or adds reactions. [#170](https://github.com/lelouvincx/agent-skills/pull/170)
 - Add the latest Holistics custom chart, dashboard, dashboard control, dashboard theme, and visualization skills. [#166](https://github.com/lelouvincx/agent-skills/pull/166)
@@ -156,6 +157,7 @@ and this project does not currently use versioned releases.
 
 ### Fixed
 
+- Correct the Google Sheets semantic-layer demo path and GitHub mapping.
 - Restore the FFmpeg MCP connection by replacing its removed npm package with the working pinned package. [#116](https://github.com/lelouvincx/agent-skills/pull/116)
 - Support Claude Fable 5 in Claude Code subagents and remove obsolete Claude Code tool names that prevented the read-only agent from launching. [#109](https://github.com/lelouvincx/agent-skills/pull/109)
 - Reconcile completed Logseq worker responses at the five-minute timeout boundary instead of reporting successful writes as failures. [#95](https://github.com/lelouvincx/agent-skills/pull/95)
