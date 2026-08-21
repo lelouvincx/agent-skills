@@ -23,6 +23,7 @@
 
 - Before using `agent-browser`, read `{AMP_CONFIG_DIR:~/.config/amp}/conventions/agent-browser.md`.
 - Before working with `.aml` files or interpreting Holistics query results, read `{AMP_CONFIG_DIR:~/.config/amp}/conventions/holistics.md`.
+- Before Python tasks, read `{AMP_CONFIG_DIR:~/.config/amp}/conventions/python.md`.
 - Before writing or editing SQL, read `{AMP_CONFIG_DIR:~/.config/amp}/conventions/sql.md`.
 - Before changing Amp plugin documentation or code, read `{AMP_CONFIG_DIR:~/.config/amp}/conventions/amp-plugins.md`.
 - Before searching, creating, or moving Linear issues, read `{AMP_CONFIG_DIR:~/.config/amp}/conventions/linear.md`.

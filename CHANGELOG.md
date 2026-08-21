@@ -10,6 +10,7 @@ and this project does not currently use versioned releases.
 ### Added
 
 - Add GPT-5.5 agent modes with medium and xhigh reasoning effort. [#176](https://github.com/lelouvincx/agent-skills/pull/176)
+- Add a Python convention that prefers `uv` for project workflows and `uvx` for ephemeral CLI tools. [#175](https://github.com/lelouvincx/agent-skills/pull/175)
 - Add `collaborating-with-claude-design` for structured design briefs, browser render gates, evidence-based iteration, and machine-readable handoffs, and load it into every Claude Design subagent call. [#174](https://github.com/lelouvincx/agent-skills/pull/174)
 - Add `contribute` as the parent workspace for open-source contribution repositories. [#173](https://github.com/lelouvincx/agent-skills/pull/173)
 - Add `proto` for route-aware static, SPA, single-HTML and image deployments with verified secret handoffs, bounded preview acceptance, explicit merge approval, and evidence-based reviews. [#171](https://github.com/lelouvincx/agent-skills/pull/171)
