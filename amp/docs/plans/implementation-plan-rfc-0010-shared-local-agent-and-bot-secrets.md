@@ -535,9 +535,17 @@ Completed:
 - verified that the loaded job has only `AGENT_SECRET_AUTH=service-account`, with no legacy selector
 - passed the loaded/source service-account doctor without fallback; the job remained idle with zero scheduled runs
 - updated and projected the shared Logseq automation convention for `AGENT_SECRET_AUTH`, one-way operational fallback and legacy rollback-only state
+- found that the deterministic Logseq publisher could not open an agent-skills pull request without exposing a general-purpose GitHub command surface
+- merged Logseq pull request 86 as `79e1744`; the publisher now has an exact `open-pr` command for agent-skills with a fixed repository, fixed body path and no arbitrary file, comment or commit arguments
+- found that the Logseq-only `master` ruleset audit did not match agent-skills, which has no active equivalent repository ruleset
+- merged Logseq pull request 87 as `52d9eff`; each allowed repository now keeps its own verified publishing policy while both retain the shared bot identity, token-scope, repository-allowlist and operation checks
+- opened agent-skills pull request 180 with the accepted RFC, resolver, policy manifest, validation, tests, projection and rollout documentation
+- passed every initial pull-request validation job, then added the required separate changelog commit linking pull request 180
+- passed every pull-request validation job again after the changelog-link commit
 
 Pending:
 
+- merge agent-skills pull request 180 after Chinh's explicit approval, then verify post-merge CI and project the merged source
 - observe and verify one naturally due loaded-job run
 - remove selector compatibility only after those checks pass
 
