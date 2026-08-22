@@ -9,7 +9,7 @@ and this project does not currently use versioned releases.
 
 ### Added
 
-- Add a `Herdr: Restart Background Runners` Amp command that creates a confirmation-gated worker thread for restarting background Amp runners from the always-on `agent-skills` runner.
+- Add a `Herdr: Restart Background Runners` Amp command that creates a confirmation-gated worker thread for restarting background Amp runners from the always-on `agent-skills` runner. [#179](https://github.com/lelouvincx/agent-skills/pull/179)
 - Add the `herdr` remote skill for controlling Herdr-managed panes, tabs, workspaces, commands, and neighboring agents. [#178](https://github.com/lelouvincx/agent-skills/pull/178)
 - Add GPT-5.5 agent modes with medium and xhigh reasoning effort, using the latest Fable 5 prompt and tools. [#176](https://github.com/lelouvincx/agent-skills/pull/176)
 - Add a Python convention that prefers `uv` for project workflows and `uvx` for ephemeral CLI tools. [#175](https://github.com/lelouvincx/agent-skills/pull/175)
