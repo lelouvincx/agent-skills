@@ -1,0 +1,106 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/lelouvincx/agent-skills/amp/agent-secrets/bundles.schema.json",
+  "title": "Local agent secret capability bundles",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "command_classes",
+    "bundles"
+  ],
+  "properties": {
+    "version": {
+      "const": 1
+    },
+    "command_classes": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {
+        "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/commandClass"
+      }
+    },
+    "bundles": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {
+        "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/bundle"
+      }
+    }
+  },
+  "$defs": {
+    "commandClass": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "executablePaths"
+      ],
+      "properties": {
+        "executablePaths": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^/\\S(?:.*\\S)?$"
+          }
+        }
+      }
+    },
+    "bundle": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "audience",
+        "owner",
+        "variables",
+        "compatibleBundles",
+        "allowedCommandClasses"
+      ],
+      "properties": {
+        "audience": {
+          "enum": [
+            "agent",
+            "publisher"
+          ]
+        },
+        "owner": {
+          "type": "string",
+          "pattern": "^[a-z0-9](?:[a-z0-9._/-]*[a-z0-9])?$"
+        },
+        "variables": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Z][A-Z0-9_]*$"
+          }
+        },
+        "compatibleBundles": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+          }
+        },
+        "allowedCommandClasses": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+          }
+        }
+      }
+    }
+  }
+}

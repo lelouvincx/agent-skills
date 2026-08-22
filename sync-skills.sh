@@ -417,6 +417,17 @@ sync_amp_artifacts() {
 	echo "Syncing Amp artifacts..."
 	echo ""
 
+	if [ -d "$AMP_DIR/agent-secrets" ]; then
+		if ! command -v uvx >/dev/null 2>&1; then
+			echo "error: uvx is required to validate agent secret policy" >&2
+			return 1
+		fi
+		uvx --with jsonschema==4.25.1 python "$AMP_DIR/scripts/validate-agent-secrets.py"
+		mkdir -p "$AMP_CONFIG_DIR/agent-secrets"
+		rsync -a --delete "$AMP_DIR/agent-secrets/" "$AMP_CONFIG_DIR/agent-secrets/"
+		echo "synced: amp/agent-secrets/ -> $AMP_CONFIG_DIR/agent-secrets/"
+	fi
+
 	if [ -f "$AMP_DIR/AGENTS.md" ]; then
 		mkdir -p "$AMP_CONFIG_DIR"
 		cp "$AMP_DIR/AGENTS.md" "$AMP_CONFIG_DIR/AGENTS.md"

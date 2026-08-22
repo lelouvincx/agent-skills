@@ -1,0 +1,74 @@
+{
+  "version": 1,
+  "command_classes": {
+    "amp": {
+      "executablePaths": [
+        "/Users/lelouvincx/.amp/bin/amp"
+      ]
+    },
+    "claude-code": {
+      "executablePaths": [
+        "/Users/lelouvincx/.local/share/mise/installs/claude/latest/bin/claude"
+      ]
+    },
+    "pi": {
+      "executablePaths": [
+        "/Users/lelouvincx/.local/share/mise/installs/pi/latest/pi"
+      ]
+    },
+    "logseq-agent-preflight": {
+      "executablePaths": [
+        "/Users/lelouvincx/Developer/second-brain-logseq/automation/validate-agent-credentials"
+      ]
+    },
+    "logseq-publisher": {
+      "executablePaths": [
+        "/Users/lelouvincx/Developer/second-brain-logseq/automation/publish-approved-output"
+      ]
+    }
+  },
+  "bundles": {
+    "amp-runtime": {
+      "audience": "agent",
+      "owner": "lelouvincx/agent-skills",
+      "variables": [
+        "AMP_API_KEY"
+      ],
+      "compatibleBundles": [
+        "work"
+      ],
+      "allowedCommandClasses": [
+        "amp",
+        "logseq-agent-preflight"
+      ]
+    },
+    "work": {
+      "audience": "agent",
+      "owner": "lelouvincx/agent-skills",
+      "variables": [
+        "GH_TOKEN",
+        "GITHUB_TOKEN"
+      ],
+      "compatibleBundles": [
+        "amp-runtime"
+      ],
+      "allowedCommandClasses": [
+        "amp",
+        "claude-code",
+        "pi",
+        "logseq-agent-preflight"
+      ]
+    },
+    "lelouvincx-bot": {
+      "audience": "publisher",
+      "owner": "lelouvincx/second-brain-logseq",
+      "variables": [
+        "GH_TOKEN"
+      ],
+      "compatibleBundles": [],
+      "allowedCommandClasses": [
+        "logseq-publisher"
+      ]
+    }
+  }
+}

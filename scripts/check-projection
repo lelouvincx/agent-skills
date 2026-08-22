@@ -13,6 +13,8 @@ trap 'rm -rf "$tmp_home"' EXIT
 
 mkdir -p "$tmp_home/.config/amp/github-thread-events/policies"
 touch "$tmp_home/.config/amp/github-thread-events/policies/stale.json"
+mkdir -p "$tmp_home/.config/amp/agent-secrets"
+touch "$tmp_home/.config/amp/agent-secrets/stale.json"
 mkdir -p "$tmp_home/.config/amp/conventions"
 touch "$tmp_home/.config/amp/conventions/stale.md"
 mkdir -p "$tmp_home/.config/amp/state"
@@ -25,6 +27,8 @@ HOME="$tmp_home" \
 for path in \
 	".config/amp/AGENTS.md" \
 	".config/amp/settings.json" \
+	".config/amp/agent-secrets/bundles.json" \
+	".config/amp/agent-secrets/bundles.schema.json" \
 	".config/amp/github-thread-events/config.json" \
 	".config/amp/github-thread-events/config.schema.json" \
 	".config/amp/github-thread-events/policy-set.schema.json" \
@@ -54,6 +58,22 @@ fi
 
 if [ -e "$conventions/stale.md" ]; then
 	echo "error: projection did not delete a stale Amp convention file" >&2
+	exit 1
+fi
+
+if ! diff -qr "$REPO_DIR/amp/agent-secrets" "$tmp_home/.config/amp/agent-secrets"; then
+	echo "error: agent secret policy projection differs from its source" >&2
+	exit 1
+fi
+
+if [ -e "$tmp_home/.config/amp/agent-secrets/stale.json" ]; then
+	echo "error: projection did not delete a stale agent secret policy file" >&2
+	exit 1
+fi
+
+if [ -e "$tmp_home/.credentials/agent-secrets" ] \
+	|| [ -e "$tmp_home/.local/share/agent-secrets/op-service-account-token" ]; then
+	echo "error: projection created local agent secret credentials" >&2
 	exit 1
 fi
 
@@ -90,6 +110,12 @@ done
 resolver="$tmp_home/.local/bin/project-resolve"
 if [ ! -L "$resolver" ] || [ "$(readlink "$resolver")" != "$REPO_DIR/bin/project-resolve" ] || [ ! -x "$resolver" ]; then
 	echo "error: projection did not create an executable project-resolve link" >&2
+	exit 1
+fi
+
+agent_secrets="$tmp_home/.local/bin/agent-secrets"
+if [ ! -L "$agent_secrets" ] || [ "$(readlink "$agent_secrets")" != "$REPO_DIR/bin/agent-secrets" ] || [ ! -x "$agent_secrets" ]; then
+	echo "error: projection did not create an executable agent-secrets link" >&2
 	exit 1
 fi
 
