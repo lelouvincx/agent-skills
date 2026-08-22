@@ -32,6 +32,29 @@ project-resolve dbt --json
 
 See [PROJECTS.md](PROJECTS.md) for the generated project list.
 
+## Run commands with local secret bundles
+
+`agent-secrets` starts registered local commands with only the 1Password-backed capability bundles approved for that command class.
+
+```bash
+agent-secrets run \
+  --bundle amp-runtime \
+  --bundle work \
+  -- /Users/lelouvincx/.amp/bin/amp
+
+agent-secrets doctor
+```
+
+The source-controlled policy is in [`amp/agent-secrets/`](amp/agent-secrets/).
+`./sync-skills.sh` validates and projects that policy and links the resolver into `~/.local/bin`.
+
+Local bundle files belong in `~/.credentials/agent-secrets/` with directory mode `0700` and file mode `0600`.
+They may contain only simple assignments to `op://Agent Secrets/...` references.
+The service-account bootstrap file is separate and is never projected from this repository.
+
+The resolver provides only `run` and `doctor`.
+It does not print, export, evaluate or copy resolved values to the clipboard.
+
 ## Skills
 
 ### Repository skills
@@ -137,6 +160,8 @@ Run the relevant repository command directly:
 | Test the Amp documentation validator | `python3 -m unittest amp/scripts/test_validate_plugin_docs.py` |
 | Validate Amp capability and issue docs | `python3 amp/scripts/validate-plugin-docs.py` |
 | Validate Amp RFCs | `python3 amp/scripts/validate-rfcs.py` |
+| Test the agent secret resolver | `uvx --with jsonschema==4.25.1 python -m unittest amp/scripts/test_validate_agent_secrets.py amp/scripts/test_agent_secrets.py` |
+| Validate agent secret policy | `uvx --with jsonschema==4.25.1 python amp/scripts/validate-agent-secrets.py` |
 | Test the GitHub thread event validator | `python3 -m unittest amp/scripts/test_validate_github_thread_events.py` |
 | Validate GitHub thread event configuration | `python3 amp/scripts/validate-github-thread-events.py` |
 | Validate the project registry | `scripts/check-project-registry` |

@@ -49,6 +49,22 @@ repos:
         pass_filenames: false
         files: ^(?:amp/docs/rfcs/|amp/scripts/validate-rfcs\.py$|\.github/workflows/ci\.yml$|\.pre-commit-config\.yaml$)
 
+      - id: validate-agent-secrets
+        name: Validate agent secret capability policy
+        entry: python amp/scripts/validate-agent-secrets.py
+        language: python
+        additional_dependencies: [jsonschema==4.25.1]
+        pass_filenames: false
+        files: ^(?:amp/agent-secrets/|amp/scripts/(?:test_agent_secrets|test_validate_agent_secrets|validate-agent-secrets)\.py$|bin/agent-secrets$|sync-skills\.sh$|scripts/check-projection$|\.github/workflows/ci\.yml$|\.pre-commit-config\.yaml$)
+
+      - id: test-agent-secrets
+        name: Test agent secret capability resolver
+        entry: python -m unittest amp/scripts/test_validate_agent_secrets.py amp/scripts/test_agent_secrets.py
+        language: python
+        additional_dependencies: [jsonschema==4.25.1]
+        pass_filenames: false
+        files: ^(?:amp/agent-secrets/|amp/scripts/(?:test_agent_secrets|test_validate_agent_secrets|validate-agent-secrets)\.py$|bin/agent-secrets$|sync-skills\.sh$|scripts/check-projection$|\.github/workflows/ci\.yml$|\.pre-commit-config\.yaml$)
+
       - id: validate-github-thread-events
         name: Validate GitHub thread event configuration
         entry: python amp/scripts/validate-github-thread-events.py
