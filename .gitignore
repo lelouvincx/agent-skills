@@ -120,6 +120,9 @@ skills/diagram-design/assets/
 skills/diagram-design/references/
 skills/diagram-design/scripts/
 
+skills/herdr/SKILL.md
+skills/herdr/.remote-source
+
 # Amp runtime/source mirror: keep only intentional source artifacts under amp/.
 # Do not commit local runtime state, logs, MCP configs, or write metadata.
 .amp/
