@@ -55,7 +55,7 @@ Local skills are maintained in this repository. Remote skills are fetched and pr
 | [develop-amql](skills/develop-amql/SKILL.md) | Remote | develop Holistics models, datasets, dashboards, and metrics |
 | [diagram-design](skills/diagram-design/SKILL.md) | Remote | create and export branded diagrams as HTML, SVG, or PNG |
 | [domain-modeling](skills/domain-modeling/SKILL.md) | Remote | define domain terms, context, and architectural decisions |
-| [explaining-technical-concepts](skills/explaining-technical-concepts/SKILL.md) | Local | explain technical concepts and write or edit unambiguous technical documentation |
+| [technical-precision](skills/technical-precision/SKILL.md) | Local | explain technical concepts and write or edit unambiguous technical documentation |
 | [figma-design-to-code](skills/figma-design-to-code/SKILL.md) | Remote | inspect Figma designs and implement them as code |
 | [gmail](skills/gmail/SKILL.md) | Local | search and read Gmail through a read-only `gog` account |
 | [govuk-style](skills/govuk-style/SKILL.md) | Local | write clear plain-English prose |

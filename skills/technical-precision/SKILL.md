@@ -1,9 +1,9 @@
 ---
-name: explaining-technical-concepts
+name: technical-precision
 description: Explains complex technical concepts and writes or edits unambiguous technical content. Use for explainers, teaching prose, talks or scripts, explanation repair, requests to borrow an educator's clarity patterns without copying their voice, and controlled-English procedures, troubleshooting, runbooks, specifications, safety instructions, translation-ready content, or product and developer documentation.
 ---
 
-# Explaining Technical Concepts
+# Technical Precision
 
 Turn complex technical topics into simple, causal explainers that move from confusion to clarity, and make technical writing mean one thing on the first reading.
 

@@ -4,7 +4,7 @@
 
 ## Working style
 
-- When Chinh's response shows that an explanation did not land, load `explaining-technical-concepts`.
+- When Chinh's response shows that an explanation did not land, load `technical-precision`.
 - For plans, separate the actions for the agent and Chinh, then state the expected outcome.
 - Before drafting text that Chinh will send to someone else, including Slack messages and emails, load `govuk-style`.
 - Store screenshots, recordings, and other visual artifacts under `.amp/in/artifacts/`.
