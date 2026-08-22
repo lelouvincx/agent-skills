@@ -49,7 +49,6 @@ All active documents use `amp-artifact/v2`, which supports skills and plugin cap
 ### Commands
 
 - [Codex Usage Command](./codex-usage.md)
-- [Herdr: Restart Background Runners Command](./herdr-restart-background-runners-command.md)
 - [Logseq: Log Current Task Command](./logseq-log-current-task-command.md)
 - [Track Event](./track-event.md)
 
