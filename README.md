@@ -55,7 +55,7 @@ Local skills are maintained in this repository. Remote skills are fetched and pr
 | [develop-amql](skills/develop-amql/SKILL.md) | Remote | develop Holistics models, datasets, dashboards, and metrics |
 | [diagram-design](skills/diagram-design/SKILL.md) | Remote | create and export branded diagrams as HTML, SVG, or PNG |
 | [domain-modeling](skills/domain-modeling/SKILL.md) | Remote | define domain terms, context, and architectural decisions |
-| [explaining-technical-concepts](skills/explaining-technical-concepts/SKILL.md) | Local | explain technical concepts so they are easy to understand |
+| [technical-precision](skills/technical-precision/SKILL.md) | Local | explain technical concepts and write or edit unambiguous technical documentation |
 | [figma-design-to-code](skills/figma-design-to-code/SKILL.md) | Remote | inspect Figma designs and implement them as code |
 | [gmail](skills/gmail/SKILL.md) | Local | search and read Gmail through a read-only `gog` account |
 | [govuk-style](skills/govuk-style/SKILL.md) | Local | write clear plain-English prose |
@@ -78,7 +78,6 @@ Local skills are maintained in this repository. Remote skills are fetched and pr
 | [slackcli](skills/slackcli/SKILL.md) | Local | read, send, and manage Slack messages from the CLI |
 | [tdd](skills/tdd/SKILL.md) | Remote | work test-first |
 | [teach](skills/teach/SKILL.md) | Remote | teach a skill or concept in a workspace |
-| [technical-precision](skills/technical-precision/SKILL.md) | Local | write unambiguous procedures and technical documentation |
 | [to-questionnaire](skills/to-questionnaire/SKILL.md) | Remote | turn missing stakeholder knowledge into a reusable questionnaire |
 | [to-spec](skills/to-spec/SKILL.md) | Remote | turn a conversation into a specification in the project issue tracker |
 | [write-aql](skills/write-aql/SKILL.md) | Remote | write and run Holistics AQL queries |
