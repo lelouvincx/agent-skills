@@ -3,7 +3,7 @@ title: "Amp Plugin Capability Docs"
 slug: "amp-plugin-capability-docs"
 doc_schema: "amp-plugin-doc-index/v1"
 status: "active"
-last_reviewed: "2026-08-21"
+last_reviewed: "2026-08-22"
 ---
 
 # Amp artifact docs
@@ -49,6 +49,7 @@ All active documents use `amp-artifact/v2`, which supports skills and plugin cap
 ### Commands
 
 - [Codex Usage Command](./codex-usage.md)
+- [Herdr: Restart Background Runners Command](./herdr-restart-background-runners-command.md)
 - [Logseq: Log Current Task Command](./logseq-log-current-task-command.md)
 - [Track Event](./track-event.md)
 
