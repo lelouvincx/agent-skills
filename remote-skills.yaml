@@ -331,6 +331,10 @@ skills:
     archive_path: skills/diagram-design
     enabled: true
 
+  - name: herdr
+    url: https://raw.githubusercontent.com/herdrdev/herdr/master/skills/herdr/SKILL.md
+    enabled: true
+
   # Add more remote skills here:
   # - name: example-skill
   #   url: https://raw.githubusercontent.com/user/repo/main/skills/example/SKILL.md
