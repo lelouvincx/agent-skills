@@ -57,7 +57,7 @@ It does not print, export, evaluate or copy resolved values to the clipboard.
 
 ## Run a background Amp runner
 
-`amp-runner` installs a user LaunchAgent that starts at login and restarts after failure. It runs Amp through `caffeinate -s`: AC power keeps the Mac awake while the runner is active, while battery power keeps normal macOS sleep behaviour. Each runner gets private structured and supervisor logs under `~/.cache/amp/logs/runners/`.
+`amp-runner` installs a user LaunchAgent that starts at login, restarts after failure, and keeps the Mac awake on AC power.
 
 ```bash
 amp-runner install macbook.agent-skills
@@ -65,14 +65,7 @@ amp-runner status macbook.agent-skills
 amp-runner logs macbook.agent-skills
 ```
 
-To investigate one runner, reinstall it with temporary debug logging. Reinstall it without `--debug` after collecting the incident window.
-
-```bash
-amp-runner install --debug macbook.agent-skills
-amp-runner install macbook.agent-skills
-```
-
-Use `start`, `stop`, `restart`, and `uninstall` for lifecycle control. Installation captures the current `PATH` so MCP servers and plugins can find their commands under `launchd`; it does not copy secret environment variables. Amp's structured records include runner, thread, request, message, executor, and tool-call identifiers when those values apply. The separate `*.supervisor.log` captures startup failures outside Amp's structured logger. Treat both logs as sensitive.
+See the [Amp runner capability guide](amp/docs/tools/amp-runner.md) for debug logging, lifecycle controls, logs, and safety details.
 
 ## Skills
 
@@ -194,6 +187,7 @@ Run the relevant repository command directly:
 
 | Capability | Type | Where it appears | Use it to |
 | --- | --- | --- | --- |
+| [Amp runner](amp/docs/tools/amp-runner.md) | Local CLI | Shell | run named Amp background runners as user LaunchAgents |
 | [Claude Code subagent](amp/docs/tools/claude-code-subagent.md) | Agent tool | Agent | ask Claude Code for read-only advice |
 | [Label skill and plugin usage](amp/docs/tools/label-skill-plugin-usage.md) | Agent tool | Agent | add or correct usage-event labels |
 | [Pi Code subagent](amp/docs/tools/pi-code-subagent.md) | Agent tool | Agent | ask Pi Coding Agent for read-only advice |
