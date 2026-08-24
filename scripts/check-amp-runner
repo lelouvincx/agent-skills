@@ -35,7 +35,12 @@ EOF
 chmod +x "$tmp_dir/bin/amp" "$tmp_dir/bin/caffeinate" "$tmp_dir/bin/launchctl" "$tmp_dir/bin/plutil"
 
 file_mode() {
-	stat -f '%Lp' "$1" 2>/dev/null || stat -c '%a' "$1"
+	local mode
+	if mode="$(stat -f '%Lp' "$1" 2>/dev/null)" && [[ "$mode" =~ ^[0-7]+$ ]]; then
+		printf '%s\n' "$mode"
+	else
+		stat -c '%a' "$1"
+	fi
 }
 
 run_launcher() {
