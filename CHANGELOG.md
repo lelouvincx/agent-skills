@@ -9,6 +9,7 @@ and this project does not currently use versioned releases.
 
 ### Added
 
+- Add an `amp-runner` user LaunchAgent manager with AC-only sleep prevention, crash recovery, isolated private logs, lifecycle controls, and temporary debug logging.
 - Add an agent-browser lifecycle registry and CLI with current state, append-only audit history, fresh-profile sessions, and parent/child thread adoption. [#182](https://github.com/lelouvincx/agent-skills/pull/182)
 - Add accepted RFC-0010, its staged implementation plan, and the validated local resolver and projection contract for shared local agent and bot secrets using capability bundles backed by one dedicated 1Password automation boundary. [#180](https://github.com/lelouvincx/agent-skills/pull/180)
 - Add the `herdr` remote skill for controlling Herdr-managed panes, tabs, workspaces, commands, and neighboring agents. [#178](https://github.com/lelouvincx/agent-skills/pull/178)
@@ -153,6 +154,7 @@ and this project does not currently use versioned releases.
 
 ### Removed
 
+- Remove the macOS turn-end notification capability and plugin now that Amp runners operate as background LaunchAgents.
 - Remove the redundant Holistics development plugin and the unused `analyze-data`, `use-existing-viz`, and `visualize-data` skills. [#164](https://github.com/lelouvincx/agent-skills/pull/164)
 - Remove the `ponytail`, `ponytail-review`, and `ponytail-help` remote skills and clean their generated artifacts from existing projections. [#155](https://github.com/lelouvincx/agent-skills/pull/155)
 - Remove the retired `remotion` remote skill and clean its generated artifacts from existing projections. [#142](https://github.com/lelouvincx/agent-skills/pull/142)

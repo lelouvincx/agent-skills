@@ -55,6 +55,25 @@ The service-account bootstrap file is separate and is never projected from this 
 The resolver provides only `run` and `doctor`.
 It does not print, export, evaluate or copy resolved values to the clipboard.
 
+## Run a background Amp runner
+
+`amp-runner` installs a user LaunchAgent that starts at login and restarts after failure. It runs Amp through `caffeinate -s`: AC power keeps the Mac awake while the runner is active, while battery power keeps normal macOS sleep behaviour. Each runner gets private structured and supervisor logs under `~/.cache/amp/logs/runners/`.
+
+```bash
+amp-runner install macbook.agent-skills
+amp-runner status macbook.agent-skills
+amp-runner logs macbook.agent-skills
+```
+
+To investigate one runner, reinstall it with temporary debug logging. Reinstall it without `--debug` after collecting the incident window.
+
+```bash
+amp-runner install --debug macbook.agent-skills
+amp-runner install macbook.agent-skills
+```
+
+Use `start`, `stop`, `restart`, and `uninstall` for lifecycle control. Installation captures the current `PATH` so MCP servers and plugins can find their commands under `launchd`; it does not copy secret environment variables. Amp's structured records include runner, thread, request, message, executor, and tool-call identifiers when those values apply. The separate `*.supervisor.log` captures startup failures outside Amp's structured logger. Treat both logs as sensitive.
+
 ## Skills
 
 ### Repository skills
@@ -166,6 +185,7 @@ Run the relevant repository command directly:
 | Validate GitHub thread event configuration | `python3 amp/scripts/validate-github-thread-events.py` |
 | Validate the project registry | `scripts/check-project-registry` |
 | Test the project resolver | `scripts/check-project-resolver` |
+| Test the Amp runner launcher | `scripts/check-amp-runner` |
 | Validate runtime projection | `scripts/check-projection` |
 | Build Amp plugins | `scripts/check-plugin-builds` |
 | Validate SDK dependencies | `npm ci --prefix sdk` |
@@ -187,7 +207,6 @@ Run the relevant repository command directly:
 | [Capture skill and plugin magic words](amp/docs/tools/capture-skill-plugin-magic-words.md) | Event handler | Plugin event pipeline | record usage events from trigger phrases |
 | [Holistics MCP error logger](amp/docs/tools/holistics-mcp-errors.md) | Event handler | Plugin event pipeline | log Holistics MCP CLI failures |
 | [Holistics Markdown result renderer](amp/docs/tools/holistics-md.md) | Event handler | Plugin event pipeline | turn selected YAML result blocks into Markdown tables |
-| [macOS turn end notifier](amp/docs/tools/macos-turn-end-notifier.md) | Event handler | Plugin event pipeline | send a macOS notification when an agent turn ends |
 | [RTK rewrite](amp/docs/tools/rtk-rewrite.md) | Event handler | Plugin event pipeline | rewrite eligible shell commands through `rtk rewrite` |
 
 ## Development and maintenance flow

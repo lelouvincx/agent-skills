@@ -1,0 +1,97 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+launcher="$repo_root/bin/amp-runner"
+tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/check-amp-runner.XXXXXX")"
+trap 'rm -rf "$tmp_dir"' EXIT
+
+mkdir -p "$tmp_dir/bin" "$tmp_dir/launch-agents"
+cat > "$tmp_dir/bin/amp" <<'EOF'
+#!/usr/bin/env bash
+exit 0
+EOF
+cat > "$tmp_dir/bin/caffeinate" <<'EOF'
+#!/usr/bin/env bash
+{
+	printf 'AMP_NO_TUI=%s\n' "${AMP_NO_TUI:-}"
+	printf 'AMP_LOG_LEVEL=%s\n' "${AMP_LOG_LEVEL:-}"
+	printf 'AMP_LOG_FILE=%s\n' "${AMP_LOG_FILE:-}"
+	printf 'args='
+	printf '<%s>' "$@"
+	printf '\n'
+} > "$AMP_RUNNER_TEST_CAPTURE"
+EOF
+cat > "$tmp_dir/bin/launchctl" <<'EOF'
+#!/usr/bin/env bash
+printf '<%s>' "$@" > "$AMP_RUNNER_TEST_LAUNCHCTL_CAPTURE"
+if [ "${1:-}" = print ]; then exit 1; fi
+EOF
+cat > "$tmp_dir/bin/plutil" <<'EOF'
+#!/usr/bin/env bash
+grep -Fq '<plist version="1.0">' "${2:?plist path required}"
+grep -Fq '</plist>' "$2"
+EOF
+chmod +x "$tmp_dir/bin/amp" "$tmp_dir/bin/caffeinate" "$tmp_dir/bin/launchctl" "$tmp_dir/bin/plutil"
+
+file_mode() {
+	stat -f '%Lp' "$1" 2>/dev/null || stat -c '%a' "$1"
+}
+
+run_launcher() {
+	PATH="$tmp_dir/bin:/usr/bin:/bin" \
+	AMP_RUNNER_AMP_BIN="$tmp_dir/bin/amp" \
+	AMP_RUNNER_CAFFEINATE="$tmp_dir/bin/caffeinate" \
+	AMP_RUNNER_LAUNCHCTL="$tmp_dir/bin/launchctl" \
+	AMP_RUNNER_LAUNCH_AGENTS_DIR="$tmp_dir/launch-agents" \
+	AMP_RUNNER_PLUTIL="$tmp_dir/bin/plutil" \
+	AMP_RUNNER_TEST_CAPTURE="$tmp_dir/capture" \
+	AMP_RUNNER_TEST_LAUNCHCTL_CAPTURE="$tmp_dir/launchctl-capture" \
+		"$launcher" "$@"
+}
+
+logs="$tmp_dir/logs"
+mock_amp="$(CDPATH= cd -- "$tmp_dir/bin" && pwd)/amp"
+run_launcher run --debug --log-dir "$logs" macbook.agent-skills -- --no-ide
+grep -Fxq 'AMP_NO_TUI=1' "$tmp_dir/capture"
+grep -Fxq 'AMP_LOG_LEVEL=debug' "$tmp_dir/capture"
+grep -Fxq "AMP_LOG_FILE=$logs/macbook.agent-skills.log" "$tmp_dir/capture"
+grep -Fxq "args=<-s><$mock_amp><--no-tui><--runner-id=macbook.agent-skills><--no-ide>" "$tmp_dir/capture"
+[ "$(file_mode "$logs")" = 700 ]
+[ "$(file_mode "$logs/macbook.agent-skills.log")" = 600 ]
+[ "$(file_mode "$logs/macbook.agent-skills.supervisor.log")" = 600 ]
+
+run_launcher install --no-start --log-dir "$logs" --workdir "$repo_root" macbook.agent-skills -- --no-ide
+plist="$tmp_dir/launch-agents/com.ampcode.runner.macbook.agent-skills.plist"
+grep -Fq '<plist version="1.0">' "$plist"
+grep -Fq '<string>-s</string>' "$plist" && {
+	printf '%s\n' 'LaunchAgent must delegate AC-only sleep handling to amp-runner, not encode caffeinate arguments.' >&2
+	exit 1
+}
+grep -Fq '<string>run</string>' "$plist"
+grep -Fq '<string>--log-level</string>' "$plist"
+grep -Fq '<string>info</string>' "$plist"
+grep -Fq "<string>$repo_root</string>" "$plist"
+grep -Fq '<key>EnvironmentVariables</key>' "$plist"
+grep -Fq '<key>PATH</key>' "$plist"
+grep -Fq "<string>$tmp_dir/bin:/usr/bin:/bin</string>" "$plist"
+[ "$(file_mode "$plist")" = 600 ]
+
+run_launcher start macbook.agent-skills
+grep -Fq '<bootstrap>' "$tmp_dir/launchctl-capture"
+grep -Fq '<gui/' "$tmp_dir/launchctl-capture"
+grep -Fq "<$plist>" "$tmp_dir/launchctl-capture"
+
+if run_launcher run 'bad/runner' >"$tmp_dir/stdout" 2>"$tmp_dir/stderr"; then
+	printf '%s\n' 'Expected an unsafe runner ID to fail.' >&2
+	exit 1
+fi
+grep -Fq 'RUNNER_ID may contain only' "$tmp_dir/stderr"
+
+if run_launcher run test.runner -- --log-file other.log >"$tmp_dir/stdout" 2>"$tmp_dir/stderr"; then
+	printf '%s\n' 'Expected an owned Amp argument to fail.' >&2
+	exit 1
+fi
+grep -Fq 'amp-runner owns Amp argument' "$tmp_dir/stderr"
+
+printf '%s\n' 'Amp runner LaunchAgent contracts passed.'

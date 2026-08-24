@@ -1,0 +1,345 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+	cat <<'EOF'
+Usage:
+  amp-runner install [OPTIONS] RUNNER_ID [-- AMP_ARGS...]
+  amp-runner start|stop|restart|status|logs|uninstall RUNNER_ID
+  amp-runner run [OPTIONS] RUNNER_ID [-- AMP_ARGS...]
+
+Manage a user LaunchAgent for an Amp background runner. The runner starts at
+login, restarts after failure, and uses caffeinate -s so AC power prevents
+system sleep while battery power keeps normal macOS sleep behaviour.
+
+Install and run options:
+  --debug            Set Amp's log level to debug.
+  --log-level LEVEL  Set Amp's log level (default: info).
+  --log-dir DIR      Store logs in DIR (default: ~/.cache/amp/logs/runners).
+  --workdir DIR      Runner working directory (install only; default: current directory).
+  --no-start         Write the LaunchAgent without loading it (install only).
+  -h, --help         Show this help.
+
+Examples:
+  amp-runner install macbook.agent-skills
+  amp-runner install --debug macbook.agent-skills
+  amp-runner restart macbook.agent-skills
+  amp-runner logs macbook.agent-skills
+EOF
+}
+
+fail() {
+	printf 'amp-runner: %s\n' "$*" >&2
+	exit 2
+}
+
+validate_runner_id() {
+	[[ "$1" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || fail 'RUNNER_ID may contain only letters, numbers, dots, underscores, and hyphens'
+}
+
+validate_log_level() {
+	case "$1" in
+		debug|info|warn|error|audit) ;;
+		*) fail "unsupported log level: $1" ;;
+	esac
+}
+
+runner_label() {
+	printf 'com.ampcode.runner.%s' "$1"
+}
+
+launch_agent_path() {
+	printf '%s/%s.plist' "${AMP_RUNNER_LAUNCH_AGENTS_DIR:-$HOME/Library/LaunchAgents}" "$(runner_label "$1")"
+}
+
+log_dir_default() {
+	printf '%s' "${AMP_RUNNER_LOG_DIR:-$HOME/.cache/amp/logs/runners}"
+}
+
+prepare_logs() {
+	local log_dir="$1"
+	local runner_id="$2"
+	umask 077
+	mkdir -p "$log_dir"
+	chmod 700 "$log_dir"
+	touch "$log_dir/$runner_id.log" "$log_dir/$runner_id.supervisor.log"
+	chmod 600 "$log_dir/$runner_id.log" "$log_dir/$runner_id.supervisor.log"
+}
+
+xml_escape() {
+	printf '%s' "$1" | sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g' -e 's/"/\&quot;/g' -e "s/'/\&apos;/g"
+}
+
+xml_string() {
+	printf '\t\t<string>'
+	xml_escape "$1"
+	printf '</string>\n'
+}
+
+service_target() {
+	printf 'gui/%s/%s' "$(id -u)" "$(runner_label "$1")"
+}
+
+launchctl_command() {
+	"${AMP_RUNNER_LAUNCHCTL:-/bin/launchctl}" "$@"
+}
+
+plutil_command() {
+	"${AMP_RUNNER_PLUTIL:-/usr/bin/plutil}" "$@"
+}
+
+service_is_loaded() {
+	launchctl_command print "$(service_target "$1")" >/dev/null 2>&1
+}
+
+parse_run_options() {
+	log_level=info
+	log_dir="$(log_dir_default)"
+	workdir="$PWD"
+	no_start=false
+	amp_bin="${AMP_RUNNER_AMP_BIN:-}"
+	runner_id=
+	amp_args=()
+	amp_arg_count=0
+
+	while [ "$#" -gt 0 ]; do
+		case "$1" in
+			--debug)
+				log_level=debug
+				shift
+				;;
+			--log-level)
+				[ "$#" -ge 2 ] || fail '--log-level requires a value'
+				log_level="$2"
+				shift 2
+				;;
+			--log-dir)
+				[ "$#" -ge 2 ] || fail '--log-dir requires a value'
+				log_dir="$2"
+				shift 2
+				;;
+			--workdir)
+				[ "$#" -ge 2 ] || fail '--workdir requires a value'
+				workdir="$2"
+				shift 2
+				;;
+			--amp-bin)
+				[ "$#" -ge 2 ] || fail '--amp-bin requires a value'
+				amp_bin="$2"
+				shift 2
+				;;
+			--no-start)
+				no_start=true
+				shift
+				;;
+			-h|--help)
+				usage
+				exit 0
+				;;
+			--)
+				[ -n "$runner_id" ] || fail 'RUNNER_ID is required before --'
+				shift
+				amp_args=("$@")
+				amp_arg_count="$#"
+				break
+				;;
+			-*)
+				fail "unknown option: $1"
+				;;
+			*)
+				[ -z "$runner_id" ] || fail 'pass additional Amp arguments after --'
+				runner_id="$1"
+				shift
+				;;
+		esac
+	done
+
+	[ -n "$runner_id" ] || fail 'RUNNER_ID is required'
+	validate_runner_id "$runner_id"
+	validate_log_level "$log_level"
+	[ -d "$workdir" ] || fail "working directory does not exist: $workdir"
+	workdir="$(CDPATH= cd -- "$workdir" && pwd)"
+
+	if [ "$amp_arg_count" -gt 0 ]; then
+		for arg in "${amp_args[@]}"; do
+			case "$arg" in
+				--runner-id|--runner-id=*|--log-level|--log-level=*|--log-file|--log-file=*|--no-tui)
+					fail "amp-runner owns Amp argument: $arg"
+					;;
+			esac
+		done
+	fi
+
+	if [ -z "$amp_bin" ]; then
+		amp_bin="$(command -v amp || true)"
+	fi
+	[ -n "$amp_bin" ] && [ -x "$amp_bin" ] || fail 'amp is not available or executable'
+	amp_bin="$(CDPATH= cd -- "$(dirname -- "$amp_bin")" && pwd)/$(basename -- "$amp_bin")"
+}
+
+run_runner() {
+	parse_run_options "$@"
+	[ "$no_start" = false ] || fail '--no-start is valid only with install'
+	[ "$workdir" = "$PWD" ] || fail '--workdir is valid only with install'
+	prepare_logs "$log_dir" "$runner_id"
+
+	export AMP_NO_TUI=1
+	export AMP_LOG_LEVEL="$log_level"
+	export AMP_LOG_FILE="$log_dir/$runner_id.log"
+
+	if [ "$amp_arg_count" -gt 0 ]; then
+		exec "${AMP_RUNNER_CAFFEINATE:-/usr/bin/caffeinate}" -s "$amp_bin" --no-tui "--runner-id=$runner_id" "${amp_args[@]}"
+	else
+		exec "${AMP_RUNNER_CAFFEINATE:-/usr/bin/caffeinate}" -s "$amp_bin" --no-tui "--runner-id=$runner_id"
+	fi
+}
+
+install_runner() {
+	parse_run_options "$@"
+	prepare_logs "$log_dir" "$runner_id"
+
+	local launch_agents_dir
+	local plist
+	local script_path
+	launch_agents_dir="${AMP_RUNNER_LAUNCH_AGENTS_DIR:-$HOME/Library/LaunchAgents}"
+	plist="$(launch_agent_path "$runner_id")"
+	script_path="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/$(basename -- "${BASH_SOURCE[0]}")"
+	mkdir -p "$launch_agents_dir"
+
+	{
+		printf '%s\n' '<?xml version="1.0" encoding="UTF-8"?>'
+		printf '%s\n' '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">'
+		printf '%s\n' '<plist version="1.0">' '<dict>'
+		printf '\t<key>Label</key>\n'
+		xml_string "$(runner_label "$runner_id")"
+		printf '\t<key>ProgramArguments</key>\n\t<array>\n'
+		xml_string "$script_path"
+		xml_string run
+		xml_string --log-level
+		xml_string "$log_level"
+		xml_string --log-dir
+		xml_string "$log_dir"
+		xml_string --amp-bin
+		xml_string "$amp_bin"
+		xml_string "$runner_id"
+		if [ "$amp_arg_count" -gt 0 ]; then
+			xml_string --
+			for arg in "${amp_args[@]}"; do
+				xml_string "$arg"
+			done
+		fi
+		printf '\t</array>\n'
+		printf '\t<key>WorkingDirectory</key>\n'
+		xml_string "$workdir"
+		printf '\t<key>EnvironmentVariables</key>\n\t<dict>\n'
+		printf '\t\t<key>PATH</key>\n'
+		xml_string "$PATH"
+		printf '\t\t<key>HOME</key>\n'
+		xml_string "$HOME"
+		printf '\t</dict>\n'
+		printf '\t<key>RunAtLoad</key>\n\t<true/>\n'
+		printf '\t<key>KeepAlive</key>\n\t<true/>\n'
+		printf '\t<key>ThrottleInterval</key>\n\t<integer>10</integer>\n'
+		printf '\t<key>ProcessType</key>\n'
+		xml_string Background
+		printf '\t<key>StandardOutPath</key>\n'
+		xml_string "$log_dir/$runner_id.supervisor.log"
+		printf '\t<key>StandardErrorPath</key>\n'
+		xml_string "$log_dir/$runner_id.supervisor.log"
+		printf '%s\n' '</dict>' '</plist>'
+	} > "$plist"
+	chmod 600 "$plist"
+	plutil_command -lint "$plist" >/dev/null
+
+	printf 'Installed %s\n' "$plist"
+	printf 'Amp log: %s/%s.log\n' "$log_dir" "$runner_id"
+	printf 'Supervisor log: %s/%s.supervisor.log\n' "$log_dir" "$runner_id"
+
+	if [ "$no_start" = false ]; then
+		if service_is_loaded "$runner_id"; then
+			launchctl_command bootout "$(service_target "$runner_id")"
+		fi
+		launchctl_command bootstrap "gui/$(id -u)" "$plist"
+		printf 'Started %s\n' "$runner_id"
+	else
+		printf 'Not started; run: amp-runner start %s\n' "$runner_id"
+	fi
+}
+
+require_runner_id() {
+	[ "$#" -eq 1 ] || fail 'this command requires exactly one RUNNER_ID'
+	validate_runner_id "$1"
+}
+
+start_runner() {
+	require_runner_id "$@"
+	local plist
+	plist="$(launch_agent_path "$1")"
+	[ -f "$plist" ] || fail "runner is not installed: $1"
+	if service_is_loaded "$1"; then
+		launchctl_command kickstart "$(service_target "$1")"
+	else
+		launchctl_command bootstrap "gui/$(id -u)" "$plist"
+	fi
+}
+
+stop_runner() {
+	require_runner_id "$@"
+	service_is_loaded "$1" || fail "runner is not loaded: $1"
+	launchctl_command bootout "$(service_target "$1")"
+}
+
+restart_runner() {
+	require_runner_id "$@"
+	local plist
+	plist="$(launch_agent_path "$1")"
+	[ -f "$plist" ] || fail "runner is not installed: $1"
+	if service_is_loaded "$1"; then
+		launchctl_command kickstart -k "$(service_target "$1")"
+	else
+		launchctl_command bootstrap "gui/$(id -u)" "$plist"
+	fi
+}
+
+status_runner() {
+	require_runner_id "$@"
+	launchctl_command print "$(service_target "$1")"
+}
+
+logs_runner() {
+	require_runner_id "$@"
+	local log_dir
+	log_dir="$(log_dir_default)"
+	tail -n 100 -f "$log_dir/$1.log" "$log_dir/$1.supervisor.log"
+}
+
+uninstall_runner() {
+	require_runner_id "$@"
+	local plist
+	plist="$(launch_agent_path "$1")"
+	if service_is_loaded "$1"; then
+		launchctl_command bootout "$(service_target "$1")"
+	fi
+	rm -f "$plist"
+	printf 'Uninstalled %s; logs were preserved.\n' "$1"
+}
+
+[ "$#" -gt 0 ] || {
+	usage >&2
+	exit 2
+}
+
+command="$1"
+shift
+case "$command" in
+	install) install_runner "$@" ;;
+	run) run_runner "$@" ;;
+	start) start_runner "$@" ;;
+	stop) stop_runner "$@" ;;
+	restart) restart_runner "$@" ;;
+	status) status_runner "$@" ;;
+	logs) logs_runner "$@" ;;
+	uninstall) uninstall_runner "$@" ;;
+	-h|--help|help) usage ;;
+	*) fail "unknown command: $command" ;;
+esac

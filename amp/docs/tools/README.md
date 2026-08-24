@@ -58,7 +58,6 @@ All active documents use `amp-artifact/v2`, which supports skills and plugin cap
 - [RTK Rewrite](./rtk-rewrite.md)
 - [Holistics Markdown Result Renderer](./holistics-md.md)
 - [Holistics MCP Error Logger](./holistics-mcp-errors.md)
-- [macOS Turn End Notifier](./macos-turn-end-notifier.md)
 
 ## Maintenance files
 

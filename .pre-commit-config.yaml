@@ -87,6 +87,13 @@ repos:
         language: system
         types: [shell]
 
+      - id: check-amp-runner
+        name: Test Amp runner LaunchAgent manager
+        entry: scripts/check-amp-runner
+        language: system
+        pass_filenames: false
+        files: ^(?:bin/amp-runner$|scripts/check-amp-runner$|README\.md$|\.pre-commit-config\.yaml$)
+
       - id: generated-project-docs
         name: Check generated project documentation
         entry: >-
