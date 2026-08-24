@@ -3,12 +3,12 @@ title: "Amp Plugin Capability Docs"
 slug: "amp-plugin-capability-docs"
 doc_schema: "amp-plugin-doc-index/v1"
 status: "active"
-last_reviewed: "2026-08-21"
+last_reviewed: "2026-08-24"
 ---
 
 # Amp artifact docs
 
-This folder documents active local Amp artifacts. The unit of documentation is an artifact, not a source file: one plugin can expose multiple capabilities, while one skill is loaded from its `SKILL.md` contract.
+This folder documents active local Amp artifacts. The unit of documentation is an artifact, not a source file: one plugin can expose multiple capabilities, one skill is loaded from its `SKILL.md` contract, and one local CLI can expose a shell workflow.
 
 ## Source of truth
 
@@ -19,14 +19,19 @@ Use these sources in order when adding or refreshing a document:
 3. `amp plugins show-agent-options --json` for plugin-agent models and built-in tool names.
 4. `plugins/*.ts` for registered names, schemas, side effects, dependencies, and behavior.
 5. `skills/*/SKILL.md` for skill names, descriptions, declared tools, instructions, and behavior.
+6. `bin/*` for local CLI arguments, side effects, dependencies, and behavior.
 
 ## Capability documents
 
-All active documents use `amp-artifact/v2`, which supports skills and plugin capabilities. V1 is retained only as a historical reference.
+All active documents use `amp-artifact/v2`, which supports skills, local CLIs, and plugin capabilities. V1 is retained only as a historical reference.
 
 ### Skills
 
 - [Delegating Subagents](./delegating-subagents.md)
+
+### Local CLIs
+
+- [Amp Runner](./amp-runner.md)
 
 ### Agent-callable tools
 
@@ -58,7 +63,6 @@ All active documents use `amp-artifact/v2`, which supports skills and plugin cap
 - [RTK Rewrite](./rtk-rewrite.md)
 - [Holistics Markdown Result Renderer](./holistics-md.md)
 - [Holistics MCP Error Logger](./holistics-mcp-errors.md)
-- [macOS Turn End Notifier](./macos-turn-end-notifier.md)
 
 ## Maintenance files
 

@@ -55,6 +55,18 @@ The service-account bootstrap file is separate and is never projected from this 
 The resolver provides only `run` and `doctor`.
 It does not print, export, evaluate or copy resolved values to the clipboard.
 
+## Run a background Amp runner
+
+`amp-runner` installs a user LaunchAgent that starts at login, restarts after failure, and keeps the Mac awake on AC power.
+
+```bash
+amp-runner install macbook.agent-skills
+amp-runner status macbook.agent-skills
+amp-runner logs macbook.agent-skills
+```
+
+See the [Amp runner capability guide](amp/docs/tools/amp-runner.md) for debug logging, lifecycle controls, logs, and safety details.
+
 ## Skills
 
 ### Repository skills
@@ -166,6 +178,7 @@ Run the relevant repository command directly:
 | Validate GitHub thread event configuration | `python3 amp/scripts/validate-github-thread-events.py` |
 | Validate the project registry | `scripts/check-project-registry` |
 | Test the project resolver | `scripts/check-project-resolver` |
+| Test the Amp runner launcher | `scripts/check-amp-runner` |
 | Validate runtime projection | `scripts/check-projection` |
 | Build Amp plugins | `scripts/check-plugin-builds` |
 | Validate SDK dependencies | `npm ci --prefix sdk` |
@@ -174,6 +187,7 @@ Run the relevant repository command directly:
 
 | Capability | Type | Where it appears | Use it to |
 | --- | --- | --- | --- |
+| [Amp runner](amp/docs/tools/amp-runner.md) | Local CLI | Shell | run named Amp background runners as user LaunchAgents |
 | [Claude Code subagent](amp/docs/tools/claude-code-subagent.md) | Agent tool | Agent | ask Claude Code for read-only advice |
 | [Label skill and plugin usage](amp/docs/tools/label-skill-plugin-usage.md) | Agent tool | Agent | add or correct usage-event labels |
 | [Pi Code subagent](amp/docs/tools/pi-code-subagent.md) | Agent tool | Agent | ask Pi Coding Agent for read-only advice |
@@ -187,7 +201,6 @@ Run the relevant repository command directly:
 | [Capture skill and plugin magic words](amp/docs/tools/capture-skill-plugin-magic-words.md) | Event handler | Plugin event pipeline | record usage events from trigger phrases |
 | [Holistics MCP error logger](amp/docs/tools/holistics-mcp-errors.md) | Event handler | Plugin event pipeline | log Holistics MCP CLI failures |
 | [Holistics Markdown result renderer](amp/docs/tools/holistics-md.md) | Event handler | Plugin event pipeline | turn selected YAML result blocks into Markdown tables |
-| [macOS turn end notifier](amp/docs/tools/macos-turn-end-notifier.md) | Event handler | Plugin event pipeline | send a macOS notification when an agent turn ends |
 | [RTK rewrite](amp/docs/tools/rtk-rewrite.md) | Event handler | Plugin event pipeline | rewrite eligible shell commands through `rtk rewrite` |
 
 ## Development and maintenance flow

@@ -3,12 +3,12 @@ title: "Amp Artifact Schema"
 slug: "amp-artifact-schema"
 doc_schema: "amp-artifact-doc-schema/v2"
 status: "active"
-last_reviewed: "2026-07-12"
+last_reviewed: "2026-08-24"
 ---
 
 # Amp artifact schema
 
-Use `doc_schema: "amp-artifact/v2"` for one document per Amp artifact. An artifact can be exposed by a plugin or loaded as a skill. All active artifact documents must use v2; v1 is historical only.
+Use `doc_schema: "amp-artifact/v2"` for one document per Amp artifact. A plugin, skill, or local CLI can expose an artifact. All active artifact documents must use v2; v1 is historical only.
 
 The contract is closed by default: undocumented fields are invalid. The currently documented optional extension fields are `contract.required_inputs`, `contract.optional_inputs`, and `contract.model`. Add future extensions to this schema and the validator before using them.
 
@@ -51,6 +51,7 @@ source:
 
 - `plugin`: `source.registration_api` must name the Amp API that registers the artifact.
 - `skill`: `source.registration_api` must be `null`; the skill frontmatter is its registration contract.
+- `script`: `source.registration_api` must be `null`; the executable file is its invocation contract.
 
 Required Amp verification metadata:
 
@@ -114,6 +115,7 @@ tags: []
 `artifact.type` values:
 
 - `skill` for a `SKILL.md` loaded into agent context
+- `local_cli` for a projected executable invoked from a shell
 - `agent_tool` for `amp.registerTool(...)`
 - `command` for `amp.registerCommand(...)`
 - `event_handler` for `amp.on(...)`
@@ -124,6 +126,7 @@ tags: []
 `artifact.surface` values should describe where the artifact appears:
 
 - `agent_context`
+- `shell`
 - `agent`
 - `command_palette`
 - `plugin_event_pipeline`
@@ -134,6 +137,7 @@ tags: []
 `artifact.invocation` values should describe how it runs:
 
 - `skill_load`
+- `cli`
 - `tool_call`
 - `command_palette`
 - `plugin_event`
@@ -158,6 +162,18 @@ artifact:
   invocation: "skill_load"
 source:
   kind: "skill"
+  registration_api: null
+```
+
+Local CLI documents must use this combination:
+
+```yaml
+artifact:
+  type: "local_cli"
+  surface: "shell"
+  invocation: "cli"
+source:
+  kind: "script"
   registration_api: null
 ```
 

@@ -53,6 +53,11 @@ class ArtifactValidationTests(unittest.TestCase):
         for case in cases:
             self.assertEqual([], self.validate(self.data(*case)), case[0])
 
+    def test_valid_local_cli_invariant(self):
+        data = self.data("local_cli", "shell", "cli", None)
+        data["source"].update({"kind": "script", "file": "bin/test"})
+        self.assertEqual([], self.validate(data))
+
     def test_rejects_mismatch_and_unrelated_discriminator(self):
         data = self.data("command", "agent", "tool_call", "amp.registerTool", "command_id")
         data["contract"]["trigger"] = "tool_call"

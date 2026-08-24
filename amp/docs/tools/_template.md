@@ -61,7 +61,7 @@ Describe what the artifact does, who should use it, and the smallest mental mode
 - Invocation: `skill_load`
 - ID: `registered-name-or-stable-id`
 
-For a plugin artifact, replace the skill values with its plugin surface, invocation, source file, and registration API.
+For a plugin artifact, replace the skill values with its plugin surface, invocation, source file, and registration API. For a local CLI, use `local_cli`, `shell`, `cli`, `script`, and a null registration API.
 
 ## Contract
 

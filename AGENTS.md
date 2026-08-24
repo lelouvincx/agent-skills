@@ -3,6 +3,7 @@
 ## Maintenance
 
 - `amp/AGENTS.md` is the global AGENTS.md
+- When Chinh supplies a directory path for a new Amp runner, follow `amp/docs/tools/amp-runner.md` and name it `macbook.<directory-basename>`.
 - Use conventional branches and conventional commits.
 - Publish repository maintenance as `lelouvincx-bot` through the `logseq-weekly-report` 1Password service account. Resolve the `logseq` project with `project-resolve`, read its RFC-0010, set `LOGSEQ_REPORT_AUTH=service-account`, and use its repository helpers to resolve `GH_TOKEN_BOT` without printing it.
 - Use the hardened bot SSH identity for commits and pushes, and the service-account-resolved bot PAT for pull requests and other GitHub API writes. If those local service-account artifacts are unavailable, stop and ask Chinh rather than falling back to a personal identity.

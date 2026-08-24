@@ -93,11 +93,11 @@ PLUGIN_INVARIANTS = {
 }
 
 V2_ENUMS = {
-    "artifact.type": {"skill", "agent_tool", "command", "event_handler", "agent_mode", "status_item", "helper_agent"},
-    "artifact.surface": {"agent_context", "agent", "command_palette", "plugin_event_pipeline", "mode_picker", "status_bar", "internal"},
-    "artifact.invocation": {"skill_load", "tool_call", "command_palette", "plugin_event", "new_thread_mode", "status_update", "internal_call"},
+    "artifact.type": {"skill", "local_cli", "agent_tool", "command", "event_handler", "agent_mode", "status_item", "helper_agent"},
+    "artifact.surface": {"agent_context", "shell", "agent", "command_palette", "plugin_event_pipeline", "mode_picker", "status_bar", "internal"},
+    "artifact.invocation": {"skill_load", "cli", "tool_call", "command_palette", "plugin_event", "new_thread_mode", "status_update", "internal_call"},
     "artifact.api_stability": {"stable", "experimental", "mixed"},
-    "source.kind": {"plugin", "skill"},
+    "source.kind": {"plugin", "skill", "script"},
 }
 
 REQUIRED_H2S = [
@@ -256,6 +256,18 @@ def validate_schema_contract(path: Path, data: dict[str, object], errors: list[s
                     errors.append(f"{path}: skill artifacts must use surface 'agent_context' and invocation 'skill_load'")
                 if source_kind != "skill" or registration_api is not None:
                     errors.append(f"{path}: skill artifacts must use source.kind 'skill' and a null registration_api")
+            elif artifact_type == "local_cli":
+                if artifact.get("surface") != "shell" or artifact.get("invocation") != "cli":
+                    errors.append(f"{path}: local_cli artifacts must use surface 'shell' and invocation 'cli'")
+                if source_kind != "script" or registration_api is not None:
+                    errors.append(f"{path}: local_cli artifacts must use source.kind 'script' and a null registration_api")
+                contract = data.get("contract")
+                if isinstance(contract, dict):
+                    if contract.get("trigger") != "cli":
+                        errors.append(f"{path}: local_cli requires contract.trigger 'cli'")
+                    for field in ("event", "command_id", "agent_mode_key"):
+                        if contract.get(field) is not None:
+                            errors.append(f"{path}: local_cli requires contract.{field} to be null")
             elif source_kind != "plugin" or not isinstance(registration_api, str) or not registration_api:
                 errors.append(f"{path}: plugin artifacts must use source.kind 'plugin' and a non-empty registration_api")
             elif artifact_type in PLUGIN_INVARIANTS:
