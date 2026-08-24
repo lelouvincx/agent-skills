@@ -94,6 +94,13 @@ repos:
         pass_filenames: false
         files: ^(?:bin/amp-runner$|scripts/check-amp-runner$|README\.md$|\.pre-commit-config\.yaml$)
 
+      - id: check-amp-runner-logs
+        name: Test Amp runner log rotation and backup
+        entry: scripts/check-amp-runner-logs
+        language: system
+        pass_filenames: false
+        files: ^(?:bin/amp-runner-logs$|scripts/check-amp-runner-logs$|amp/docs/tools/amp-runner-logs\.md$|amp/agent-secrets/bundles\.json$|README\.md$|\.pre-commit-config\.yaml$)
+
       - id: generated-project-docs
         name: Check generated project documentation
         entry: >-

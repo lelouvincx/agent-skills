@@ -1,0 +1,470 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+usage() {
+	cat <<'EOF'
+Usage:
+  amp-runner-logs install [--remote REMOTE] [--rclone-command PATH]
+  amp-runner-logs uninstall
+  amp-runner-logs run
+  amp-runner-logs status
+  amp-runner-logs verify
+  amp-runner-logs restore OBJECT [OUTPUT_DIR]
+
+Rotate Amp runner logs at 50 MiB, then gzip and upload them to private storage.
+EOF
+}
+
+fail() { printf 'amp-runner-logs: %s\n' "$*" >&2; exit 2; }
+note() {
+	local line
+	line="$(date -u '+%Y-%m-%dT%H:%M:%SZ') $*"
+	printf '%s\n' "$line" >> "$maintenance_log"
+	printf '%s\n' "$line" >&2
+}
+
+state_dir="${AMP_RUNNER_LOGS_STATE_DIR:-$HOME/.local/state/amp-runner-logs}"
+active_dir="${AMP_RUNNER_LOG_DIR:-$HOME/.cache/amp/logs/runners}"
+launch_agents_dir="${AMP_RUNNER_LAUNCH_AGENTS_DIR:-$HOME/Library/LaunchAgents}"
+agent_path="$launch_agents_dir/com.ampcode.runner-logs.plist"
+pending_dir="$state_dir/pending"
+archive_dir="$state_dir/archives"
+restore_dir="$state_dir/restored"
+tmp_dir="$state_dir/tmp"
+orphan_dir="$state_dir/orphans"
+maintenance_log="$state_dir/maintenance.log"
+config_file="$state_dir/config"
+last_run_file="$state_dir/last-run"
+threshold="${AMP_RUNNER_LOGS_THRESHOLD_BYTES:-52428800}"
+pending_limit="${AMP_RUNNER_LOGS_PENDING_LIMIT_BYTES:-5368709120}"
+retention_days="${AMP_RUNNER_LOGS_RETENTION_DAYS:-7}"
+stale_hours="${AMP_RUNNER_LOGS_STALE_HOURS:-24}"
+remote="${AMP_RUNNER_LOGS_REMOTE:-amp-runner-r2:amp-runner-logs}"
+rclone_command="${AMP_RUNNER_LOGS_RCLONE:-}"
+launchctl_command="${AMP_RUNNER_LAUNCHCTL:-/bin/launchctl}"
+plistbuddy_command="${AMP_RUNNER_PLISTBUDDY:-/usr/libexec/PlistBuddy}"
+maintenance_phase=initializing
+
+prepare_state() {
+	umask 077
+	mkdir -p "$state_dir" "$pending_dir" "$archive_dir" "$restore_dir" "$tmp_dir" "$orphan_dir"
+	chmod 700 "$state_dir" "$pending_dir" "$archive_dir" "$restore_dir" "$tmp_dir" "$orphan_dir"
+	touch "$maintenance_log"
+	chmod 600 "$maintenance_log"
+}
+
+write_last_run() {
+	local result="$1" detail="$2" tmp="$last_run_file.tmp.$$"
+	printf 'timestamp=%s\nresult=%s\nphase=%s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "$result" "$detail" > "$tmp"
+	chmod 600 "$tmp"
+	mv "$tmp" "$last_run_file"
+}
+
+maintenance_error() {
+	local status=$?
+	set +e
+	note "ERROR maintenance failed during $maintenance_phase (exit=$status)"
+	write_last_run failed "$maintenance_phase"
+	exit "$status"
+}
+
+load_config() {
+	[ -f "$config_file" ] || return 0
+	while IFS='=' read -r key value; do
+		case "$key" in
+			REMOTE) [ -n "${AMP_RUNNER_LOGS_REMOTE:-}" ] || remote="$value" ;;
+			RCLONE_COMMAND) [ -n "${AMP_RUNNER_LOGS_RCLONE:-}" ] || rclone_command="$value" ;;
+		esac
+	done < "$config_file"
+}
+
+find_rclone() {
+	[ -n "$rclone_command" ] && [ -x "$rclone_command" ] || {
+		printf '%s\n' 'amp-runner-logs: configured rclone command is not executable; reinstall with --rclone-command PATH' >&2
+		return 2
+	}
+}
+
+file_size() { stat -f '%z' "$1" 2>/dev/null || stat -c '%s' "$1"; }
+file_mode() { stat -f '%Lp' "$1" 2>/dev/null || stat -c '%a' "$1"; }
+sha256() { shasum -a 256 "$1" | awk '{print $1}'; }
+runner_label() { printf 'com.ampcode.runner.%s' "$1"; }
+service_target() { printf 'gui/%s/%s' "$(id -u)" "$(runner_label "$1")"; }
+runner_loaded() { "$launchctl_command" print "$(service_target "$1")" >/dev/null 2>&1; }
+
+acquire_lock() {
+	if ! mkdir "$state_dir/lock" 2>/dev/null; then
+		local owner=
+		[ -f "$state_dir/lock/pid" ] && read -r owner < "$state_dir/lock/pid"
+		if [ -n "$owner" ] && kill -0 "$owner" 2>/dev/null; then
+			note 'ERROR another maintenance run holds the lock'
+			exit 1
+		fi
+		rm -rf "$state_dir/lock"
+		mkdir "$state_dir/lock" || fail 'could not replace stale maintenance lock'
+	fi
+	printf '%s\n' "$$" > "$state_dir/lock/pid"
+	trap 'rm -rf "$state_dir/lock"' EXIT
+}
+
+validate_trusted_command() {
+	local path="$1" current mode
+	[[ "$path" = /* ]] || fail '--rclone-command must be an absolute path'
+	[ -f "$path" ] && [ -x "$path" ] && [ ! -L "$path" ] || fail '--rclone-command must be an executable regular file, not a symlink'
+	current="$path"
+	while [ "$current" != / ]; do
+		mode="$(file_mode "$current")"
+		(( (8#$mode & 0022) == 0 )) || fail "rclone command path is writable by group or others: $current"
+		current="$(dirname "$current")"
+	done
+}
+
+write_transaction_metadata() {
+	local txn="$1" id="$2" plist="$3" main="$4" supervisor="$5" was_loaded="$6" name value
+	for name in runner-id plist-path main-path supervisor-path was-loaded; do
+		case "$name" in
+			runner-id) value="$id" ;;
+			plist-path) value="$plist" ;;
+			main-path) value="$main" ;;
+			supervisor-path) value="$supervisor" ;;
+			was-loaded) value="$was_loaded" ;;
+		esac
+		printf '%s\n' "$value" > "$txn/$name"
+		chmod 600 "$txn/$name"
+	done
+	: > "$txn/.prepared.tmp"; chmod 600 "$txn/.prepared.tmp"; mv "$txn/.prepared.tmp" "$txn/prepared"
+}
+
+mark_transaction_ready() {
+	local txn="$1"
+	: > "$txn/.ready.tmp"; chmod 600 "$txn/.ready.tmp"; mv "$txn/.ready.tmp" "$txn/ready"
+}
+
+restart_recorded_runner() {
+	local id="$1" plist="$2" was_loaded="$3"
+	if [ "$was_loaded" = true ] && ! runner_loaded "$id"; then
+		[ -f "$plist" ] || { note "ERROR cannot restart $id because its plist is missing: $plist"; return 1; }
+		"$launchctl_command" bootstrap "gui/$(id -u)" "$plist"
+	fi
+}
+
+recover_transactions() {
+	local txn id plist main supervisor was_loaded main_moved supervisor_moved failed=0 target orphan moved raw original
+	for txn in "$pending_dir"/*; do
+		[ -d "$txn" ] || continue
+		if [ ! -f "$txn/prepared" ]; then rm -rf "$txn"; continue; fi
+		[ ! -f "$txn/ready" ] || continue
+		for target in runner-id plist-path main-path supervisor-path was-loaded; do
+			[ -f "$txn/$target" ] || { note "ERROR incomplete transaction metadata: $txn"; failed=1; continue 2; }
+		done
+		read -r id < "$txn/runner-id"; read -r plist < "$txn/plist-path"
+		read -r main < "$txn/main-path"; read -r supervisor < "$txn/supervisor-path"; read -r was_loaded < "$txn/was-loaded"
+		main_moved=false; supervisor_moved=false
+		[ -f "$txn/main.jsonl" ] && main_moved=true
+		[ -f "$txn/supervisor.log" ] && supervisor_moved=true
+		if [ "$main_moved" = true ] && [ "$supervisor_moved" = true ]; then
+			umask 077
+			[ -e "$main" ] || : > "$main"
+			[ -e "$supervisor" ] || : > "$supervisor"
+			chmod 600 "$main" "$supervisor"
+			if restart_recorded_runner "$id" "$plist" "$was_loaded"; then
+				mark_transaction_ready "$txn"
+				note "recovered completed rotation for $id"
+			else failed=1
+			fi
+		elif [ "$main_moved" = false ] && [ "$supervisor_moved" = false ]; then
+			if restart_recorded_runner "$id" "$plist" "$was_loaded"; then rm -rf "$txn"; else failed=1; fi
+		else
+			for target in main supervisor; do
+				if [ "$target" = main ]; then moved="$main_moved"; raw="$txn/main.jsonl"; original="$main"; else moved="$supervisor_moved"; raw="$txn/supervisor.log"; original="$supervisor"; fi
+				[ "$moved" = true ] || continue
+				if [ ! -e "$original" ]; then
+					mv "$raw" "$original"; chmod 600 "$original"
+				else
+					orphan="$orphan_dir/$(basename "$txn").$(basename "$raw")"
+					mv "$raw" "$orphan"; chmod 600 "$orphan"
+					note "ERROR preserved partial rotation as orphan: $orphan"
+					failed=1
+				fi
+			done
+			restart_recorded_runner "$id" "$plist" "$was_loaded" || failed=1
+			rm -rf "$txn"
+			note "recovered partial rotation for $id"
+		fi
+	done
+	return "$failed"
+}
+
+resolve_runner_logs() {
+	local id="$1" plist="$2" supervisor
+	if ! supervisor="$("$plistbuddy_command" -c 'Print :StandardErrorPath' "$plist" 2>/dev/null)"; then
+		note "ERROR cannot read supervisor path from $plist"
+		return 1
+	fi
+	[[ "$supervisor" = /* ]] && [[ "$supervisor" = */"$id.supervisor.log" ]] || {
+		note "ERROR invalid supervisor path for $id: $supervisor"
+		return 1
+	}
+	printf '%s\n%s\n' "${supervisor%.supervisor.log}.log" "$supervisor"
+}
+
+rotate_runner() {
+	local id="$1" plist="$2" main="$3" supervisor="$4"
+	local txn was_loaded=false rotate_status=0
+	[ -f "$main" ] || return 0
+	[ "$(file_size "$main")" -ge "$threshold" ] || return 0
+	[ -f "$supervisor" ] || { note "ERROR supervisor log is missing for $id: $supervisor"; return 1; }
+	txn="$pending_dir/$id.$(date -u '+%Y%m%dT%H%M%SZ').$$"
+	mkdir "$txn"; chmod 700 "$txn"
+	if runner_loaded "$id"; then was_loaded=true; fi
+	write_transaction_metadata "$txn" "$id" "$plist" "$main" "$supervisor" "$was_loaded"
+	if [ "$was_loaded" = true ]; then "$launchctl_command" bootout "$(service_target "$id")"; fi
+	# Keep the interruption bounded. Each rename is atomic on this filesystem.
+	set +e
+	mv "$main" "$txn/main.jsonl" || rotate_status=$?
+	if [ "$rotate_status" -eq 0 ] && [ -f "$supervisor" ]; then mv "$supervisor" "$txn/supervisor.log" || rotate_status=$?; fi
+	if [ "$rotate_status" -eq 0 ]; then
+		umask 077
+		: > "$main" && : > "$supervisor" && chmod 600 "$main" "$supervisor" || rotate_status=$?
+	fi
+	if [ "$was_loaded" = true ]; then
+		"$launchctl_command" bootstrap "gui/$(id -u)" "$plist" || rotate_status=$?
+	fi
+	set -e
+	[ "$rotate_status" -eq 0 ] || { note "ERROR rotation failed for $id; pending files were preserved"; return "$rotate_status"; }
+	mark_transaction_ready "$txn"
+	note "rotated $id (previously_loaded=$was_loaded)"
+}
+
+compress_pending() {
+	local txn raw kind suffix id timestamp year month day output_dir tmp digest archive
+	rm -f "$tmp_dir"/*.partial
+	for txn in "$pending_dir"/*; do
+		[ -d "$txn" ] && [ -f "$txn/ready" ] || continue
+		read -r id < "$txn/runner-id"
+		timestamp="$(basename "$txn" | sed -E 's/^.*\.([0-9]{8}T[0-9]{6}Z)\.[0-9]+$/\1/')"
+		year="${timestamp:0:4}"; month="${timestamp:4:2}"; day="${timestamp:6:2}"
+		output_dir="$archive_dir/$(hostname -s)/$id/$year/$month/$day"
+		mkdir -p "$output_dir"; chmod 700 "$output_dir"
+		for raw in "$txn/main.jsonl" "$txn/supervisor.log"; do
+			[ -f "$raw" ] || continue
+			case "$(basename "$raw")" in
+				main.jsonl) kind=amp; suffix=amp.jsonl.gz ;;
+				supervisor.log) kind=supervisor; suffix=supervisor.log.gz ;;
+			esac
+			tmp="$tmp_dir/$timestamp.$$.${kind}.partial"
+			gzip -c "$raw" > "$tmp"
+			digest="$(sha256 "$tmp")"
+			archive="$output_dir/$timestamp--$digest--$suffix"
+			mv "$tmp" "$archive"; chmod 600 "$archive"; rm "$raw"
+		done
+		[ ! -f "$txn/main.jsonl" ] && [ ! -f "$txn/supervisor.log" ] && rm -rf "$txn"
+	done
+}
+
+remote_size() {
+	"$rclone_command" size --json "$1" | sed -nE 's/.*"bytes"[[:space:]]*:[[:space:]]*([0-9]+).*/\1/p' | head -1
+}
+
+upload_archives() {
+	local archive name relative object expected actual failed=0
+	while IFS= read -r -d '' archive; do
+		name="$(basename "$archive")"
+		[[ "$name" =~ ^[0-9]{8}T[0-9]{6}Z--[0-9a-f]{64}--(amp\.jsonl|supervisor\.log)\.gz$ ]] || continue
+		[ ! -f "$archive.uploaded" ] || continue
+		relative="${archive#"$archive_dir"/}"
+		object="$remote/$relative"
+		if ! "$rclone_command" copyto "$archive" "$object" --immutable; then
+			note "ERROR upload failed for $relative"
+			failed=1
+			continue
+		fi
+		expected="$(file_size "$archive")"
+		if ! actual="$(remote_size "$object")"; then
+			note "ERROR upload verification request failed for $relative"
+			failed=1
+			continue
+		fi
+		if [ "$actual" != "$expected" ]; then
+			note "ERROR upload verification failed for $relative"
+			failed=1
+			continue
+		fi
+		touch "$archive.uploaded"; chmod 600 "$archive.uploaded"
+		note "verified upload $relative ($expected bytes)"
+	done < <(find "$archive_dir" -type f -name '*.gz' -print0)
+	return "$failed"
+}
+
+pending_bytes() {
+	local bytes=0 file size
+	while IFS= read -r -d '' file; do
+		size="$(file_size "$file")"
+		bytes=$((bytes + size))
+	done < <(find "$pending_dir" "$orphan_dir" -type f -print0)
+	while IFS= read -r -d '' file; do
+		[ -f "$file.uploaded" ] && continue
+		size="$(file_size "$file")"
+		bytes=$((bytes + size))
+	done < <(find "$archive_dir" -type f -name '*.gz' -print0)
+	printf '%s\n' "$bytes"
+}
+
+check_pending_health() {
+	local bytes stale=false
+	bytes="$(pending_bytes)"
+	[ "$bytes" -le "$pending_limit" ] || { note "ERROR pending data exceeds $pending_limit bytes"; return 1; }
+	if find "$orphan_dir" -type f -print -quit | grep -q .; then
+		note 'ERROR partial rotation data requires manual recovery in the orphan directory'
+		return 1
+	fi
+	if find "$pending_dir" "$orphan_dir" -type f -mmin "+$((stale_hours * 60))" -print -quit | grep -q .; then
+		stale=true
+	fi
+	while [ "$stale" = false ] && IFS= read -r -d '' file; do
+		[ -f "$file.uploaded" ] && continue
+		if find "$file" -mmin "+$((stale_hours * 60))" -print -quit | grep -q .; then stale=true; fi
+	done < <(find "$archive_dir" -type f -name '*.gz' -print0)
+	if [ "$stale" = true ]; then
+		note "WARNING unuploaded pending data is older than $stale_hours hours"
+	fi
+}
+
+run_maintenance() {
+	prepare_state; load_config; acquire_lock
+	trap maintenance_error ERR
+	local plist id health=0 paths main supervisor
+	maintenance_phase=recovery
+	recover_transactions || health=1
+	maintenance_phase=rotation
+	mkdir -p "$active_dir"; chmod 700 "$active_dir"
+	for plist in "$launch_agents_dir"/com.ampcode.runner.*.plist; do
+		[ -f "$plist" ] || continue
+		id="$(basename "$plist" .plist)"; id="${id#com.ampcode.runner.}"
+		if ! paths="$(resolve_runner_logs "$id" "$plist")"; then health=1; continue; fi
+		main="$(printf '%s\n' "$paths" | sed -n '1p')"; supervisor="$(printf '%s\n' "$paths" | sed -n '2p')"
+		rotate_runner "$id" "$plist" "$main" "$supervisor" || health=1
+	done
+	maintenance_phase=compression
+	compress_pending
+	maintenance_phase=upload
+	find_rclone
+	upload_archives || health=1
+	maintenance_phase=health-check
+	check_pending_health || health=1
+	maintenance_phase=retention
+	find "$archive_dir" -type f -name '*.uploaded' -mmin "+$((retention_days * 1440))" -print0 | while IFS= read -r -d '' marker; do
+		rm -f "$marker" "${marker%.uploaded}"
+	done
+	if [ "$health" -eq 0 ]; then write_last_run ok complete; else write_last_run failed health-check; fi
+	trap - ERR
+	return "$health"
+}
+
+xml_escape() { printf '%s' "$1" | sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g' -e 's/"/\&quot;/g'; }
+xml_string() { printf '\t\t<string>%s</string>\n' "$(xml_escape "$1")"; }
+
+install_agent() {
+	local script_path plist_remote="$remote" plist_rclone=
+	while [ "$#" -gt 0 ]; do
+		case "$1" in
+			--remote) [ "$#" -ge 2 ] || fail '--remote requires a value'; plist_remote="$2"; shift 2 ;;
+			--rclone-command) [ "$#" -ge 2 ] || fail '--rclone-command requires a value'; plist_rclone="$2"; shift 2 ;;
+			*) fail "unknown install option: $1" ;;
+		esac
+	done
+	[ -n "$plist_rclone" ] || fail '--rclone-command is required'
+	validate_trusted_command "$plist_rclone"
+	plist_rclone="$(CDPATH= cd -- "$(dirname "$plist_rclone")" && pwd)/$(basename "$plist_rclone")"
+	prepare_state
+	printf 'REMOTE=%s\nRCLONE_COMMAND=%s\n' "$plist_remote" "$plist_rclone" > "$config_file"; chmod 600 "$config_file"
+	mkdir -p "$launch_agents_dir"
+	script_path="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/$(basename -- "${BASH_SOURCE[0]}")"
+	{
+		printf '%s\n' '<?xml version="1.0" encoding="UTF-8"?>' '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">' '<plist version="1.0">' '<dict>'
+		printf '\t<key>Label</key>\n'; xml_string 'com.ampcode.runner-logs'
+		printf '\t<key>ProgramArguments</key>\n\t<array>\n'; xml_string "$script_path"; xml_string run; printf '\t</array>\n'
+		printf '\t<key>EnvironmentVariables</key>\n\t<dict>\n'
+		printf '\t\t<key>HOME</key>\n'; xml_string "$HOME"
+		printf '\t\t<key>PATH</key>\n'; xml_string "$PATH"
+		printf '\t</dict>\n'
+		printf '\t<key>StartInterval</key>\n\t<integer>900</integer>\n'
+		printf '\t<key>StandardOutPath</key>\n'; xml_string '/dev/null'
+		printf '\t<key>StandardErrorPath</key>\n'; xml_string '/dev/null'
+		printf '%s\n' '</dict>' '</plist>'
+	} > "$agent_path"; chmod 600 "$agent_path"
+	"${AMP_RUNNER_PLUTIL:-/usr/bin/plutil}" -lint "$agent_path" >/dev/null
+	"$launchctl_command" bootout "gui/$(id -u)/com.ampcode.runner-logs" >/dev/null 2>&1 || true
+	"$launchctl_command" bootstrap "gui/$(id -u)" "$agent_path"
+	printf 'Installed %s\n' "$agent_path"
+}
+
+uninstall_agent() {
+	"$launchctl_command" bootout "gui/$(id -u)/com.ampcode.runner-logs" >/dev/null 2>&1 || true
+	rm -f "$agent_path"
+	printf 'Uninstalled log maintenance; pending data was preserved.\n'
+}
+
+status_agent() {
+	prepare_state; load_config
+	printf 'Remote: %s\nPending bytes: %s\n' "$remote" "$(pending_bytes)"
+	if [ -f "$last_run_file" ]; then cat "$last_run_file"; else printf 'result=never-run\n'; fi
+	"$launchctl_command" print "gui/$(id -u)/com.ampcode.runner-logs"
+}
+
+verify_backup() {
+	prepare_state; load_config; find_rclone; acquire_lock
+	local verify_dir="$tmp_dir/verify.$$" timestamp year month day digest archive relative object expected actual downloaded restored
+	mkdir "$verify_dir"; chmod 700 "$verify_dir"
+	timestamp="$(date -u '+%Y%m%dT%H%M%SZ')"
+	year="${timestamp:0:4}"; month="${timestamp:4:2}"; day="${timestamp:6:2}"
+	printf 'amp-runner-logs verification %s\n' "$timestamp" > "$verify_dir/source.jsonl"
+	gzip -c "$verify_dir/source.jsonl" > "$verify_dir/archive.gz"
+	digest="$(sha256 "$verify_dir/archive.gz")"
+	archive="$timestamp--$digest--amp.jsonl.gz"
+	relative="$(hostname -s)/validation.amp-runner-logs/$year/$month/$day/$archive"
+	object="$remote/$relative"
+	if ! "$rclone_command" copyto "$verify_dir/archive.gz" "$object" --immutable; then rm -rf "$verify_dir"; fail 'verification upload failed'; fi
+	expected="$(file_size "$verify_dir/archive.gz")"
+	if ! actual="$(remote_size "$object")" || [ "$actual" != "$expected" ]; then rm -rf "$verify_dir"; fail 'verification remote size did not match'; fi
+	downloaded="$verify_dir/downloaded.gz"; restored="$verify_dir/restored.jsonl"
+	if ! "$rclone_command" copyto "$object" "$downloaded"; then rm -rf "$verify_dir"; fail 'verification download failed'; fi
+	if [ "$(sha256 "$downloaded")" != "$digest" ] || ! gzip -dc "$downloaded" > "$restored" || ! cmp -s "$verify_dir/source.jsonl" "$restored"; then
+		rm -rf "$verify_dir"; fail 'verification restore did not match its source'
+	fi
+	rm -rf "$verify_dir"
+	printf 'Verified backup and restore: %s\n' "$relative"
+}
+
+restore_archive() {
+	[ "$#" -ge 1 ] && [ "$#" -le 2 ] || fail 'restore requires OBJECT and optional OUTPUT_DIR'
+	prepare_state; load_config; find_rclone
+	local object="$1" output="${2:-$restore_dir}" name expected tmp restore_tmp destination
+	name="$(basename "$object")"
+	expected="$(printf '%s' "$name" | sed -nE 's/^.*--([0-9a-f]{64})--(amp\.jsonl|supervisor\.log)\.gz$/\1/p')"
+	[ -n "$expected" ] || fail 'object name does not contain an expected SHA-256 digest'
+	mkdir -p "$output"; chmod 700 "$output"
+	tmp="$output/.$name.download.$$"
+	destination="$output/${name%.gz}"
+	[ ! -e "$destination" ] || fail "restore destination already exists: $destination"
+	case "$object" in *:*) ;; *) object="$remote/$object" ;; esac
+	"$rclone_command" copyto "$object" "$tmp"
+	[ "$(sha256 "$tmp")" = "$expected" ] || { rm -f "$tmp"; fail 'downloaded archive SHA-256 does not match its object name'; }
+	restore_tmp="$output/.${name%.gz}.restore.$$"
+	if ! gzip -dc "$tmp" > "$restore_tmp"; then rm -f "$tmp" "$restore_tmp"; fail 'downloaded archive is not valid gzip data'; fi
+	chmod 600 "$restore_tmp"; mv "$restore_tmp" "$destination"; rm "$tmp"
+	printf 'Restored %s\n' "$destination"
+}
+
+[ "$#" -gt 0 ] || { usage >&2; exit 2; }
+command="$1"; shift
+case "$command" in
+	install) install_agent "$@" ;;
+	uninstall) [ "$#" -eq 0 ] || fail 'uninstall takes no arguments'; uninstall_agent ;;
+	run) [ "$#" -eq 0 ] || fail 'run takes no arguments'; run_maintenance ;;
+	status) [ "$#" -eq 0 ] || fail 'status takes no arguments'; status_agent ;;
+	verify) [ "$#" -eq 0 ] || fail 'verify takes no arguments'; verify_backup ;;
+	restore) restore_archive "$@" ;;
+	-h|--help|help) usage ;;
+	*) fail "unknown command: $command" ;;
+esac

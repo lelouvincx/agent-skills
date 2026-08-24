@@ -138,4 +138,10 @@ if [ ! -L "$amp_runner" ] || [ "$(readlink "$amp_runner")" != "$REPO_DIR/bin/amp
 	exit 1
 fi
 
+amp_runner_logs="$tmp_home/.local/bin/amp-runner-logs"
+if [ ! -L "$amp_runner_logs" ] || [ "$(readlink "$amp_runner_logs")" != "$REPO_DIR/bin/amp-runner-logs" ] || [ ! -x "$amp_runner_logs" ]; then
+	echo "error: projection did not create an executable amp-runner-logs link" >&2
+	exit 1
+fi
+
 echo "Projection check passed"
