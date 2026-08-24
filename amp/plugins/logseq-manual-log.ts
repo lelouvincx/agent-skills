@@ -25,7 +25,8 @@ const WORKER_TIMEOUT_MS = 10 * 60 * 1000
 const WORKER_ERROR_RECOVERY_TIMEOUT_MS = 15_000
 const MAX_NOTIFICATION_CHARS = 500
 const LOGSEQ_WORKER_PROMPT_PREFIX = '[logseq-manual-log]'
-const WORKER_RESULT_KEYS = ['backlogVerified', 'error', 'journalVerified', 'summary', 'threadLabels', 'threadTitle', 'version']
+const WORKER_RESULT_VERSION = 2
+const WORKER_RESULT_KEYS = ['backlogVerified', 'error', 'journalVerified', 'parentThreadUpdated', 'summary', 'version']
 
 type LogContext = Pick<PluginCommandContext, 'thread'>
 type WorkerThread = {
@@ -55,11 +56,10 @@ type Timing = {
 }
 type RecoveryCheckpoint = { version: 1; parentThreadID: ThreadID; workerThreadID: ThreadID }
 type WorkerResult = {
-	version: 1
+	version: 2
 	backlogVerified: boolean
 	journalVerified: boolean
-	threadTitle: string | null
-	threadLabels: string[]
+	parentThreadUpdated: boolean
 	summary: string
 	error: string | null
 }
@@ -86,15 +86,11 @@ export type LogseqOperation = {
 	appendStatus: AppendStatus
 	lastConsumedAssistantMessageID?: ThreadMessageID
 	logseqStatus: LogseqStatus
-	renameStatus: DownstreamStatus
-	labelStatus: DownstreamStatus
+	parentThreadStatus: DownstreamStatus
 	archiveStatus: DownstreamStatus
-	threadTitle?: string
-	threadLabels: string[]
 	summary?: string
 	workerError?: string
-	renameError?: string
-	labelError?: string
+	parentThreadError?: string
 	archiveError?: string
 	restartAllowed: boolean
 }
@@ -205,10 +201,8 @@ function newOperation(parentThreadID: ThreadID, hint: string): LogseqOperation {
 		turnInFlight: false,
 		appendStatus: 'none',
 		logseqStatus: 'unverified',
-		renameStatus: 'not-attempted',
-		labelStatus: 'not-attempted',
+		parentThreadStatus: 'not-attempted',
 		archiveStatus: 'not-attempted',
-		threadLabels: [],
 		restartAllowed: false,
 	}
 }
@@ -306,18 +300,18 @@ async function advanceOperation(amp: PluginAPI, operation: LogseqOperation, timi
 
 	if (operation.turnInFlight) {
 		await consumeCurrentTurn(operation, timing)
-		if (operation.logseqStatus === 'complete') await completeDownstreamStages(amp, operation)
+		if (isReadyToArchive(operation)) await archiveWorker(amp, operation)
 		return
 	}
 
-	if (operation.logseqStatus === 'complete') {
-		await completeDownstreamStages(amp, operation)
+	if (isReadyToArchive(operation)) {
+		await archiveWorker(amp, operation)
 		return
 	}
 
 	await startWorkerTurn(operation, timing)
 	if (operation.turnInFlight) await consumeCurrentTurn(operation, timing)
-	if (operation.logseqStatus === 'complete') await completeDownstreamStages(amp, operation)
+	if (isReadyToArchive(operation)) await archiveWorker(amp, operation)
 }
 
 async function ensureWorker(amp: PluginAPI, operation: LogseqOperation, timing: Timing): Promise<void> {
@@ -628,9 +622,16 @@ async function consumeWorkerResponse(
 	}
 
 	operation.summary = parsed.result.summary
-	operation.threadTitle = parsed.result.threadTitle || undefined
-	operation.threadLabels = parsed.result.threadLabels
-	operation.workerError = parsed.result.error || undefined
+	const parentOnlyFailure = parsed.result.backlogVerified
+		&& parsed.result.journalVerified
+		&& !parsed.result.parentThreadUpdated
+	operation.workerError = parentOnlyFailure ? undefined : parsed.result.error || undefined
+	operation.parentThreadStatus = parsed.result.parentThreadUpdated
+		? 'complete'
+		: parsed.result.backlogVerified && parsed.result.journalVerified
+			? 'failed'
+			: 'not-attempted'
+	operation.parentThreadError = operation.parentThreadStatus === 'failed' ? parsed.result.error || undefined : undefined
 	if (!parsed.result.backlogVerified) {
 		operation.logseqStatus = 'failed'
 		return
@@ -793,64 +794,37 @@ export function parseWorkerResult(text: string): { ok: true; result: WorkerResul
 	if (keys.length !== WORKER_RESULT_KEYS.length || keys.some((key, index) => key !== WORKER_RESULT_KEYS[index])) {
 		return { ok: false, error: 'Worker result has an unexpected key set.' }
 	}
-	if (record.version !== 1
+	if (record.version !== WORKER_RESULT_VERSION
 		|| typeof record.backlogVerified !== 'boolean'
 		|| typeof record.journalVerified !== 'boolean'
-		|| (record.threadTitle !== null && typeof record.threadTitle !== 'string')
-		|| !Array.isArray(record.threadLabels)
-		|| record.threadLabels.some((label) => typeof label !== 'string')
+		|| typeof record.parentThreadUpdated !== 'boolean'
 		|| typeof record.summary !== 'string'
 		|| (record.error !== null && typeof record.error !== 'string')) {
 		return { ok: false, error: 'Worker result has invalid field types or version.' }
 	}
 
-	const result = {
-		...record,
-		threadLabels: [...new Set(record.threadLabels.map(normalizeLabel).filter(Boolean))],
-	} as WorkerResult
+	const result = record as WorkerResult
 	if (!result.summary.trim()) return { ok: false, error: 'Worker result summary must not be empty.' }
 	if (result.error !== null && !result.error.trim()) return { ok: false, error: 'Worker result error must be null or non-empty.' }
 	if (result.journalVerified && !result.backlogVerified) return { ok: false, error: 'Journal verification requires the parent-linked Backlog task.' }
-	if (!result.backlogVerified && result.threadTitle !== null) return { ok: false, error: 'Unverified Backlog requires a null thread title.' }
-	if (!result.backlogVerified && record.threadLabels.length > 0) return { ok: false, error: 'Unverified Backlog requires an empty thread label list.' }
-	if (result.backlogVerified && (result.threadTitle === null || !isValidThreadTitle(result.threadTitle))) return { ok: false, error: 'Verified Backlog requires a valid thread title.' }
-	if (result.backlogVerified && result.threadLabels.length === 0) return { ok: false, error: 'Verified Backlog requires at least one valid thread label.' }
-	if (result.threadLabels.some((label) => label.length > 32)) return { ok: false, error: 'Thread labels must not exceed 32 characters.' }
-	if (result.backlogVerified && result.journalVerified && result.error !== null) {
+	if (result.parentThreadUpdated && (!result.backlogVerified || !result.journalVerified)) {
+		return { ok: false, error: 'Parent thread update requires complete Logseq verification.' }
+	}
+	if (result.backlogVerified && result.journalVerified && result.parentThreadUpdated && result.error !== null) {
 		return { ok: false, error: 'Complete verification cannot include an error.' }
 	}
-	if ((!result.backlogVerified || !result.journalVerified) && result.error === null) {
+	if ((!result.backlogVerified || !result.journalVerified || !result.parentThreadUpdated) && result.error === null) {
 		return { ok: false, error: 'Incomplete verification requires an explicit error.' }
 	}
 	return { ok: true, result }
 }
 
-async function completeDownstreamStages(amp: PluginAPI, operation: LogseqOperation): Promise<void> {
-	if (!operation.threadTitle || !operation.workerID) return
-	if (operation.renameStatus !== 'complete') {
-		operation.renameStatus = 'running'
-		try {
-			await renameThread(amp, operation.parentThreadID, operation.threadTitle)
-			operation.renameStatus = 'complete'
-			operation.renameError = undefined
-		} catch (error) {
-			operation.renameStatus = 'failed'
-			operation.renameError = `Rename failed: ${errorMessage(error)}`
-		}
-	}
+function isReadyToArchive(operation: LogseqOperation): boolean {
+	return operation.logseqStatus === 'complete' && operation.parentThreadStatus === 'complete'
+}
 
-	if (operation.labelStatus !== 'complete') {
-		operation.labelStatus = 'running'
-		try {
-			await labelThread(amp, operation.parentThreadID, operation.threadLabels)
-			operation.labelStatus = 'complete'
-			operation.labelError = undefined
-		} catch (error) {
-			operation.labelStatus = 'failed'
-			operation.labelError = `Labels failed: ${errorMessage(error)}`
-		}
-	}
-
+async function archiveWorker(amp: PluginAPI, operation: LogseqOperation): Promise<void> {
+	if (!operation.workerID) return
 	if (operation.archiveStatus !== 'complete') {
 		operation.archiveStatus = 'running'
 		try {
@@ -866,8 +840,7 @@ async function completeDownstreamStages(amp: PluginAPI, operation: LogseqOperati
 
 function isFullyComplete(operation: LogseqOperation): boolean {
 	return operation.logseqStatus === 'complete'
-		&& operation.renameStatus === 'complete'
-		&& operation.labelStatus === 'complete'
+		&& operation.parentThreadStatus === 'complete'
 		&& operation.archiveStatus === 'complete'
 }
 
@@ -875,29 +848,45 @@ function formatOperation(operation: LogseqOperation, maxResultChars: number, not
 	const worker = operation.workerID
 		? `${operation.workerStatus} — ${operation.workerID}`
 		: `${operation.workerStatus} (ID not assigned yet)`
-	const errors = [operation.workerError, operation.renameError, operation.labelError, operation.archiveError].filter(Boolean).join('\n')
+	const errors = [operation.workerError, operation.parentThreadError, operation.archiveError].filter(Boolean).join('\n')
 	const detail = note || errors || operation.summary || 'Operation state recorded; run the command again to reconcile pending work.'
 	return [
 		`Worker: ${worker}`,
 		`Logseq: ${operation.logseqStatus}`,
-		`Rename: ${operation.renameStatus}`,
-		`Labels: ${operation.labelStatus}`,
+		`Parent thread: ${operation.parentThreadStatus}`,
 		`Archive: ${operation.archiveStatus}`,
 		truncate(detail, maxResultChars),
 	].join('\n')
 }
 
+function logseqCompletionContract(parentThreadID: string, today: string): string {
+	return `Logseq completion criterion: set backlogVerified true only after re-reading Backlog.md and finding exactly one actionable task whose direct input:: contains ${parentThreadID}. That task must have one unique UUID in direct id::, one page reference in direct project::, one #P value in direct priority::, ${today} in direct updated-at::, a matching direct linear:: value when its title or input contains a DAT-, PS-, or DOC- issue ID, a non-empty direct next-action:: when active, and a directly nested activity with its own UUID in id::, ${today} in observed-at::, and a non-empty outcome::. A DONE task must have completed:: [[YYYY-MM-DD]] and no next-action:: or blocker::. Set journalVerified true only after re-reading today's journal and confirming that it contains a block reference to that exact task UUID.`
+}
+
+function parentThreadUpdateContract(parentThreadID: string): string {
+	return `Only after both Logseq booleans meet that completion criterion, update parent Amp thread ${parentThreadID}. Derive its title from the verified task in the exact format \`[Project] task title\`. Preserve any Linear issue ID immediately after the project prefix. Derive labels for the normalized Backlog project and working project, plus \`customer-...\` when the task identifies a customer. Resolve the parent workspace directory name with \`project-resolve <directory-name> --json\` and use its registry key for the working-project label; if resolution fails, use the normalized directory name. Normalize each label to lowercase words joined with hyphens and omit punctuation. Truncate labels longer than 32 characters to 32 characters, remove any trailing hyphen, then remove empty values and duplicates. Do not add priority or task-state labels. Run \`amp threads rename\` with the exact derived title, then run \`amp threads label\` with every derived label without removing existing labels. Reapply both idempotent commands during reconciliation. Set parentThreadUpdated true only when both commands exit successfully.`
+}
+
+function workerResultContract(): string {
+	return `Return exactly one unfenced JSON object and no other text:
+{"version":${WORKER_RESULT_VERSION},"backlogVerified":true,"journalVerified":true,"parentThreadUpdated":true,"summary":"Short outcome","error":null}
+
+Logseq booleans require the file read-back described above. parentThreadUpdated requires both parent-thread commands to exit successfully with the exact derived title and every required label. Never set journalVerified true when backlogVerified is false. Never set parentThreadUpdated true unless both Logseq booleans are true. If any boolean is false, set error to the corresponding concise non-empty reason.`
+}
+
 function buildReconciliationPrompt(operation: LogseqOperation): string {
+	const today = localDateParts()
 	return `${LOGSEQ_WORKER_PROMPT_PREFIX}
 
 Reconcile Logseq logging for parent Amp thread ${operation.parentThreadID}. This is generation ${operation.generation} of the existing operation; do not create a duplicate task.
 
-Use read_thread on ${operation.parentThreadID} again when the prior result did not verify Backlog. Re-read ${LOGSEQ_REPO}/pages/Backlog.md and the exact journal path from the original worker prompt. Search for the parent-thread link before mutation. Update the existing task when found; only create it when no parent-linked task exists after searching. Repair only missing or invalid state, including the RFC-0008 task contract: direct id::, project::, priority::, input::, updated-at::, next-action:: for active follow-up, blocker:: only for a known blocker, completed:: only for DONE, and directly nested dated activity with its own id::, observed-at::, and outcome::. If the user hint, parent thread, or matching Backlog task contains a Linear issue ID such as DAT-745, keep it unchanged in the Backlog task title, linear:: property, and immediately after the project prefix in threadTitle. Before final read-back, ask yourself: can a fresh agent safely act on every recorded fact about this task, answer status and history questions, and take the recorded next action without asking the user to restate known context? If a new request changes intent or requires unavailable authority, can it identify that precisely rather than guessing? Repair missing durable context before continuing. Derive title and labels from the verified task. Each label must not exceed 32 characters. Ensure the journal pointer targets that same task, then re-read both files.
+Use read_thread on ${operation.parentThreadID} again when the prior result did not verify Backlog. Re-read ${LOGSEQ_REPO}/pages/Backlog.md and the exact journal path from the original worker prompt. Search for the parent-thread link before mutation. Update the existing task when found; only create it when no parent-linked task exists after searching. Repair only missing or invalid state, including the RFC-0008 task contract: direct id::, project::, priority::, input::, updated-at::, next-action:: for active follow-up, blocker:: only for a known blocker, completed:: only for DONE, and directly nested dated activity with its own id::, observed-at::, and outcome::. If the user hint, parent thread, or matching Backlog task contains a Linear issue ID such as DAT-745, keep it unchanged in the Backlog task title, linear:: property, and immediately after the project prefix in the parent thread title. Before final read-back, ask yourself: can a fresh agent safely act on every recorded fact about this task, answer status and history questions, and take the recorded next action without asking the user to restate known context? If a new request changes intent or requires unavailable authority, can it identify that precisely rather than guessing? Repair missing durable context before continuing. Ensure the journal pointer targets that same task, then re-read both files.
 
-Return exactly one unfenced JSON object and no other text:
-{"version":1,"backlogVerified":true,"journalVerified":true,"threadTitle":"[Project] task title","threadLabels":["project","working-project","customer-name"],"summary":"Short outcome","error":null}
+${logseqCompletionContract(operation.parentThreadID, today.isoDate)}
 
-Use true only after post-write read-back. If only Backlog verifies, set journalVerified to false and error to a concise non-empty reason. If neither verifies, set both booleans false, threadTitle null, threadLabels to [], and error to a concise non-empty reason.`
+${parentThreadUpdateContract(operation.parentThreadID)}
+
+${workerResultContract()}`
 }
 
 type Settled<T> = { kind: 'fulfilled'; value: T } | { kind: 'rejected'; error: unknown } | { kind: 'timeout' }
@@ -934,7 +923,7 @@ Context:
 - Today's journal file: ${LOGSEQ_REPO}/journals/${today.journalFile}
 
 Rules:
-1. First perform a private intent-reconstruction step. You must use read_thread on ${parentThreadID}. Do not fall back to partial parent context. If read_thread is unavailable or fails, stop without editing Logseq and return the required JSON with both verification booleans false, threadTitle null, threadLabels [], and a concise error. Infer and keep distinct: (a) the original user intent, (b) any later user redirect, (c) the latest coherent requested outcome, and (d) the durable result to log. Do not write anything yet.
+1. First perform a private intent-reconstruction step. You must use read_thread on ${parentThreadID}. Do not fall back to partial parent context. If read_thread is unavailable or fails, stop without editing Logseq and return the required JSON with all 3 booleans false and a concise error. Infer and keep distinct: (a) the original user intent, (b) any later user redirect, (c) the latest coherent requested outcome, and (d) the durable result to log. Do not write anything yet.
 2. Log the durable task/outcome represented by that reconstructed intent. Do not let incidental recent-message context replace the original task intent. If the thread contains unrelated later chatter, ignore it unless the user explicitly redirected the task.
 3. Before choosing or writing a Logseq block, read \`${LOGSEQ_REPO}/pages/Canonical Pages.md\`, then read the corresponding canonical project/rule pages named there, especially \`pages/Projects.md\`, \`pages/Backlog.md\`, and any relevant rule page. Use that canonical map as the source of truth for project taxonomy, active backlog matches, priority conventions, and placement.
 4. All task logs must be represented in \`pages/Backlog.md\` first. Check for an existing backlog entry referencing the parent thread via \`input:: [Ampcode](${parentThreadID})\`, a numbered variant such as \`[1-Ampcode](${parentThreadID})\`, or \`${parentThreadID}\`; update it instead of creating a duplicate.
@@ -961,18 +950,17 @@ Rules:
    - When updating an existing parent-linked task, preserve valid fields and repair any missing task-contract fields before verification.
    - preserve surrounding indentation style, usually one tab for properties under a block
 8. Keep the backlog entry short: one task block plus few useful child notes, and one brief journal reference. Do not paste the transcript or your private intent-reconstruction notes.
-9. Determine the parent Amp thread title from the Logseq backlog task/block you wrote or updated, using exactly this pattern: \`[Project] task title\`. Use the Logseq \`project:: [[...]]\` value without brackets for \`Project\`; use the backlog task/block title text without TODO/DONE markers or properties for \`task title\`. If the user hint, parent thread, or matching Backlog task contains a Linear issue ID such as \`DAT-745\`, ensure the Backlog task title contains that ID unchanged and keep it immediately after the project prefix in \`threadTitle\`, for example \`[Internal] DAT-745 Support Quality Overview PR #111\`.
-10. Derive parent Amp thread labels for the backlog project, working project, and customer. Always include the normalized backlog-project label, for example \`Duty Support\` becomes \`duty-support\`. Always include the working-project label for the parent Amp workspace shown in Context: resolve its directory name with \`project-resolve <directory-name> --json\` and use the returned registry \`key\`, such as \`logseq\`, \`agent-skills\`, or \`demo4\`; if resolution fails, use the normalized workspace directory name. Include the customer label only when the backlog task identifies a customer through its title, properties, or canonical project/customer context. Prefix the normalized customer with \`customer-\`, for example \`FanServ\` becomes \`customer-fanserv\` and \`Basata\` becomes \`customer-basata\`. Normalize labels to lowercase words joined with hyphens and omit punctuation. Each label must not exceed 32 characters. Do not add priority or TODO/DONE state labels.
-11. Do not commit, push, run weekly report automation, or modify unrelated blocks.
-12. Do not send messages to the parent thread. Return your result only as this worker thread's final answer.
-13. After mutation and before final read-back, ask yourself: can a fresh agent safely act on every recorded fact about this task, answer status and history questions, and take the recorded next action without asking the user to restate known context? If a new request changes intent or requires unavailable authority, can it identify that precisely rather than guessing? Repair the task or activity when the answer is no. Then re-read both files. Set backlogVerified true only when a Backlog task linked to parent thread ${parentThreadID} is present. Set journalVerified true only when the journal pointer targets that same task.
+9. Do not commit, push, run weekly report automation, or modify unrelated blocks.
+10. After mutation and before final read-back, ask yourself: can a fresh agent safely act on every recorded fact about this task, answer status and history questions, and take the recorded next action without asking the user to restate known context? If a new request changes intent or requires unavailable authority, can it identify that precisely rather than guessing? Repair the task or activity when the answer is no. Then re-read both files.
+11. Do not send messages to the parent thread. Return your result only as this worker thread's final answer.
+
+${logseqCompletionContract(parentThreadID, today.isoDate)}
+
+${parentThreadUpdateContract(parentThreadID)}
 
 User instruction: ${hint || '(none, infer the best target from this thread)'}
 
-Return exactly one unfenced JSON object and no other text:
-{"version":1,"backlogVerified":true,"journalVerified":true,"threadTitle":"[Project] task title","threadLabels":["project","working-project","customer-name"],"summary":"Short outcome","error":null}
-
-Use true only after post-write read-back. If only Backlog verifies, set journalVerified false and error to a concise non-empty reason. If neither verifies, set both booleans false, threadTitle null, threadLabels to [], and error to a concise non-empty reason. Never set journalVerified true when backlogVerified is false.
+${workerResultContract()}
 `
 }
 
@@ -990,28 +978,6 @@ async function archiveThread(amp: PluginAPI, threadID: ThreadID): Promise<void> 
 	if (result.exitCode !== 0) {
 		throw new Error(result.stderr.trim() || result.stdout.trim() || `amp threads archive exited with ${result.exitCode}`)
 	}
-}
-
-async function renameThread(amp: PluginAPI, threadID: ThreadID, newTitle: string): Promise<void> {
-	const result = await amp.$`amp threads rename ${threadID} ${newTitle}`
-	if (result.exitCode !== 0) {
-		throw new Error(result.stderr.trim() || result.stdout.trim() || `amp threads rename exited with ${result.exitCode}`)
-	}
-}
-
-async function labelThread(amp: PluginAPI, threadID: ThreadID, labels: string[]): Promise<void> {
-	const result = await amp.$`amp threads label ${threadID} ${labels}`
-	if (result.exitCode !== 0) {
-		throw new Error(result.stderr.trim() || result.stdout.trim() || `amp threads label exited with ${result.exitCode}`)
-	}
-}
-
-function isValidThreadTitle(text: string): boolean {
-	return text === text.trim() && /^\[[^\]\r\n]+\] [^\r\n]+$/.test(text)
-}
-
-function normalizeLabel(label: string): string {
-	return label.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
 }
 
 function errorMessage(error: unknown): string {

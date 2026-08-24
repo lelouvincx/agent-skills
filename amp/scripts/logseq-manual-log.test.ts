@@ -21,26 +21,31 @@ const timing = {
 	verifyLogseqWrite: async () => ({ backlogVerified: true, journalVerified: true }),
 }
 const completeResult = {
-	version: 1,
+	version: 2,
 	backlogVerified: true,
 	journalVerified: true,
-	threadTitle: '[Presales] Follow up with FanServ',
-	threadLabels: ['presales', 'agent-skills', 'customer-fanserv'],
+	parentThreadUpdated: true,
 	summary: 'Logged and verified both files.',
 	error: null,
 }
 const partialResult = {
 	...completeResult,
 	journalVerified: false,
+	parentThreadUpdated: false,
 	summary: 'Backlog verified; journal still missing.',
 	error: 'Journal pointer was not found.',
+}
+const parentUpdateFailedResult = {
+	...completeResult,
+	parentThreadUpdated: false,
+	summary: 'Logseq verified; parent thread update failed.',
+	error: 'Parent thread rename failed.',
 }
 const failedResult = {
 	...completeResult,
 	backlogVerified: false,
 	journalVerified: false,
-	threadTitle: null,
-	threadLabels: [],
+	parentThreadUpdated: false,
 	summary: 'No Logseq writes verified.',
 	error: 'Canonical pages could not be read.',
 }
@@ -179,26 +184,17 @@ describe('worker result protocol', () => {
 
 	test.each([
 		['prose', `result: ${JSON.stringify(completeResult)}`],
+		['old version', JSON.stringify({ ...completeResult, version: 1 })],
 		['extra key', JSON.stringify({ ...completeResult, taskId: 'not-p0' })],
+		['missing parent update', JSON.stringify(Object.fromEntries(Object.entries(completeResult).filter(([key]) => key !== 'parentThreadUpdated')))],
+		['non-boolean parent update', JSON.stringify({ ...completeResult, parentThreadUpdated: 'yes' })],
 		['journal without backlog', JSON.stringify({ ...failedResult, journalVerified: true })],
+		['parent update without Logseq', JSON.stringify({ ...failedResult, parentThreadUpdated: true })],
 		['complete with error', JSON.stringify({ ...completeResult, error: 'contradiction' })],
 		['failed without error', JSON.stringify({ ...failedResult, error: null })],
-		['backlog without title', JSON.stringify({ ...partialResult, threadTitle: null })],
-		['backlog without labels', JSON.stringify({ ...partialResult, threadLabels: [] })],
-		['unverified backlog with title', JSON.stringify({ ...failedResult, threadTitle: 'invalid' })],
-		['unverified backlog with labels', JSON.stringify({ ...failedResult, threadLabels: ['presales'] })],
-		['multiline title', JSON.stringify({ ...completeResult, threadTitle: '[Presales] Bad\ntitle' })],
-		['label longer than 32 characters', JSON.stringify({ ...completeResult, threadLabels: ['customer-name-that-exceeds-32-chars'] })],
+		['parent update failure without error', JSON.stringify({ ...completeResult, parentThreadUpdated: false, error: null })],
 	])('rejects %s', (_label, value) => {
 		expect(parseWorkerResult(value).ok).toBe(false)
-	})
-
-	test('normalizes and deduplicates labels', () => {
-		const parsed = parseWorkerResult(JSON.stringify({
-			...completeResult,
-			threadLabels: ['Presales', 'agent-skills', 'customer-FanServ', 'presales'],
-		}))
-		expect(parsed.ok && parsed.result.threadLabels).toEqual(['presales', 'agent-skills', 'customer-fanserv'])
 	})
 })
 
@@ -369,15 +365,14 @@ describe('worker wait outcomes', () => {
 })
 
 describe('operation coordinator', () => {
-	test('completes Logseq and downstream stages, then cleans up one operation', async () => {
+	test('completes Logseq and parent-thread work, archives the worker, then cleans up one operation', async () => {
 		const { worker, appended } = fakeWorker()
 		const harness = fakeAmp({ createThread: () => worker })
 		const operations: LogseqOperationStore = new Map()
 		const output = await logCurrentTask(harness.amp as never, context() as never, '', 500, operations, timing)
 
 		expect(output).toContain('Logseq: complete')
-		expect(output).toContain('Rename: complete')
-		expect(output).toContain('Labels: complete')
+		expect(output).toContain('Parent thread: complete')
 		expect(output).toContain('Archive: complete')
 		expect(harness.createCalls).toBe(1)
 		expect(appended).toHaveLength(1)
@@ -387,6 +382,12 @@ describe('operation coordinator', () => {
 		expect(appended[0]).toContain('observed-at::')
 		expect(appended[0]).toContain('outcome::')
 		expect(appended[0]).toContain('can a fresh agent safely act on every recorded fact')
+		expect(appended[0]).toContain('update parent Amp thread')
+		expect(appended[0]).toContain('amp threads label')
+		expect(appended[0]).toContain('exactly one actionable task')
+		expect(appended[0]).toContain('parentThreadUpdated requires both parent-thread commands')
+		expect(appended[0]).toContain('"version":2')
+		expect(harness.defaultShell.calls).toEqual(['amp threads archive {}'])
 		expect(operations.size).toBe(0)
 	})
 
@@ -434,10 +435,10 @@ describe('operation coordinator', () => {
 		})
 
 		expect(output).toContain('Logseq: failed')
-		expect(output).toContain('Rename: not-attempted')
-		expect(output).toContain('Labels: not-attempted')
+		expect(output).toContain('Parent thread: complete')
 		expect(output).toContain('Archive: not-attempted')
 		expect(output).toContain('missing task id::')
+		expect(harness.defaultShell.calls).toHaveLength(0)
 		expect(operations.size).toBe(1)
 	})
 
@@ -488,10 +489,47 @@ describe('operation coordinator', () => {
 			})
 			const recovered = await logCurrentTask(secondHarness.amp as never, context() as never, '', 500, new Map(), recoveryTiming)
 			expect(recovered).toContain('Logseq: complete')
-			expect(recovered).toContain('Rename: complete')
-			expect(recovered).toContain('Labels: complete')
+			expect(recovered).toContain('Parent thread: complete')
 			expect(recovered).toContain('Archive: complete')
 			expect(secondHarness.createCalls).toBe(0)
+			expect(access(join(checkpointDir, `${parentID}.json`))).rejects.toThrow()
+		} finally {
+			await rm(checkpointDir, { recursive: true, force: true })
+		}
+	})
+
+	test('recovers a parent-update failure after reload and repairs it on the next invocation', async () => {
+		const checkpointDir = await mkdtemp(join(tmpdir(), 'logseq-manual-log-test-'))
+		await writeRecoveryCheckpoint(checkpointDir)
+		const failedResponse = assistantResponse('parent-update-failed', parentUpdateFailedResult)
+		const completeResponse = assistantResponse('parent-update-complete', completeResult)
+		const recovered = fakeWorker({
+			state: 'idle',
+			messages: (options) => {
+				const request = options as { from?: string; roles?: string[] }
+				if (request.from === 'start') return [{ role: 'user', id: 'initial-prompt', content: [{ type: 'text', text: workerPrompt() }] }]
+				return request.roles?.includes('assistant') ? [failedResponse] : [failedResponse]
+			},
+			waitForResponse: () => completeResponse,
+		})
+		const harness = fakeAmp({
+			createThread: () => { throw new Error('must not create another worker') },
+			getThread: () => recovered.worker,
+		})
+		const operations: LogseqOperationStore = new Map()
+
+		try {
+			const replayed = await logCurrentTask(harness.amp as never, context() as never, '', 500, operations, { ...timing, checkpointDir })
+			expect(replayed).toContain('Parent thread: failed')
+			expect(recovered.appended).toHaveLength(0)
+			expect(access(join(checkpointDir, `${parentID}.json`))).resolves.toBeNull()
+
+			const repaired = await logCurrentTask(harness.amp as never, context() as never, '', 500, operations, { ...timing, checkpointDir })
+			expect(repaired).toContain('Parent thread: complete')
+			expect(repaired).toContain('Archive: complete')
+			expect(recovered.appended).toHaveLength(1)
+			expect(recovered.appended[0]).toContain('Reapply both idempotent commands')
+			expect(harness.createCalls).toBe(0)
 			expect(access(join(checkpointDir, `${parentID}.json`))).rejects.toThrow()
 		} finally {
 			await rm(checkpointDir, { recursive: true, force: true })
@@ -592,7 +630,7 @@ describe('operation coordinator', () => {
 		}
 	})
 
-	test.each(['rename', 'label', 'archive'])('retries %s and the other downstream setters after reload', async (failedCommand) => {
+	test('retries worker archiving after reload', async () => {
 		const checkpointDir = await mkdtemp(join(tmpdir(), 'logseq-manual-log-test-'))
 		let state = 'running'
 		let failedCalls = 0
@@ -607,16 +645,16 @@ describe('operation coordinator', () => {
 			waitForResponse: () => response,
 		})
 		const shell = fakeShell((command) => {
-			if (!command.includes(failedCommand)) return { exitCode: 0 }
+			if (!command.includes('archive')) return { exitCode: 0 }
 			failedCalls += 1
-			return failedCalls === 1 ? { exitCode: 1, stderr: `${failedCommand} failed` } : { exitCode: 0 }
+			return failedCalls === 1 ? { exitCode: 1, stderr: 'archive failed' } : { exitCode: 0 }
 		})
 		const recoveryTiming = { ...timing, checkpointDir }
 
 		try {
 			const firstHarness = fakeAmp({ createThread: () => recovered.worker, shell: shell.shell })
 			const first = await logCurrentTask(firstHarness.amp as never, context() as never, '', 500, new Map(), recoveryTiming)
-			expect(first).toContain(`${failedCommand === 'label' ? 'Labels' : `${failedCommand[0].toUpperCase()}${failedCommand.slice(1)}`}: failed`)
+			expect(first).toContain('Archive: failed')
 
 			state = 'idle'
 			const secondHarness = fakeAmp({
@@ -625,8 +663,7 @@ describe('operation coordinator', () => {
 				shell: shell.shell,
 			})
 			const second = await logCurrentTask(secondHarness.amp as never, context() as never, '', 500, new Map(), recoveryTiming)
-			expect(second).toContain('Rename: complete')
-			expect(second).toContain('Labels: complete')
+			expect(second).toContain('Parent thread: complete')
 			expect(second).toContain('Archive: complete')
 			expect(secondHarness.createCalls).toBe(0)
 			expect(recovered.appended).toHaveLength(1)
@@ -651,36 +688,6 @@ describe('operation coordinator', () => {
 		await first
 	})
 
-	test('serializes concurrent calls during rename', async () => {
-		const rename = deferred<{ exitCode: number }>()
-		const { worker } = fakeWorker()
-		const shell = fakeShell((command) => command.includes('rename') ? rename.promise : { exitCode: 0 })
-		const harness = fakeAmp({ createThread: () => worker, shell: shell.shell })
-		const operations: LogseqOperationStore = new Map()
-		const first = logCurrentTask(harness.amp as never, context() as never, '', 500, operations, timing)
-		while (!shell.calls.some((call) => call.includes('rename'))) await Promise.resolve()
-		const second = await logCurrentTask(harness.amp as never, context() as never, '', 500, operations, timing)
-		expect(second).toContain('already reconciling')
-		expect(shell.calls.filter((call) => call.includes('rename'))).toHaveLength(1)
-		rename.resolve({ exitCode: 0 })
-		await first
-	})
-
-	test('serializes concurrent calls during labeling', async () => {
-		const labels = deferred<{ exitCode: number }>()
-		const { worker } = fakeWorker()
-		const shell = fakeShell((command) => command.includes('label') ? labels.promise : { exitCode: 0 })
-		const harness = fakeAmp({ createThread: () => worker, shell: shell.shell })
-		const operations: LogseqOperationStore = new Map()
-		const first = logCurrentTask(harness.amp as never, context() as never, '', 500, operations, timing)
-		while (!shell.calls.some((call) => call.includes('label'))) await Promise.resolve()
-		const second = await logCurrentTask(harness.amp as never, context() as never, '', 500, operations, timing)
-		expect(second).toContain('already reconciling')
-		expect(shell.calls.filter((call) => call.includes('label'))).toHaveLength(1)
-		labels.resolve({ exitCode: 0 })
-		await first
-	})
-
 	test('serializes concurrent calls during archive', async () => {
 		const archive = deferred<{ exitCode: number }>()
 		const { worker } = fakeWorker()
@@ -696,58 +703,24 @@ describe('operation coordinator', () => {
 		await first
 	})
 
-	test('preserves Logseq success, archives after rename failure, then retries rename only', async () => {
-		let renameCalls = 0
-		const { worker, appended } = fakeWorker()
-		const shell = fakeShell((command) => {
-			if (command.includes('rename')) {
-				renameCalls += 1
-				return renameCalls === 1 ? { exitCode: 1, stderr: 'rename failed' } : { exitCode: 0 }
-			}
-			return { exitCode: 0 }
-		})
-		const harness = fakeAmp({ createThread: () => worker, shell: shell.shell })
+	test('keeps Logseq complete and asks the worker to retry a failed parent-thread update', async () => {
+		const responses = [assistantResponse('first', parentUpdateFailedResult), assistantResponse('second', completeResult)]
+		const { worker, appended } = fakeWorker({ waitForResponse: () => responses.shift()! })
+		const harness = fakeAmp({ createThread: () => worker })
 		const operations: LogseqOperationStore = new Map()
 
 		const first = await logCurrentTask(harness.amp as never, context() as never, '', 500, operations, timing)
 		expect(first).toContain('Logseq: complete')
-		expect(first).toContain('Rename: failed')
-		expect(first).toContain('Labels: complete')
-		expect(first).toContain('Archive: complete')
+		expect(first).toContain('Parent thread: failed')
+		expect(first).toContain('Archive: not-attempted')
+		expect(harness.defaultShell.calls).toHaveLength(0)
+		expect(first.match(/Parent thread rename failed\./g)).toHaveLength(1)
 		const second = await logCurrentTask(harness.amp as never, context() as never, '', 500, operations, timing)
-		expect(second).toContain('Rename: complete')
-		expect(second).not.toContain('rename failed')
-		expect(appended).toHaveLength(1)
-		expect(shell.calls.filter((call) => call.includes('archive'))).toHaveLength(1)
-		expect(operations.size).toBe(0)
-	})
-
-	test('preserves Logseq success, archives after label failure, then retries labels only', async () => {
-		let labelCalls = 0
-		const { worker, appended } = fakeWorker()
-		const shell = fakeShell((command) => {
-			if (command.includes('label')) {
-				labelCalls += 1
-				return labelCalls === 1 ? { exitCode: 1, stderr: 'label failed' } : { exitCode: 0 }
-			}
-			return { exitCode: 0 }
-		})
-		const harness = fakeAmp({ createThread: () => worker, shell: shell.shell })
-		const operations: LogseqOperationStore = new Map()
-
-		const first = await logCurrentTask(harness.amp as never, context() as never, '', 500, operations, timing)
-		expect(first).toContain('Logseq: complete')
-		expect(first).toContain('Rename: complete')
-		expect(first).toContain('Labels: failed')
-		expect(first).toContain('Archive: complete')
-
-		const second = await logCurrentTask(harness.amp as never, context() as never, '', 500, operations, timing)
-		expect(second).toContain('Labels: complete')
-		expect(second).not.toContain('label failed')
-		expect(appended).toHaveLength(1)
-		expect(shell.calls.filter((call) => call.includes('rename'))).toHaveLength(1)
-		expect(shell.calls.filter((call) => call.includes('label'))).toHaveLength(2)
-		expect(shell.calls.filter((call) => call.includes('archive'))).toHaveLength(1)
+		expect(second).toContain('Parent thread: complete')
+		expect(second).toContain('Archive: complete')
+		expect(appended).toHaveLength(2)
+		expect(appended[1]).toContain('amp threads rename')
+		expect(appended[1]).toContain('amp threads label')
 		expect(operations.size).toBe(0)
 	})
 
@@ -758,7 +731,7 @@ describe('operation coordinator', () => {
 		const operations: LogseqOperationStore = new Map()
 		const output = await logCurrentTask(harness.amp as never, context() as never, '', 500, operations, timing)
 		expect(output).toContain('Logseq: complete')
-		expect(output).toContain('Labels: complete')
+		expect(output).toContain('Parent thread: complete')
 		expect(output).toContain('Archive: failed')
 		expect(operations.size).toBe(1)
 	})
@@ -767,6 +740,7 @@ describe('operation coordinator', () => {
 		['partial', partialResult],
 		['malformed', 'not json'],
 		['verified failure', failedResult],
+		['parent-thread failure', parentUpdateFailedResult],
 	])('reconciles %s through the same worker', async (_label, firstResult) => {
 		const responses = [assistantResponse('first', firstResult), assistantResponse('second', completeResult)]
 		const { worker, appended } = fakeWorker({ waitForResponse: () => responses.shift()! })
@@ -782,6 +756,9 @@ describe('operation coordinator', () => {
 		expect(appended[1]).toContain('RFC-0008 task contract')
 		expect(appended[1]).toContain('observed-at::')
 		expect(appended[1]).toContain('can a fresh agent safely act on every recorded fact')
+		expect(appended[1]).toContain('exactly one actionable task')
+		expect(appended[1]).toContain('parentThreadUpdated requires both parent-thread commands')
+		expect(appended[1]).toContain('"version":2')
 	})
 
 	test('preserves prior partial verification when a repair result is malformed', async () => {

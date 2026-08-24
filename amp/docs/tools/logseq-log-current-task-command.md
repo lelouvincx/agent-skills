@@ -3,7 +3,7 @@ doc_schema: "amp-artifact/v2"
 title: "Logseq: log current task command"
 slug: "logseq-log-current-task-command"
 status: "active"
-summary: "Adds a command that reliably logs the current Amp task to Logseq, then updates the parent thread."
+summary: "Adds a command that reliably logs the current Amp task to Logseq and asks its worker to update the parent thread."
 artifact:
   id: "logseq-log-current-task"
   type: "command"
@@ -44,8 +44,6 @@ runtime:
     - "PluginThread.state"
     - "node:fs/promises temporary checkpoint"
     - "amp.threads.get(...).messages"
-    - "amp.$ amp threads rename"
-    - "amp.$ amp threads label"
     - "amp.$ amp threads archive"
   dependencies:
     - "Amp CLI on PATH"
@@ -58,8 +56,8 @@ runtime:
     - "temporary parent-to-worker recovery checkpoint"
   writes:
     - "Logseq graph through spawned worker"
-    - "parent Amp thread title"
-    - "parent Amp thread labels"
+    - "parent Amp thread title through spawned worker"
+    - "parent Amp thread labels through spawned worker"
     - "worker thread archive state"
     - "temporary parent-to-worker recovery checkpoint"
   network:
@@ -74,6 +72,7 @@ safety:
     - "Does not run automatically from lifecycle events."
     - "Worker must reconstruct parent context with read_thread before editing Logseq."
     - "Worker must re-read and verify both Logseq files before reporting completion."
+    - "Worker must rename and label the parent thread only after it verifies both Logseq files."
     - "Coordinator must independently validate the parent-linked task schema and journal block reference before reporting completion."
     - "Worker must return the exact versioned JSON result."
     - "Each parent Amp thread label must not exceed 32 characters."
@@ -119,17 +118,22 @@ Select `Log to Logseq` to start the operation. The notification reports these st
 
 - `Worker`
 - `Logseq`
-- `Rename`
-- `Labels`
+- `Parent thread`
 - `Archive`
 
-`Pending` means the operation may still write or Amp cannot confirm whether it accepted the work. `Partial` means the worker verified the parent-linked Backlog task but not the matching journal pointer. `Complete` means the worker re-read both files and verified that the journal points to the same parent-linked task.
+`Pending` means the operation may still write or Amp cannot confirm whether it accepted the work. `Partial` means the worker verified the parent-linked Backlog task but not the matching journal pointer.
+
+Each status completes on its own condition:
+
+- `Logseq: complete` means the worker and coordinator verified the parent-linked task and matching journal pointer
+- `Parent thread: complete` means the worker reported that both parent-thread commands succeeded
+- `Archive: complete` means the coordinator archived the worker
 
 ## Behavior
 
 ### One operation owns each parent thread
 
-The command records one in-memory operation for each parent thread before it creates a worker. It handles each create, append, response, rename, label and archive state change in order. A concurrent invocation returns the current status instead of starting duplicate work.
+The command records one in-memory operation for each parent thread before it creates a worker. It handles each create, append, response and archive state change in order. A concurrent invocation returns the current status instead of starting duplicate work.
 
 The first invocation starts one hidden built-in `high` worker without copying recent parent messages. Later invocations use the same worker and retry only unfinished stages.
 
@@ -137,7 +141,7 @@ As soon as Amp confirms that the worker thread was created, the command starts a
 
 After Amp returns the worker ID, the command writes a small parent-to-worker checkpoint at `$TMPDIR/amp-logseq-manual-log/<parent-thread-id>.json`. It stores no prompt or conversation content. The command does not send the worker prompt until this checkpoint is committed.
 
-A plugin reload pauses the operation. Run the command again from the parent thread to reconnect to the saved worker. The coordinator replays its latest result, validates Logseq again and reattempts rename, label and archive. These downstream actions are safe to repeat. The command deletes the checkpoint after every stage completes or the worker definitively fails.
+A plugin reload pauses the operation. Run the command again from the parent thread to reconnect to the saved worker. The coordinator replays its latest result and validates Logseq again. If that recovered result is incomplete, run the command once more to ask the same worker to repair missing Logseq or parent-thread state. The coordinator retries worker archiving when needed. These actions are safe to repeat. The command deletes the checkpoint after every stage completes or the worker definitively fails.
 
 Amp does not provide a way to list child threads. A reload before the checkpoint is committed, including before Amp returns the worker ID, can therefore still lose ownership of an uncertain worker creation.
 
@@ -217,46 +221,37 @@ The coordinator recognises only `DAT-`, `PS-` and `DOC-` prefixes as Linear team
 
 A valid task with a missing journal reference remains partial.
 
-The coordinator does not rename, label or archive from worker claims that fail this validation.
+The coordinator does not archive from worker claims that fail this validation.
 
 ### The worker returns strict JSON
 
 After editing, the worker re-reads both files. It returns one unfenced JSON object with this exact key set:
 
 ```json
-{"version":1,"backlogVerified":true,"journalVerified":true,"threadTitle":"[Project] task title","threadLabels":["project","working-project","customer-name"],"summary":"Short outcome","error":null}
+{"version":2,"backlogVerified":true,"journalVerified":true,"parentThreadUpdated":true,"summary":"Short outcome","error":null}
 ```
 
-`backlogVerified` means the worker found a Backlog task linked to the parent thread. `journalVerified` means the journal points to that same task.
+`backlogVerified` means post-write read-back found exactly one actionable parent-linked task that satisfies the documented task contract. This includes its direct identity, project, priority, input, date and state-specific properties, plus a directly nested dated activity. `journalVerified` means post-write read-back found a journal pointer to that exact task UUID.
 
-The result also includes:
+`parentThreadUpdated` means both parent-thread commands exited successfully with the exact derived title and all required labels. The worker uses a title in the format `[Project] task title`. It derives labels for the Backlog project, working project and customer when present. It normalises each label, truncates it to 32 characters, removes any trailing hyphen, then removes empty values and duplicates.
 
-- `threadTitle` in the format `[Project] task title`
-- `threadLabels` for the Backlog project, working project and customer when present
+If the hint, parent thread or matching Backlog task contains a Linear issue ID, the worker keeps that ID unchanged after the project prefix. For example, it uses `[Internal] DAT-745 Support Quality Overview PR #111` rather than dropping `DAT-745`.
 
-If the hint, parent thread or matching Backlog task contains a Linear issue ID, the worker keeps that ID unchanged after the project prefix in `threadTitle`. For example, it uses `[Internal] DAT-745 Support Quality Overview PR #111` rather than dropping `DAT-745`.
-
-The coordinator normalises and removes duplicate labels. Each label must contain no more than 32 characters after normalisation. A verified Backlog task needs at least one usable label. An unverified Backlog result must return an empty label list.
+The worker updates the parent only after it re-reads and verifies the complete Logseq task contract and journal pointer. It returns `parentThreadUpdated: false` and a concise error when either parent-thread action fails. An unverified Logseq result must also return `parentThreadUpdated: false`.
 
 The coordinator rejects extra keys, prose, code fences, invalid field types and contradictory verification results. Malformed output remains `unverified`. It never counts as complete or as a terminal failure.
 
-Completion requires both worker-attested verification and independent TypeScript validation of the graph files.
+Completion requires worker-attested Logseq and parent-thread completion, plus independent TypeScript validation of the graph files.
 
 ### The same worker repairs incomplete state
 
-The command keeps the same worker after a partial, malformed or validated failed result. A later invocation makes the worker inspect existing parent-linked state and repair only missing work. A malformed repair response does not erase earlier verified Logseq state.
+The command keeps the same worker after a partial, malformed or validated failed result. A later invocation makes the worker inspect existing parent-linked state and repair missing work. For a parent-thread retry, the worker reapplies both idempotent commands. A malformed repair response does not erase earlier verified Logseq state.
 
 ### Later actions run separately
 
-Verified Logseq completion starts 3 separate actions:
+After the worker reports parent-thread completion and the coordinator verifies Logseq, the coordinator archives the worker. A later invocation retries a failed archive.
 
-- rename parent thread
-- add labels without removing existing labels
-- archive worker
-
-The plugin still attempts archive if rename or labelling fails. Any later-action failure leaves `Logseq: complete` unchanged. A later invocation retries only failed stages.
-
-The operation leaves memory after Logseq, rename, labels and archive all complete. A sustained worker error with no fresh response also ends ownership so a later invocation can start a replacement worker.
+The operation leaves memory after Logseq, parent-thread update and archive all complete. A sustained worker error with no fresh response also ends ownership so a later invocation can start a replacement worker.
 
 ## Permissions and side effects
 
@@ -264,8 +259,8 @@ The command can:
 
 - write to the configured Logseq graph
 - create and archive a hidden Amp worker thread
-- rename the parent Amp thread
-- add labels to the parent Amp thread
+- ask the worker to rename the parent Amp thread
+- ask the worker to add labels to the parent Amp thread
 
 The command does not run from an agent message or lifecycle event. You must select it from the command palette.
 
@@ -282,7 +277,8 @@ Use these checks when the command does not complete:
 - open an Amp thread before running the command
 - for `Worker: pending`, wait and run the command again to check the same operation
 - for `Logseq: partial`, `Logseq: unverified` or `Logseq: failed`, run the command again so the same worker can repair the state
-- for `Rename: failed`, `Labels: failed` or `Archive: failed`, run the command again to retry only that action
+- for `Parent thread: failed`, run the command again so the same worker retries the parent update
+- for `Archive: failed`, run the command again to retry worker archiving
 - for `Worker: failed`, run the command again to start a replacement worker
 - if a checkpointed `Worker: pending` remains unresolved after repeated retries, inspect `$TMPDIR/amp-logseq-manual-log/<parent-thread-id>.json`; delete only that file as a last-resort escape hatch, because the original worker may still write when its availability is ambiguous
 - to use another graph, set `AMP_LOGSEQ_GRAPH_DIR` before starting Amp
@@ -297,7 +293,7 @@ Update this document when any of these change:
 - operation state, worker result or reconciliation
 - Backlog-first behaviour or journal verification
 - parent thread title or labels
-- rename, label or archive behaviour
+- parent-thread update or archive behaviour
 - default graph path or timeout compatibility
 
 Keep historical intent and evidence in ISSUE-0001.
