@@ -1,0 +1,308 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/lelouvincx/agent-skills/amp/agent-browser-lifecycle/schema.json",
+  "title": "Agent Browser lifecycle records",
+  "description": "Validates either one committed lifecycle.jsonl event or the current.json materialized view.",
+  "oneOf": [
+    {
+      "$ref": "#lifecycleEvent"
+    },
+    {
+      "$ref": "#currentState"
+    }
+  ],
+  "$defs": {
+    "timestamp": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+    },
+    "sessionId": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "threadId": {
+      "type": "string",
+      "pattern": "^T-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "absolutePath": {
+      "type": "string",
+      "pattern": "^/"
+    },
+    "browserPid": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "integer",
+          "minimum": 1
+        }
+      ]
+    },
+    "lifecycleEvent": {
+      "$anchor": "lifecycleEvent",
+      "title": "Committed Agent Browser lifecycle event",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema",
+        "timestamp",
+        "event",
+        "session_id",
+        "owner_thread_id",
+        "actor_thread_id",
+        "cdp_host",
+        "cdp_port",
+        "user_data_dir",
+        "browser_pid",
+        "workspace"
+      ],
+      "properties": {
+        "schema": {
+          "const": "agent-browser-lifecycle/v1"
+        },
+        "timestamp": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "event": {
+          "enum": [
+            "claimed",
+            "ready",
+            "attached",
+            "detached",
+            "stopping",
+            "start_failed",
+            "stopped",
+            "observed_dead"
+          ]
+        },
+        "session_id": {
+          "$ref": "#/$defs/sessionId"
+        },
+        "owner_thread_id": {
+          "$ref": "#/$defs/threadId"
+        },
+        "actor_thread_id": {
+          "$ref": "#/$defs/threadId"
+        },
+        "cdp_host": {
+          "const": "127.0.0.1"
+        },
+        "cdp_port": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        },
+        "user_data_dir": {
+          "$ref": "#/$defs/absolutePath"
+        },
+        "browser_pid": {
+          "$ref": "#/$defs/browserPid"
+        },
+        "workspace": {
+          "$ref": "#/$defs/absolutePath"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "event": {
+                "enum": [
+                  "claimed",
+                  "start_failed"
+                ]
+              }
+            },
+            "required": [
+              "event"
+            ]
+          },
+          "then": {
+            "properties": {
+              "browser_pid": {
+                "type": "null"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "event": {
+                "enum": [
+                  "ready",
+                  "attached",
+                  "detached",
+                  "stopping",
+                  "stopped",
+                  "observed_dead"
+                ]
+              }
+            },
+            "required": [
+              "event"
+            ]
+          },
+          "then": {
+            "properties": {
+              "browser_pid": {
+                "type": "integer",
+                "minimum": 1
+              }
+            }
+          }
+        }
+      ]
+    },
+    "currentSession": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "session_id",
+        "state",
+        "owner_thread_id",
+        "cdp_host",
+        "cdp_port",
+        "user_data_dir",
+        "browser_pid",
+        "workspace",
+        "attached_thread_ids",
+        "last_event_at"
+      ],
+      "properties": {
+        "session_id": {
+          "$ref": "#/$defs/sessionId"
+        },
+        "state": {
+          "enum": [
+            "claimed",
+            "ready",
+            "stopping"
+          ]
+        },
+        "owner_thread_id": {
+          "$ref": "#/$defs/threadId"
+        },
+        "cdp_host": {
+          "const": "127.0.0.1"
+        },
+        "cdp_port": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        },
+        "user_data_dir": {
+          "$ref": "#/$defs/absolutePath"
+        },
+        "browser_pid": {
+          "$ref": "#/$defs/browserPid"
+        },
+        "workspace": {
+          "$ref": "#/$defs/absolutePath"
+        },
+        "attached_thread_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/threadId"
+          }
+        },
+        "last_event_at": {
+          "$ref": "#/$defs/timestamp"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "state": {
+                "const": "claimed"
+              }
+            },
+            "required": [
+              "state"
+            ]
+          },
+          "then": {
+            "properties": {
+              "browser_pid": {
+                "type": "null"
+              },
+              "attached_thread_ids": {
+                "maxItems": 0
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "state": {
+                "enum": [
+                  "ready",
+                  "stopping"
+                ]
+              }
+            },
+            "required": [
+              "state"
+            ]
+          },
+          "then": {
+            "properties": {
+              "browser_pid": {
+                "type": "integer",
+                "minimum": 1
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "state": {
+                "const": "stopping"
+              }
+            },
+            "required": [
+              "state"
+            ]
+          },
+          "then": {
+            "properties": {
+              "attached_thread_ids": {
+                "maxItems": 0
+              }
+            }
+          }
+        }
+      ]
+    },
+    "currentState": {
+      "$anchor": "currentState",
+      "title": "Agent Browser current-session materialized view",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema",
+        "generated_at",
+        "sessions"
+      ],
+      "properties": {
+        "schema": {
+          "const": "agent-browser-current/v1"
+        },
+        "generated_at": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "sessions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/currentSession"
+          }
+        }
+      }
+    }
+  }
+}

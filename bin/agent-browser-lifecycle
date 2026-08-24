@@ -1,0 +1,490 @@
+#!/usr/bin/env python3
+"""Record Agent Browser lifecycle events and maintain the current-session view."""
+
+from __future__ import annotations
+
+import argparse
+import fcntl
+import json
+import os
+import re
+import socket
+import sys
+import tempfile
+import uuid
+from collections.abc import Iterator
+from contextlib import contextmanager
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any
+
+HISTORY_SCHEMA = "agent-browser-lifecycle/v1"
+CURRENT_SCHEMA = "agent-browser-current/v1"
+TERMINAL_EVENTS = {"start_failed", "stopped", "observed_dead"}
+RECORD_EVENTS = {"ready", "attached", "detached", "stopping", *TERMINAL_EVENTS}
+THREAD_ID_RE = re.compile(
+    r"^T-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+)
+TIMESTAMP_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
+
+
+class LifecycleError(Exception):
+    """A safe user-facing lifecycle failure."""
+
+
+def timestamp() -> str:
+    return (
+        datetime.now(timezone.utc)
+        .replace(microsecond=0)
+        .isoformat()
+        .replace("+00:00", "Z")
+    )
+
+
+def lifecycle_dir() -> Path:
+    state_home = os.environ.get("XDG_STATE_HOME")
+    if state_home:
+        return Path(state_home).expanduser() / "agent-browser"
+    return Path.home() / ".local" / "state" / "agent-browser"
+
+
+def ensure_private_directory(path: Path) -> None:
+    path.mkdir(parents=True, exist_ok=True, mode=0o700)
+    path.chmod(0o700)
+
+
+def ensure_private_file(path: Path) -> None:
+    path.touch(exist_ok=True, mode=0o600)
+    path.chmod(0o600)
+
+
+@contextmanager
+def lifecycle_lock(state_dir: Path) -> Iterator[None]:
+    ensure_private_directory(state_dir)
+    lock_path = state_dir / "lifecycle.lock"
+    ensure_private_file(lock_path)
+    with lock_path.open("r+", encoding="utf-8") as lock_file:
+        fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+
+
+def validate_thread_id(value: str, field: str) -> None:
+    if not THREAD_ID_RE.fullmatch(value):
+        raise LifecycleError(
+            f"{field} must be a canonical lowercase T-<UUID> Amp thread ID"
+        )
+
+
+def validate_record(record: dict[str, Any], line_number: int | None = None) -> None:
+    location = f" on history line {line_number}" if line_number is not None else ""
+    required = {
+        "schema",
+        "timestamp",
+        "event",
+        "session_id",
+        "owner_thread_id",
+        "actor_thread_id",
+        "cdp_host",
+        "cdp_port",
+        "user_data_dir",
+        "browser_pid",
+        "workspace",
+    }
+    if set(record) != required:
+        raise LifecycleError(f"lifecycle record has unexpected fields{location}")
+    if record["schema"] != HISTORY_SCHEMA:
+        raise LifecycleError(
+            f"unsupported lifecycle schema{location}: {record['schema']!r}"
+        )
+    if record["event"] not in {"claimed", *RECORD_EVENTS}:
+        raise LifecycleError(
+            f"unsupported lifecycle event{location}: {record['event']!r}"
+        )
+    if not isinstance(record["timestamp"], str) or not TIMESTAMP_RE.fullmatch(
+        record["timestamp"]
+    ):
+        raise LifecycleError(
+            f"timestamp must be UTC ISO 8601 to whole seconds{location}"
+        )
+    try:
+        uuid.UUID(record["session_id"])
+    except (AttributeError, TypeError, ValueError) as exc:
+        raise LifecycleError(f"invalid session_id{location}") from exc
+    validate_thread_id(record["owner_thread_id"], f"owner_thread_id{location}")
+    validate_thread_id(record["actor_thread_id"], f"actor_thread_id{location}")
+    if record["cdp_host"] != "127.0.0.1":
+        raise LifecycleError(f"cdp_host must be 127.0.0.1{location}")
+    if not isinstance(record["cdp_port"], int) or not 1 <= record["cdp_port"] <= 65535:
+        raise LifecycleError(f"cdp_port must be between 1 and 65535{location}")
+    if (
+        not isinstance(record["user_data_dir"], str)
+        or not Path(record["user_data_dir"]).is_absolute()
+    ):
+        raise LifecycleError(f"user_data_dir must be an absolute path{location}")
+    if record["browser_pid"] is not None and (
+        not isinstance(record["browser_pid"], int) or record["browser_pid"] <= 0
+    ):
+        raise LifecycleError(
+            f"browser_pid must be null or a positive integer{location}"
+        )
+    if (
+        not isinstance(record["workspace"], str)
+        or not Path(record["workspace"]).is_absolute()
+    ):
+        raise LifecycleError(f"workspace must be an absolute path{location}")
+
+
+def read_committed_history(history_path: Path) -> bytes:
+    ensure_private_file(history_path)
+    with history_path.open("r+b") as history_file:
+        data = history_file.read()
+        if data and not data.endswith(b"\n"):
+            committed_length = data.rfind(b"\n") + 1
+            history_file.truncate(committed_length)
+            history_file.flush()
+            os.fsync(history_file.fileno())
+            data = data[:committed_length]
+        return data
+
+
+def read_history(history_path: Path) -> list[dict[str, Any]]:
+    records: list[dict[str, Any]] = []
+    for line_number, encoded_line in enumerate(
+        read_committed_history(history_path).splitlines(), start=1
+    ):
+        try:
+            line = encoded_line.decode("utf-8")
+            record = json.loads(line)
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise LifecycleError(f"invalid JSON on history line {line_number}") from exc
+        if not isinstance(record, dict):
+            raise LifecycleError(f"history line {line_number} must be a JSON object")
+        validate_record(record, line_number)
+        records.append(record)
+    return records
+
+
+def assert_same_session(session: dict[str, Any], record: dict[str, Any]) -> None:
+    for field in (
+        "owner_thread_id",
+        "cdp_host",
+        "cdp_port",
+        "user_data_dir",
+        "workspace",
+    ):
+        if session[field] != record[field]:
+            raise LifecycleError(
+                f"{field} changed within session {record['session_id']}"
+            )
+
+
+def apply_record(sessions: dict[str, dict[str, Any]], record: dict[str, Any]) -> None:
+    session_id = record["session_id"]
+    event = record["event"]
+    session = sessions.get(session_id)
+
+    if event == "claimed":
+        if session is not None:
+            raise LifecycleError(f"session {session_id} was claimed more than once")
+        sessions[session_id] = {
+            "session_id": session_id,
+            "state": "claimed",
+            "owner_thread_id": record["owner_thread_id"],
+            "cdp_host": record["cdp_host"],
+            "cdp_port": record["cdp_port"],
+            "user_data_dir": record["user_data_dir"],
+            "browser_pid": None,
+            "workspace": record["workspace"],
+            "attached_thread_ids": [],
+            "last_event_at": record["timestamp"],
+        }
+        return
+
+    if session is None:
+        raise LifecycleError(f"event {event} refers to inactive session {session_id}")
+    assert_same_session(session, record)
+
+    if event == "ready":
+        if session["state"] != "claimed":
+            raise LifecycleError(
+                f"session {session_id} can become ready only after claimed"
+            )
+        if record["actor_thread_id"] != session["owner_thread_id"]:
+            raise LifecycleError("only the owning thread can record ready")
+        if record["browser_pid"] is None:
+            raise LifecycleError("ready requires browser_pid")
+        session["state"] = "ready"
+        session["browser_pid"] = record["browser_pid"]
+    elif event == "attached":
+        if session["state"] != "ready":
+            raise LifecycleError("a child can attach only to a ready session")
+        if record["actor_thread_id"] == session["owner_thread_id"]:
+            raise LifecycleError("the owning thread does not record attached")
+        if record["browser_pid"] != session["browser_pid"]:
+            raise LifecycleError("browser_pid changed within the session")
+        if record["actor_thread_id"] in session["attached_thread_ids"]:
+            raise LifecycleError("the child thread is already attached")
+        session["attached_thread_ids"].append(record["actor_thread_id"])
+        session["attached_thread_ids"].sort()
+    elif event == "detached":
+        if record["actor_thread_id"] not in session["attached_thread_ids"]:
+            raise LifecycleError("detached requires a matching attached event")
+        if record["browser_pid"] != session["browser_pid"]:
+            raise LifecycleError("browser_pid changed within the session")
+        session["attached_thread_ids"].remove(record["actor_thread_id"])
+    elif event == "stopping":
+        if (
+            session["state"] != "ready"
+            or record["actor_thread_id"] != session["owner_thread_id"]
+        ):
+            raise LifecycleError("only the owner can stop a ready session")
+        if session["attached_thread_ids"]:
+            raise LifecycleError(
+                "the owner cannot stop a session while child threads are attached"
+            )
+        if record["browser_pid"] != session["browser_pid"]:
+            raise LifecycleError("browser_pid changed within the session")
+        session["state"] = "stopping"
+    elif event == "start_failed":
+        if (
+            session["state"] != "claimed"
+            or record["actor_thread_id"] != session["owner_thread_id"]
+        ):
+            raise LifecycleError(
+                "only the owner can record start_failed for a claimed session"
+            )
+        del sessions[session_id]
+        return
+    elif event == "stopped":
+        if (
+            session["state"] != "stopping"
+            or record["actor_thread_id"] != session["owner_thread_id"]
+        ):
+            raise LifecycleError("only the owner can finish a stopping session")
+        del sessions[session_id]
+        return
+    elif event == "observed_dead":
+        if session["state"] not in {"ready", "stopping"}:
+            raise LifecycleError("observed_dead requires a ready or stopping session")
+        del sessions[session_id]
+        return
+
+    session["last_event_at"] = record["timestamp"]
+
+
+def replay(records: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    sessions: dict[str, dict[str, Any]] = {}
+    for record in records:
+        apply_record(sessions, record)
+    return sessions
+
+
+def current_view(sessions: dict[str, dict[str, Any]]) -> dict[str, Any]:
+    return {
+        "schema": CURRENT_SCHEMA,
+        "generated_at": timestamp(),
+        "sessions": sorted(
+            sessions.values(),
+            key=lambda session: (session["cdp_port"], session["session_id"]),
+        ),
+    }
+
+
+def write_current(
+    current_path: Path, sessions: dict[str, dict[str, Any]]
+) -> dict[str, Any]:
+    view = current_view(sessions)
+    temporary_path: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            dir=current_path.parent,
+            prefix=".current.",
+            suffix=".tmp",
+            delete=False,
+        ) as temporary_file:
+            temporary_path = Path(temporary_file.name)
+            os.fchmod(temporary_file.fileno(), 0o600)
+            json.dump(view, temporary_file, indent=2)
+            temporary_file.write("\n")
+            temporary_file.flush()
+            os.fsync(temporary_file.fileno())
+        os.replace(temporary_path, current_path)
+        current_path.chmod(0o600)
+    finally:
+        if temporary_path is not None and temporary_path.exists():
+            temporary_path.unlink()
+    return view
+
+
+def append_record(history_path: Path, record: dict[str, Any]) -> None:
+    validate_record(record)
+    ensure_private_file(history_path)
+    encoded_record = (json.dumps(record, separators=(",", ":")) + "\n").encode("utf-8")
+    descriptor = os.open(history_path, os.O_WRONLY | os.O_APPEND)
+    try:
+        remaining = memoryview(encoded_record)
+        while remaining:
+            written = os.write(descriptor, remaining)
+            remaining = remaining[written:]
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+
+
+def port_is_available(port: int) -> bool:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as listener:
+        try:
+            listener.bind(("127.0.0.1", port))
+        except OSError:
+            return False
+    return True
+
+
+def command_claim(args: argparse.Namespace) -> dict[str, Any]:
+    validate_thread_id(args.owner_thread_id, "owner_thread_id")
+    if not 1 <= args.cdp_port <= 65535:
+        raise LifecycleError("cdp_port must be between 1 and 65535")
+
+    state_dir = lifecycle_dir()
+    history_path = state_dir / "lifecycle.jsonl"
+    current_path = state_dir / "current.json"
+    session_id = str(uuid.uuid4())
+    session_root = state_dir / "sessions" / session_id
+    user_data_dir = session_root / "chrome-data"
+    workspace = Path(args.workspace).expanduser().resolve()
+
+    with lifecycle_lock(state_dir):
+        records = read_history(history_path)
+        sessions = replay(records)
+        if any(session["cdp_port"] == args.cdp_port for session in sessions.values()):
+            raise LifecycleError(f"CDP port {args.cdp_port} is already claimed")
+        if not port_is_available(args.cdp_port):
+            raise LifecycleError(
+                f"CDP port {args.cdp_port} already has a live listener"
+            )
+        if session_root.exists():
+            raise LifecycleError(
+                f"fresh session directory already exists: {session_root}"
+            )
+        sessions_dir = state_dir / "sessions"
+        ensure_private_directory(sessions_dir)
+        session_root.mkdir(mode=0o700)
+        user_data_dir.mkdir(mode=0o700)
+        record = {
+            "schema": HISTORY_SCHEMA,
+            "timestamp": timestamp(),
+            "event": "claimed",
+            "session_id": session_id,
+            "owner_thread_id": args.owner_thread_id,
+            "actor_thread_id": args.owner_thread_id,
+            "cdp_host": "127.0.0.1",
+            "cdp_port": args.cdp_port,
+            "user_data_dir": str(user_data_dir),
+            "browser_pid": None,
+            "workspace": str(workspace),
+        }
+        append_record(history_path, record)
+        apply_record(sessions, record)
+        write_current(current_path, sessions)
+        return record
+
+
+def command_record(args: argparse.Namespace) -> dict[str, Any]:
+    validate_thread_id(args.actor_thread_id, "actor_thread_id")
+    state_dir = lifecycle_dir()
+    history_path = state_dir / "lifecycle.jsonl"
+    current_path = state_dir / "current.json"
+
+    with lifecycle_lock(state_dir):
+        records = read_history(history_path)
+        sessions = replay(records)
+        session = sessions.get(args.session_id)
+        if session is None:
+            raise LifecycleError(f"session is not active: {args.session_id}")
+        if args.event != "ready" and args.browser_pid is not None:
+            raise LifecycleError("--browser-pid is valid only for the ready event")
+        browser_pid = (
+            args.browser_pid if args.event == "ready" else session["browser_pid"]
+        )
+        record = {
+            "schema": HISTORY_SCHEMA,
+            "timestamp": timestamp(),
+            "event": args.event,
+            "session_id": args.session_id,
+            "owner_thread_id": session["owner_thread_id"],
+            "actor_thread_id": args.actor_thread_id,
+            "cdp_host": session["cdp_host"],
+            "cdp_port": session["cdp_port"],
+            "user_data_dir": session["user_data_dir"],
+            "browser_pid": browser_pid,
+            "workspace": session["workspace"],
+        }
+        apply_record(sessions, record)
+        append_record(history_path, record)
+        write_current(current_path, sessions)
+        return record
+
+
+def command_rebuild() -> dict[str, Any]:
+    state_dir = lifecycle_dir()
+    history_path = state_dir / "lifecycle.jsonl"
+    current_path = state_dir / "current.json"
+    with lifecycle_lock(state_dir):
+        sessions = replay(read_history(history_path))
+        return write_current(current_path, sessions)
+
+
+def command_show() -> dict[str, Any]:
+    return command_rebuild()
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description=__doc__)
+    subparsers = parser.add_subparsers(dest="command", required=True)
+
+    claim = subparsers.add_parser(
+        "claim", help="claim a fresh browser session and CDP port"
+    )
+    claim.add_argument("--owner-thread-id", required=True)
+    claim.add_argument("--cdp-port", required=True, type=int)
+    claim.add_argument("--workspace", default=os.getcwd())
+
+    record = subparsers.add_parser(
+        "record", help="record an event for an active session"
+    )
+    record.add_argument("event", choices=sorted(RECORD_EVENTS))
+    record.add_argument("--session-id", required=True)
+    record.add_argument("--actor-thread-id", required=True)
+    record.add_argument("--browser-pid", type=int)
+
+    subparsers.add_parser("show", help="display current.json")
+    subparsers.add_parser("rebuild", help="rebuild current.json from lifecycle.jsonl")
+    return parser
+
+
+def main() -> int:
+    args = build_parser().parse_args()
+    try:
+        if args.command == "claim":
+            result = command_claim(args)
+        elif args.command == "record":
+            result = command_record(args)
+        elif args.command == "rebuild":
+            result = command_rebuild()
+        else:
+            result = command_show()
+    except LifecycleError as exc:
+        print(f"agent-browser-lifecycle: {exc}", file=sys.stderr)
+        return 2
+    json.dump(result, sys.stdout, indent=2)
+    sys.stdout.write("\n")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
