@@ -85,8 +85,18 @@ find_rclone() {
 	}
 }
 
-file_size() { stat -f '%z' "$1" 2>/dev/null || stat -c '%s' "$1"; }
-file_mode() { stat -f '%Lp' "$1" 2>/dev/null || stat -c '%a' "$1"; }
+file_size() {
+	local value
+	value="$(stat -f '%z' "$1" 2>/dev/null)" || true
+	[[ "$value" =~ ^[0-9]+$ ]] || value="$(stat -c '%s' "$1")"
+	printf '%s\n' "$value"
+}
+file_mode() {
+	local value
+	value="$(stat -f '%Lp' "$1" 2>/dev/null)" || true
+	[[ "$value" =~ ^[0-7]{3,4}$ ]] || value="$(stat -c '%a' "$1")"
+	printf '%s\n' "$value"
+}
 sha256() { shasum -a 256 "$1" | awk '{print $1}'; }
 runner_label() { printf 'com.ampcode.runner.%s' "$1"; }
 service_target() { printf 'gui/%s/%s' "$(id -u)" "$(runner_label "$1")"; }

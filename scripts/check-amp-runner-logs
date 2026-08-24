@@ -3,7 +3,7 @@ set -euo pipefail
 
 repo_root="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 tool="$repo_root/bin/amp-runner-logs"
-tmp="$(mktemp -d "${TMPDIR:-/tmp}/check-amp-runner-logs.XXXXXX")"
+tmp="$(mktemp -d "$HOME/.check-amp-runner-logs.XXXXXX")"
 trap 'rm -rf "$tmp"' EXIT
 mkdir -p "$tmp/bin" "$tmp/logs" "$tmp/agents" "$tmp/remote"
 
@@ -29,7 +29,8 @@ copyto)
 	fi ;;
 size)
 	path="${3#*:}"; path="${path#/}"
-	bytes="$(stat -f %z "$TEST_REMOTE/$path" 2>/dev/null || stat -c %s "$TEST_REMOTE/$path")"
+	bytes="$(stat -f %z "$TEST_REMOTE/$path" 2>/dev/null)" || true
+	[[ "$bytes" =~ ^[0-9]+$ ]] || bytes="$(stat -c %s "$TEST_REMOTE/$path")"
 	[ "${TEST_SIZE_MISMATCH:-0}" = 0 ] || bytes=$((bytes + 1))
 	printf '{"bytes":%s}\n' "$bytes" ;;
 esac
@@ -60,7 +61,8 @@ write_runner() {
 
 assert_private() {
 	local mode
-	mode="$(stat -f %Lp "$1" 2>/dev/null || stat -c %a "$1")"
+	mode="$(stat -f %Lp "$1" 2>/dev/null)" || true
+	[[ "$mode" =~ ^[0-7]{3,4}$ ]] || mode="$(stat -c %a "$1")"
 	[ "$mode" = "$2" ]
 }
 
