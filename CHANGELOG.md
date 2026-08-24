@@ -57,7 +57,7 @@ and this project does not currently use versioned releases.
 
 ### Changed
 
-- Move Logseq current-task parent thread renaming and labelling from the TypeScript coordinator into the logging worker prompt.
+- Move Logseq current-task parent thread renaming and labelling from the TypeScript coordinator into the logging worker prompt. [#181](https://github.com/lelouvincx/agent-skills/pull/181)
 - Merge `explaining-technical-concepts` into `technical-precision` so one local skill covers clear explanations and controlled-English technical documentation. [#177](https://github.com/lelouvincx/agent-skills/pull/177)
 - Clarify the source of global agent instructions and explicitly identify `delegating-subagents` as a skill. [#172](https://github.com/lelouvincx/agent-skills/pull/172)
 - Use the current Git working tree by default and create a worktree only when Chinh explicitly requests one. [#171](https://github.com/lelouvincx/agent-skills/pull/171)
