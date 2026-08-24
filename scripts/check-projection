@@ -15,6 +15,8 @@ mkdir -p "$tmp_home/.config/amp/github-thread-events/policies"
 touch "$tmp_home/.config/amp/github-thread-events/policies/stale.json"
 mkdir -p "$tmp_home/.config/amp/agent-secrets"
 touch "$tmp_home/.config/amp/agent-secrets/stale.json"
+mkdir -p "$tmp_home/.config/amp/agent-browser-lifecycle"
+touch "$tmp_home/.config/amp/agent-browser-lifecycle/stale.json"
 mkdir -p "$tmp_home/.config/amp/conventions"
 touch "$tmp_home/.config/amp/conventions/stale.md"
 mkdir -p "$tmp_home/.config/amp/state"
@@ -29,6 +31,7 @@ for path in \
 	".config/amp/settings.json" \
 	".config/amp/agent-secrets/bundles.json" \
 	".config/amp/agent-secrets/bundles.schema.json" \
+	".config/amp/agent-browser-lifecycle/schema.json" \
 	".config/amp/github-thread-events/config.json" \
 	".config/amp/github-thread-events/config.schema.json" \
 	".config/amp/github-thread-events/policy-set.schema.json" \
@@ -74,6 +77,16 @@ fi
 if [ -e "$tmp_home/.credentials/agent-secrets" ] \
 	|| [ -e "$tmp_home/.local/share/agent-secrets/op-service-account-token" ]; then
 	echo "error: projection created local agent secret credentials" >&2
+	exit 1
+fi
+
+if ! diff -qr "$REPO_DIR/amp/agent-browser-lifecycle" "$tmp_home/.config/amp/agent-browser-lifecycle"; then
+	echo "error: agent browser lifecycle projection differs from its source" >&2
+	exit 1
+fi
+
+if [ -e "$tmp_home/.config/amp/agent-browser-lifecycle/stale.json" ]; then
+	echo "error: projection did not delete a stale agent browser lifecycle file" >&2
 	exit 1
 fi
 

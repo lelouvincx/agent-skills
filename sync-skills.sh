@@ -428,6 +428,15 @@ sync_amp_artifacts() {
 		echo "synced: amp/agent-secrets/ -> $AMP_CONFIG_DIR/agent-secrets/"
 	fi
 
+	if [ -d "$AMP_DIR/agent-browser-lifecycle" ]; then
+		if [ -L "$AMP_CONFIG_DIR/agent-browser-lifecycle" ]; then
+			rm "$AMP_CONFIG_DIR/agent-browser-lifecycle"
+		fi
+		mkdir -p "$AMP_CONFIG_DIR/agent-browser-lifecycle"
+		rsync -a --delete "$AMP_DIR/agent-browser-lifecycle/" "$AMP_CONFIG_DIR/agent-browser-lifecycle/"
+		echo "synced: amp/agent-browser-lifecycle/ -> $AMP_CONFIG_DIR/agent-browser-lifecycle/"
+	fi
+
 	if [ -f "$AMP_DIR/AGENTS.md" ]; then
 		mkdir -p "$AMP_CONFIG_DIR"
 		cp "$AMP_DIR/AGENTS.md" "$AMP_CONFIG_DIR/AGENTS.md"
