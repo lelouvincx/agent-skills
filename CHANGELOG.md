@@ -9,7 +9,7 @@ and this project does not currently use versioned releases.
 
 ### Added
 
-- Add a current-state discovery of `dotfiles` and `agent-skills`, an environment-setup product definition and glossary, and a living design-grill decision record.
+- Add an agent-browser lifecycle registry and CLI with current state, append-only audit history, fresh-profile sessions, and parent/child thread adoption. [#182](https://github.com/lelouvincx/agent-skills/pull/182)
 - Add accepted RFC-0010, its staged implementation plan, and the validated local resolver and projection contract for shared local agent and bot secrets using capability bundles backed by one dedicated 1Password automation boundary. [#180](https://github.com/lelouvincx/agent-skills/pull/180)
 - Add the `herdr` remote skill for controlling Herdr-managed panes, tabs, workspaces, commands, and neighboring agents. [#178](https://github.com/lelouvincx/agent-skills/pull/178)
 - Add GPT-5.5 agent modes with medium and xhigh reasoning effort, using the latest Fable 5 prompt and tools. [#176](https://github.com/lelouvincx/agent-skills/pull/176)
@@ -58,7 +58,6 @@ and this project does not currently use versioned releases.
 
 ### Changed
 
-- Use the official `dbdiagram` CLI as the unified command-line interface for dbx, dbdiagram, dbdocs, and runsql work.
 - Move Logseq current-task parent thread renaming and labelling from the TypeScript coordinator into the logging worker prompt. [#181](https://github.com/lelouvincx/agent-skills/pull/181)
 - Merge `explaining-technical-concepts` into `technical-precision` so one local skill covers clear explanations and controlled-English technical documentation. [#177](https://github.com/lelouvincx/agent-skills/pull/177)
 - Clarify the source of global agent instructions and explicitly identify `delegating-subagents` as a skill. [#172](https://github.com/lelouvincx/agent-skills/pull/172)
