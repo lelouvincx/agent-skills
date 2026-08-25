@@ -554,11 +554,11 @@ Completed:
 - removed the unapproved `lelouvincx-bot/smartclass` fork and the bot's write collaborator grant on `lelouvincx/smartclass` after Chinh's separate approvals
 - passed the complete Logseq service-account doctor after the repository-access corrections
 - preserved failed weekly head `24cae39` at `backup/weekly-2026-08-24-failed-rfc-0010` and reconstructed `weekly/2026-08-24` from merged Logseq `master` with only its ten intended journal, backlog, report and planning paths
+- bot-signed reconstructed weekly source commit `56644fe`, report draft commit `38fb1e7` and whitespace-only cleanup `d8a8f0f`; the backup ref remains unchanged
 
 Pending:
 
 - merge and project the dash-prefixed path regression fix
-- bot-sign the reconstructed weekly branch after final content review
 - obtain separate approval to install and load launchd again
 - observe and verify one naturally due loaded-job run
 - remove selector compatibility only after those checks pass
