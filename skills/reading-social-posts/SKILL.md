@@ -15,8 +15,6 @@ Resolve `TIKHUB_API_KEY` at execution time without printing it:
 op run --account my.1password.com --env-file ~/.credentials/env -- uvx tikhub fetch '<url>'
 ```
 
-Use the same 1Password prefix for every TikHub CLI or Python command, including `tikhub user info`. RFC-0010 assigns `Agent Secrets` to `my.1password.com`. Selecting this account prevents another signed-in account from making a valid reference appear missing.
-
 Use `tikhub fetch` first for TikTok and other video URLs. Save its JSON to a temporary file so one paid response supplies the post text, metadata, and media URLs.
 
 For X, Reddit, LinkedIn, or multiple mixed posts that the CLI cannot fetch, use one `uvx --from tikhub python` process and the generated SDK resources:
