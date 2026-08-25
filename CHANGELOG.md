@@ -61,7 +61,7 @@ and this project does not currently use versioned releases.
 
 ### Changed
 
-- Select the personal 1Password account for every interactive `Agent Secrets` reference, including TikHub and optional Claude or Pi subagent env files. [#186](https://github.com/lelouvincx/agent-skills/pull/186)
+- Select the personal 1Password account for every interactive `Agent Secrets` reference, and move shared Logseq agent tooling into the projected `agent-secrets` library while Logseq retains policy in its adapter. [#186](https://github.com/lelouvincx/agent-skills/pull/186)
 - Use the official `dbdiagram` CLI as the unified command-line interface for dbx, dbdiagram, dbdocs, and runsql work. [#183](https://github.com/lelouvincx/agent-skills/pull/183)
 - Move Logseq current-task parent thread renaming and labelling from the TypeScript coordinator into the logging worker prompt. [#181](https://github.com/lelouvincx/agent-skills/pull/181)
 - Merge `explaining-technical-concepts` into `technical-precision` so one local skill covers clear explanations and controlled-English technical documentation. [#177](https://github.com/lelouvincx/agent-skills/pull/177)

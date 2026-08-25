@@ -20,7 +20,14 @@ dependency:
     title: "Unattended agent secret infrastructure"
     repository: "lelouvincx/second-brain-logseq"
     url: "https://github.com/lelouvincx/second-brain-logseq/blob/master/docs/plans/RFC-0010-unattended-agent-secret-infrastructure.md"
-implementation: []
+implementation:
+  - path: "../../agent-secrets/bundles.json"
+  - path: "../../agent-secrets/bundles.schema.json"
+  - path: "../../agent-secrets/lib-agent.sh"
+  - path: "../../scripts/validate-agent-secrets.py"
+  - path: "../../scripts/test_validate_agent_secrets.py"
+  - path: "../../scripts/test_agent_secrets.py"
+  - path: "../../../bin/agent-secrets"
 inputs:
   - name: "capability bundle request"
     kind: "bundle names and child command"
@@ -75,9 +82,9 @@ Each child receives credentials only from the bundles approved for its task phas
 
 No child receives the 1Password service-account token.
 
-Automation scripts and their owning repositories retain authorization, output-validation and publishing rules.
+Agent-skills owns the shared shell implementation. Automation repositories retain their configuration, authorization and publishing rules.
 
-The original Logseq RFC remains authoritative for current Logseq automation until migration completes.
+The original Logseq RFC records the legacy implementation and rollback design.
 
 ## Context
 
@@ -89,13 +96,13 @@ It uses a dedicated service account, an owner-only bootstrap token file and refe
 
 It also separates report generation from deterministic bot publishing.
 
-That implementation is deliberately tied to:
+That implementation was deliberately tied to:
 
 - the `Logseq Reports` vault
 - `~/.credentials/weekly-report.env`
 - a Logseq-specific bootstrap path
 - `LOGSEQ_REPORT_AUTH`
-- `automation/lib-agent.sh`
+- the implementation in `automation/lib-agent.sh`
 
 The problem is that the implemented contract works only for Logseq.
 
@@ -171,6 +178,8 @@ This migration includes the reusable secret setup currently implemented inside t
 
 After the shared implementation passes its acceptance checks, Logseq replaces its local authentication, reference parsing and bootstrap helpers with `agent-secrets`.
 
+Logseq also loads the projected `amp/agent-secrets/lib-agent.sh` implementation through a small repository-owned adapter.
+
 The credential migration uses copy, verify and rotate rather than an immediate move.
 
 After Chinh approves the external changes, create the shared service-account and local-file topology, then copy the Logseq credential items into `Agent Secrets`.
@@ -185,7 +194,7 @@ Then revoke the superseded credentials so that the legacy copies stop working, r
 
 This sequence avoids breaking existing `op://Logseq Reports/` references during verification and avoids leaving 2 live copies indefinitely.
 
-Logseq retains its scheduling, output validation, repository allowlist and publishing policy.
+Logseq retains its scheduling, output validation, repository allowlist, configuration and publishing policy.
 
 ### Capability bundles
 
@@ -288,9 +297,9 @@ Use another vault and service account when a future automation script needs a se
 
 ### Policy ownership
 
-`agent-skills` owns authentication, bundle validation and process-scoped injection.
+`agent-skills` owns authentication, bundle validation, process-scoped injection and the shared shell implementation.
 
-Each automation script owns permission to request a bundle and use the resulting external identity.
+Each automation repository owns the adapter configuration and permission to request a bundle or use the resulting external identity.
 
 Credential availability does not grant resource authorization.
 
@@ -791,11 +800,11 @@ This RFC owns the shared design.
 
 The implementation plan is `amp/docs/plans/implementation-plan-rfc-0010-shared-local-agent-and-bot-secrets.md`.
 
-The future `amp/agent-secrets/bundles.json`, its schema, its validator and `bin/agent-secrets` own the executable shared contract.
+`amp/agent-secrets/lib-agent.sh`, `amp/agent-secrets/bundles.json`, its schema, its validator and `bin/agent-secrets` own the executable shared contract.
 
 Automation scripts and their owning repositories own task authorization and publisher policy.
 
-Logseq RFC-0010 remains the source of truth for current Logseq behavior until migration passes.
+Logseq RFC-0010 remains historical evidence for legacy rollback and retirement.
 
 RFC-0009 remains authoritative for the GitHub event runner and keeps its separate Keychain-backed secret boundary.
 
