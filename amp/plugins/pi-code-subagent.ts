@@ -656,10 +656,24 @@ function sanitizedSubagentEnv(extra?: Record<string, string | undefined>): Recor
 
 function withOptionalOpRun(bin: string, args: string[], envFile?: string): { bin: string; args: string[] } {
 	if (!envFile?.trim()) return { bin, args }
+	const path = expandHome(envFile.trim())
+	const accountArgs = envFileUsesAgentSecrets(path)
+		? ['--account', 'my.1password.com']
+		: []
 	return {
 		bin: process.env.OP_BIN || 'op',
-		args: ['run', `--env-file=${expandHome(envFile.trim())}`, '--', bin, ...args],
+		args: ['run', ...accountArgs, `--env-file=${path}`, '--', bin, ...args],
 	}
+}
+
+function envFileUsesAgentSecrets(path: string): boolean {
+	return readFileSync(path, 'utf8').split(/\r?\n/).some((line) => {
+		const trimmed = line.trim()
+		if (!trimmed || trimmed.startsWith('#')) return false
+		const match = trimmed.match(/^(?:export\s+)?[A-Za-z_][A-Za-z0-9_]*=(.*)$/)
+		if (!match) return false
+		return unquoteEnvValue(match[1].trim()).startsWith('op://Agent Secrets/')
+	})
 }
 
 function validateOptionalOpEnvFile(envFile?: string): string | null {
