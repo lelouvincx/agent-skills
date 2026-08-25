@@ -12,7 +12,7 @@ Use the **fast path**: make the first TikHub request immediately, then investiga
 Resolve `TIKHUB_API_KEY` at execution time without printing it:
 
 ```bash
-op run --env-file ~/.credentials/env -- uvx tikhub fetch '<url>'
+op run --account my.1password.com --env-file ~/.credentials/env -- uvx tikhub fetch '<url>'
 ```
 
 Use `tikhub fetch` first for TikTok and other video URLs. Save its JSON to a temporary file so one paid response supplies the post text, metadata, and media URLs.

@@ -45,8 +45,8 @@ agent-secrets run \
 agent-secrets doctor
 ```
 
-The source-controlled policy is in [`amp/agent-secrets/`](amp/agent-secrets/).
-`./sync-skills.sh` validates and projects that policy and links the resolver into `~/.local/bin`.
+The source-controlled policy and shared automation library are in [`amp/agent-secrets/`](amp/agent-secrets/).
+`./sync-skills.sh` validates and projects them, then links the resolver into `~/.local/bin`.
 
 Local bundle files belong in `~/.credentials/agent-secrets/` with directory mode `0700` and file mode `0600`.
 They may contain only simple assignments to `op://Agent Secrets/...` references.

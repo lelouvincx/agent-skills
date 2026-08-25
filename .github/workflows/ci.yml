@@ -45,6 +45,7 @@ jobs:
               - "amp/mcp-servers/**"
               - "amp/plugins/**"
               - "amp/scripts/test_agent_secrets.py"
+              - "amp/scripts/test-agent-secrets-lib.sh"
               - "amp/scripts/test_validate_agent_secrets.py"
               - "amp/scripts/validate-agent-secrets.py"
               - "amp/scripts/test_validate_github_thread_events.py"
@@ -142,7 +143,10 @@ jobs:
         run: python amp/scripts/validate-github-thread-events.py
 
       - name: Test agent secret capability resolver
-        run: python -m unittest amp/scripts/test_validate_agent_secrets.py amp/scripts/test_agent_secrets.py
+        run: |
+          bash -n amp/agent-secrets/lib-agent.sh
+          amp/scripts/test-agent-secrets-lib.sh
+          python -m unittest amp/scripts/test_validate_agent_secrets.py amp/scripts/test_agent_secrets.py
 
       - name: Validate agent secret capability policy
         run: python amp/scripts/validate-agent-secrets.py

@@ -1,6 +1,6 @@
 # RFC-0010 implementation plan
 
-Status: Stages 0 to 6 complete. Stage 7 live projection, compatible publishing and launchd cutover are complete. One naturally due loaded-job run, credential replacement and legacy retirement remain pending.
+Status: Stages 0 to 7 are complete. Shared shell extraction is in progress. One naturally due loaded-job run, credential replacement and legacy retirement remain pending.
 
 RFC: `amp/docs/rfcs/rfc-0010-shared-local-agent-and-bot-secrets.md`
 
@@ -20,7 +20,7 @@ The migration will keep the legacy Logseq secret path available until replacemen
 
 - support local macOS runners only
 - keep RFC-0009's Keychain boundary unchanged
-- keep the original Logseq RFC unchanged
+- keep the original Logseq RFC as migration history and update its source pointers
 - use `interactive` when `AGENT_SECRET_AUTH` is unset
 - never let interactive mode fall back to the service account
 - let service-account mode fall back to interactive mode after an operational `op` failure
@@ -44,6 +44,7 @@ Agent-skills owns:
 - child-environment construction
 - exact executable-class enforcement
 - secret resolution and process launch
+- shared agent execution, output validation and deterministic publishing functions
 - isolated projection into Amp runtime paths
 - shared guidance after cutover
 
@@ -51,6 +52,7 @@ Source files:
 
 - `amp/agent-secrets/bundles.json`
 - `amp/agent-secrets/bundles.schema.json`
+- `amp/agent-secrets/lib-agent.sh`
 - `amp/scripts/validate-agent-secrets.py`
 - `amp/scripts/test_validate_agent_secrets.py`
 - `amp/scripts/test_agent_secrets.py`
@@ -73,13 +75,14 @@ Logseq retains:
 - bot account, repository, permission and ruleset checks
 - pull request titles, bodies, comments, reviewer and assignee policy
 - success-stamp ordering
+- its local adapter configuration for the shared shell library
 
 Files:
 
 - `automation/weekly-report.sh`
 - `automation/1on1-report.sh`
 - `automation/knowledge-maintenance.sh`
-- `automation/lib-agent.sh`
+- `automation/lib-agent.sh` (configuration and projected-library adapter only)
 - `automation/validate-agent-credentials`
 - `automation/publish-approved-output`
 - `automation/test-weekly-report.sh`
@@ -542,12 +545,22 @@ Completed:
 - opened agent-skills pull request 180 with the accepted RFC, resolver, policy manifest, validation, tests, projection and rollout documentation
 - passed every initial pull-request validation job, then added the required separate changelog commit linking pull request 180
 - passed every pull-request validation job again after the changelog-link commit
+- merged agent-skills pull request 180 as `f7cc016` and projected the shared resolver
 
 Pending:
 
-- merge agent-skills pull request 180 after Chinh's explicit approval, then verify post-merge CI and project the merged source
 - observe and verify one naturally due loaded-job run
 - remove selector compatibility only after those checks pass
+
+Shared shell extraction is complete when:
+
+1. `amp/agent-secrets/lib-agent.sh` is committed as the shared source.
+2. Logseq CI pins the exact 40-character agent-skills commit that contains the source.
+3. All 180 Logseq automation tests pass locally and in CI against that source.
+4. Agent-skills shell contract, resolver, RFC and projection checks pass.
+5. The agent-skills commit merges and is projected before the Logseq adapter reaches `master`.
+6. The projected library matches the committed artifact byte for byte.
+7. The service-account doctor passes against the projected library.
 
 Project the reviewed agent-skills revision with `./sync-skills.sh`.
 

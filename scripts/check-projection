@@ -31,6 +31,7 @@ for path in \
 	".config/amp/settings.json" \
 	".config/amp/agent-secrets/bundles.json" \
 	".config/amp/agent-secrets/bundles.schema.json" \
+	".config/amp/agent-secrets/lib-agent.sh" \
 	".config/amp/agent-browser-lifecycle/schema.json" \
 	".config/amp/github-thread-events/config.json" \
 	".config/amp/github-thread-events/config.schema.json" \

@@ -129,7 +129,7 @@ Pi gets only `read`, `grep`, `find`, and `ls`. The plugin writes redacted audit 
 
 Do not dump raw Amp threads into `brief` or `context`. Pass curated context so the subagent sees only what it needs.
 
-Secrets must come from 1Password at execution time. Do not put plaintext provider keys in local `.env` files or rely on Amp's ambient process environment. If Pi needs provider keys, set `AMP_PI_CODE_SUBAGENT_ENV_FILE` to an env file containing only `op://...` references; the wrapper validates that file and rejects plaintext before running Pi through `op run --env-file`.
+Secrets must come from 1Password at execution time. Do not put plaintext provider keys in local `.env` files or rely on Amp's ambient process environment. If Pi needs provider keys, set `AMP_PI_CODE_SUBAGENT_ENV_FILE` to an env file containing only `op://...` references. The wrapper validates the file and rejects plaintext before running Pi through `op run --env-file`. Under [RFC-0010](../rfcs/rfc-0010-shared-local-agent-and-bot-secrets.md), the wrapper passes `--account my.1password.com` when an env-file assignment uses an `op://Agent Secrets/...` reference.
 
 ## Examples
 
