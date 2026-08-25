@@ -754,7 +754,7 @@ The manifest maps this exact resolved path to `logseq-publisher` and restricts t
 
 The child receives no agent bundle.
 
-The wrapper accepts only high-level operations for the 2 repositories in Logseq's existing bot allowlist.
+The wrapper accepts only high-level operations for the 2 repositories permitted by Logseq's deterministic publisher. Logseq owns the broader bot access allowlist separately.
 
 ### Reject a mixed audience
 
@@ -832,7 +832,7 @@ The implementation must prove:
 - child processes do not receive `AGENT_SECRET_AUTH`
 - resolved values do not enter the caller shell, arguments, files, logs or clipboard
 - Logseq credential preflight runs through its registered deterministic command class
-- bot publishing uses strict high-level operations for only the 2 allowlisted repositories
+- bot publishing uses strict high-level operations for only the 2 repositories permitted by Logseq's deterministic publisher
 - conflicting `AGENT_SECRET_AUTH` and `LOGSEQ_REPORT_AUTH` values fail during Logseq migration
 - legacy Logseq credentials remain usable until their replacements pass, and legacy copies stop working after revocation
 - automation-script policy remains outside the shared resolver
