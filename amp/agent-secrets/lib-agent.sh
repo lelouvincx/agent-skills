@@ -85,14 +85,15 @@ agent_unset_publishing_credentials() {
 
 
 agent_file_digest() {
-	local path="$1"
+	local path="$1" digest_path="$1"
+	[[ "$digest_path" == -* ]] && digest_path="./$digest_path"
 	if [[ -L "$path" ]]; then
 		printf 'symlink:%s' "$(readlink "$path")"
 	elif [[ -f "$path" ]]; then
 		if command -v shasum >/dev/null 2>&1; then
-			shasum -a 256 "$path" | awk '{print $1}'
+			shasum -a 256 "$digest_path" | awk '{print $1}'
 		else
-			sha256sum "$path" | awk '{print $1}'
+			sha256sum "$digest_path" | awk '{print $1}'
 		fi
 	elif [[ -e "$path" ]]; then
 		printf 'other'
