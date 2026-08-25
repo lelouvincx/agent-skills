@@ -16,6 +16,11 @@
         "/Users/lelouvincx/.local/share/mise/installs/pi/latest/pi"
       ]
     },
+    "amp-runner-rclone": {
+      "executablePaths": [
+        "/opt/homebrew/bin/rclone"
+      ]
+    },
     "logseq-agent-preflight": {
       "executablePaths": [
         "/Users/lelouvincx/Developer/second-brain-logseq/automation/validate-agent-credentials"
@@ -68,6 +73,18 @@
       "compatibleBundles": [],
       "allowedCommandClasses": [
         "logseq-publisher"
+      ]
+    },
+    "amp-runner-r2": {
+      "audience": "publisher",
+      "owner": "lelouvincx/agent-skills",
+      "variables": [
+        "AWS_ACCESS_KEY_ID",
+        "AWS_SECRET_ACCESS_KEY"
+      ],
+      "compatibleBundles": [],
+      "allowedCommandClasses": [
+        "amp-runner-rclone"
       ]
     }
   }

@@ -5,6 +5,7 @@ usage() {
 	cat <<'EOF'
 Usage:
   amp-runner install [OPTIONS] RUNNER_ID [-- AMP_ARGS...]
+  amp-runner list
   amp-runner start|stop|restart|status|logs|uninstall RUNNER_ID
   amp-runner run [OPTIONS] RUNNER_ID [-- AMP_ARGS...]
 
@@ -23,6 +24,7 @@ Install and run options:
 Examples:
   amp-runner install macbook.agent-skills
   amp-runner install --debug macbook.agent-skills
+  amp-runner list
   amp-runner restart macbook.agent-skills
   amp-runner logs macbook.agent-skills
 EOF
@@ -306,6 +308,44 @@ status_runner() {
 	launchctl_command print "$(service_target "$1")"
 }
 
+list_runners() {
+	[ "$#" -eq 0 ] || fail 'list does not accept arguments'
+
+	local launch_agents_dir
+	local plist
+	local filename
+	local runner_id
+	local details
+	local state
+	local pid
+	local nullglob_was_set=false
+	local -a plists=()
+	launch_agents_dir="${AMP_RUNNER_LAUNCH_AGENTS_DIR:-$HOME/Library/LaunchAgents}"
+
+	if [ -d "$launch_agents_dir" ]; then
+		shopt -q nullglob && nullglob_was_set=true
+		shopt -s nullglob
+		plists=("$launch_agents_dir"/com.ampcode.runner.*.plist)
+		[ "$nullglob_was_set" = true ] || shopt -u nullglob
+	fi
+
+	printf 'RUNNER_ID\tSTATE\tPID\n'
+	for plist in "${plists[@]}"; do
+		filename="${plist##*/}"
+		runner_id="${filename#com.ampcode.runner.}"
+		runner_id="${runner_id%.plist}"
+		state=not-loaded
+		pid=-
+		if details="$(launchctl_command print "$(service_target "$runner_id")" 2>/dev/null)"; then
+			state="$(printf '%s\n' "$details" | awk -F'= ' '/^[[:space:]]*state =/{print $2; exit}')"
+			pid="$(printf '%s\n' "$details" | awk -F'= ' '/^[[:space:]]*pid =/{print $2; exit}')"
+			state="${state:-loaded}"
+			pid="${pid:--}"
+		fi
+		printf '%s\t%s\t%s\n' "$runner_id" "$state" "$pid"
+	done
+}
+
 logs_runner() {
 	require_runner_id "$@"
 	local log_dir
@@ -338,6 +378,7 @@ case "$command" in
 	stop) stop_runner "$@" ;;
 	restart) restart_runner "$@" ;;
 	status) status_runner "$@" ;;
+	list) list_runners "$@" ;;
 	logs) logs_runner "$@" ;;
 	uninstall) uninstall_runner "$@" ;;
 	-h|--help|help) usage ;;

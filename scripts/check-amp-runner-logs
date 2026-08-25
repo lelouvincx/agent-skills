@@ -1,0 +1,194 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+tool="$repo_root/bin/amp-runner-logs"
+tmp="$(mktemp -d "$HOME/.check-amp-runner-logs.XXXXXX")"
+trap 'rm -rf "$tmp"' EXIT
+mkdir -p "$tmp/bin" "$tmp/logs" "$tmp/agents" "$tmp/remote"
+
+cat > "$tmp/bin/launchctl" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >> "$TEST_LAUNCHCTL_LOG"
+case "$1" in
+print) [ -f "$TEST_LOADED" ] ;;
+bootout) rm -f "$TEST_LOADED" ;;
+bootstrap) [ "${TEST_BOOTSTRAP_FAIL:-0}" = 0 ] || exit 8; touch "$TEST_LOADED" ;;
+esac
+EOF
+cat > "$tmp/bin/rclone" <<'EOF'
+#!/usr/bin/env bash
+case "$1" in
+copyto)
+	[ "${TEST_RCLONE_FAIL:-0}" = 0 ] || exit 9
+	src="$2"; dst="$3"; path="${dst#*:}"; path="${path#/}"
+	if [[ "$src" == *:* ]]; then
+		mkdir -p "$(dirname "$dst")"; cp "$TEST_REMOTE/${src#*:}" "$dst"
+	else
+		mkdir -p "$TEST_REMOTE/$(dirname "$path")"; cp "$src" "$TEST_REMOTE/$path"
+	fi ;;
+size)
+	path="${3#*:}"; path="${path#/}"
+	bytes="$(stat -f %z "$TEST_REMOTE/$path" 2>/dev/null)" || true
+	[[ "$bytes" =~ ^[0-9]+$ ]] || bytes="$(stat -c %s "$TEST_REMOTE/$path")"
+	[ "${TEST_SIZE_MISMATCH:-0}" = 0 ] || bytes=$((bytes + 1))
+	printf '{"bytes":%s}\n' "$bytes" ;;
+esac
+EOF
+cat > "$tmp/bin/plutil" <<'EOF'
+#!/usr/bin/env bash
+exit 0
+EOF
+cat > "$tmp/bin/plistbuddy" <<'EOF'
+#!/usr/bin/env bash
+cat "${3:?plist path required}"
+EOF
+chmod +x "$tmp/bin/"*
+
+run_tool() {
+	HOME="$tmp/home" TEST_REMOTE="$tmp/remote" TEST_LOADED="$tmp/loaded" TEST_LAUNCHCTL_LOG="$tmp/launchctl.log" \
+	AMP_RUNNER_LOGS_STATE_DIR="$tmp/state" AMP_RUNNER_LOG_DIR="$tmp/logs" AMP_RUNNER_LAUNCH_AGENTS_DIR="$tmp/agents" \
+	AMP_RUNNER_LAUNCHCTL="$tmp/bin/launchctl" AMP_RUNNER_PLISTBUDDY="$tmp/bin/plistbuddy" \
+	AMP_RUNNER_LOGS_RCLONE="$tmp/bin/rclone" AMP_RUNNER_LOGS_REMOTE='fake:bucket' \
+	AMP_RUNNER_PLUTIL="$tmp/bin/plutil" "$tool" "$@"
+}
+
+write_runner() {
+	local id="$1" log_dir="$2"
+	mkdir -p "$log_dir"
+	printf '%s/%s.supervisor.log\n' "$log_dir" "$id" > "$tmp/agents/com.ampcode.runner.$id.plist"
+}
+
+assert_private() {
+	local mode
+	mode="$(stat -f %Lp "$1" 2>/dev/null)" || true
+	[[ "$mode" =~ ^[0-7]{3,4}$ ]] || mode="$(stat -c %a "$1")"
+	[ "$mode" = "$2" ]
+}
+
+remote_files() { find "$tmp/remote/bucket" -type f 2>/dev/null | sort; }
+local_archives() { find "$tmp/state/archives" -type f -name '*.gz' 2>/dev/null | sort; }
+
+# Installation requires a trusted explicit wrapper and captures its environment.
+if run_tool install --remote fake:bucket >"$tmp/out" 2>"$tmp/err"; then exit 1; fi
+grep -Fq -- '--rclone-command is required' "$tmp/err"
+run_tool install --remote fake:bucket --rclone-command "$tmp/bin/rclone"
+plist="$tmp/agents/com.ampcode.runner-logs.plist"
+grep -Fq '<integer>900</integer>' "$plist"
+grep -Fq '<key>HOME</key>' "$plist"
+grep -Fq '<key>PATH</key>' "$plist"
+assert_private "$plist" 600
+
+# Verification exercises upload, remote size, download, digest and decompression.
+run_tool verify | grep -Fq 'Verified backup and restore:'
+remote_files | grep -q '/validation\.amp-runner-logs/'
+
+# A below-threshold pair remains untouched.
+write_runner default.runner "$tmp/logs"
+printf 'main-below-threshold\n' > "$tmp/logs/default.runner.log"
+printf 'supervisor-below-threshold\n' > "$tmp/logs/default.runner.supervisor.log"
+AMP_RUNNER_LOGS_THRESHOLD_BYTES=1000 run_tool run
+grep -Fxq 'main-below-threshold' "$tmp/logs/default.runner.log"
+[ -z "$(remote_files | grep -v '/validation\.amp-runner-logs/' || true)" ]
+
+# A loaded runner rotates both streams, uploads both and restores both exactly.
+touch "$tmp/loaded"
+AMP_RUNNER_LOGS_THRESHOLD_BYTES=1 run_tool run
+[ -f "$tmp/loaded" ]
+[ ! -s "$tmp/logs/default.runner.log" ] && [ ! -s "$tmp/logs/default.runner.supervisor.log" ]
+assert_private "$tmp/logs/default.runner.log" 600
+main_remote="$(remote_files | grep '/default\.runner/' | grep -- '--amp.jsonl.gz$' | head -1)"
+supervisor_remote="$(remote_files | grep '/default\.runner/' | grep -- '--supervisor.log.gz$' | head -1)"
+[ -n "$main_remote" ] && [ -n "$supervisor_remote" ]
+main_relative="${main_remote#"$tmp/remote/bucket"/}"
+supervisor_relative="${supervisor_remote#"$tmp/remote/bucket"/}"
+printf '%s\n' "$main_relative" | grep -Eq '^[^/]+/default\.runner/[0-9]{4}/[0-9]{2}/[0-9]{2}/[0-9]{8}T[0-9]{6}Z--[0-9a-f]{64}--amp\.jsonl\.gz$'
+run_tool restore "$main_relative" "$tmp/restore-main"
+run_tool restore "$supervisor_relative" "$tmp/restore-supervisor"
+grep -Fxq 'main-below-threshold' "$tmp/restore-main/$(basename "${main_remote%.gz}")"
+grep -Fxq 'supervisor-below-threshold' "$tmp/restore-supervisor/$(basename "${supervisor_remote%.gz}")"
+
+# Verified local archives do not count toward the unuploaded-data limit.
+AMP_RUNNER_LOGS_PENDING_LIMIT_BYTES=1 run_tool run
+
+# A custom log directory is read from the runner plist and preserves unloaded state.
+rm "$tmp/agents/com.ampcode.runner.default.runner.plist" "$tmp/loaded"
+custom="$tmp/custom logs"
+write_runner custom.runner "$custom"
+printf 'custom-main\n' > "$custom/custom.runner.log"
+printf 'custom-supervisor\n' > "$custom/custom.runner.supervisor.log"
+AMP_RUNNER_LOGS_THRESHOLD_BYTES=1 run_tool run
+[ ! -f "$tmp/loaded" ] && [ ! -s "$custom/custom.runner.log" ]
+remote_files | grep -q '/custom\.runner/'
+
+# A failed restart leaves a durable pair that the next run recovers and uploads.
+rm "$tmp/agents/com.ampcode.runner.custom.runner.plist"
+write_runner recovery.runner "$tmp/logs"
+printf 'restart-main\n' > "$tmp/logs/recovery.runner.log"
+printf 'restart-supervisor\n' > "$tmp/logs/recovery.runner.supervisor.log"
+touch "$tmp/loaded"
+if TEST_BOOTSTRAP_FAIL=1 AMP_RUNNER_LOGS_THRESHOLD_BYTES=1 run_tool run 2>/dev/null; then exit 1; fi
+[ ! -f "$tmp/loaded" ]
+find "$tmp/state/pending" -name main.jsonl -print -quit | grep -q .
+AMP_RUNNER_LOGS_THRESHOLD_BYTES=1 run_tool run
+[ -f "$tmp/loaded" ]
+remote_files | grep -q '/recovery\.runner/'
+
+# A partial move is rolled back before any new rotation starts.
+rm "$tmp/agents/com.ampcode.runner.recovery.runner.plist" "$tmp/loaded"
+write_runner interrupted.runner "$tmp/logs"
+printf 'remaining-supervisor\n' > "$tmp/logs/interrupted.runner.supervisor.log"
+txn="$tmp/state/pending/interrupted.runner.20260824T000000Z.999"
+mkdir -p "$txn"
+printf 'interrupted.runner\n' > "$txn/runner-id"
+printf '%s\n' "$tmp/agents/com.ampcode.runner.interrupted.runner.plist" > "$txn/plist-path"
+printf '%s\n' "$tmp/logs/interrupted.runner.log" > "$txn/main-path"
+printf '%s\n' "$tmp/logs/interrupted.runner.supervisor.log" > "$txn/supervisor-path"
+printf 'true\n' > "$txn/was-loaded"
+printf 'interrupted-main\n' > "$txn/main.jsonl"
+touch "$txn/prepared"
+AMP_RUNNER_LOGS_THRESHOLD_BYTES=1000 run_tool run
+[ -f "$tmp/loaded" ] && [ ! -d "$txn" ]
+grep -Fxq 'interrupted-main' "$tmp/logs/interrupted.runner.log"
+
+# Upload and verification failures preserve the exact new archives without markers.
+rm "$tmp/agents/com.ampcode.runner.interrupted.runner.plist" "$tmp/loaded"
+write_runner failed.runner "$tmp/logs"
+printf 'failed-main\n' > "$tmp/logs/failed.runner.log"
+printf 'failed-supervisor\n' > "$tmp/logs/failed.runner.supervisor.log"
+before_remote="$(remote_files | wc -l | tr -d ' ')"
+if TEST_RCLONE_FAIL=1 AMP_RUNNER_LOGS_THRESHOLD_BYTES=1 run_tool run 2>/dev/null; then exit 1; fi
+failed_archive="$(local_archives | grep '/failed\.runner/' | head -1)"
+[ -n "$failed_archive" ] && [ ! -e "$failed_archive.uploaded" ]
+[ "$(remote_files | wc -l | tr -d ' ')" = "$before_remote" ]
+if TEST_SIZE_MISMATCH=1 run_tool run 2>/dev/null; then exit 1; fi
+[ ! -e "$failed_archive.uploaded" ]
+run_tool run
+[ -f "$failed_archive.uploaded" ]
+
+# Retention prunes a verified local archive immediately after 7 days, not after 8.
+if touch -d '10081 minutes ago' "$failed_archive" "$failed_archive.uploaded" 2>/dev/null; then :; else
+	old_time="$(date -v-10081M '+%Y%m%d%H%M.%S')"
+	touch -t "$old_time" "$failed_archive" "$failed_archive.uploaded"
+fi
+run_tool run
+[ ! -e "$failed_archive" ] && [ ! -e "$failed_archive.uploaded" ]
+
+# Invalid gzip data with a valid digest leaves no destination or temporary output.
+bad='not-gzip-data'
+bad_file="$tmp/bad"
+printf '%s' "$bad" > "$bad_file"
+bad_digest="$(shasum -a 256 "$bad_file" | awk '{print $1}')"
+bad_name="20260824T000000Z--$bad_digest--amp.jsonl.gz"
+mkdir -p "$tmp/remote/bucket/validation"
+cp "$bad_file" "$tmp/remote/bucket/validation/$bad_name"
+if run_tool restore "validation/$bad_name" "$tmp/bad-restore" >/dev/null 2>&1; then exit 1; fi
+[ ! -e "$tmp/bad-restore/${bad_name%.gz}" ]
+[ -z "$(find "$tmp/bad-restore" -type f -print -quit)" ]
+
+# A stale process lock does not block maintenance.
+mkdir -p "$tmp/state/lock"; printf '99999999\n' > "$tmp/state/lock/pid"
+run_tool run
+[ ! -d "$tmp/state/lock" ]
+
+printf '%s\n' 'Amp runner log rotation contracts passed.'

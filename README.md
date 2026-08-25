@@ -61,11 +61,14 @@ It does not print, export, evaluate or copy resolved values to the clipboard.
 
 ```bash
 amp-runner install macbook.agent-skills
+amp-runner list
 amp-runner status macbook.agent-skills
 amp-runner logs macbook.agent-skills
 ```
 
-See the [Amp runner capability guide](amp/docs/tools/amp-runner.md) for debug logging, lifecycle controls, logs, and safety details.
+Use `amp-runner-logs` for private runner log rotation, backup and restore.
+
+See the [Amp runner capability guide](amp/docs/tools/amp-runner.md) and [runner log maintenance guide](amp/docs/tools/amp-runner-logs.md) for lifecycle, backup, restore, and safety details.
 
 ## Skills
 
@@ -179,6 +182,7 @@ Run the relevant repository command directly:
 | Validate the project registry | `scripts/check-project-registry` |
 | Test the project resolver | `scripts/check-project-resolver` |
 | Test the Amp runner launcher | `scripts/check-amp-runner` |
+| Test Amp runner log maintenance | `scripts/check-amp-runner-logs` |
 | Validate runtime projection | `scripts/check-projection` |
 | Build Amp plugins | `scripts/check-plugin-builds` |
 | Validate SDK dependencies | `npm ci --prefix sdk` |
@@ -188,6 +192,7 @@ Run the relevant repository command directly:
 | Capability | Type | Where it appears | Use it to |
 | --- | --- | --- | --- |
 | [Amp runner](amp/docs/tools/amp-runner.md) | Local CLI | Shell | run named Amp background runners as user LaunchAgents |
+| [Amp runner log maintenance](amp/docs/tools/amp-runner-logs.md) | Local CLI | Shell | rotate, back up, and restore private runner logs |
 | [Claude Code subagent](amp/docs/tools/claude-code-subagent.md) | Agent tool | Agent | ask Claude Code for read-only advice |
 | [Label skill and plugin usage](amp/docs/tools/label-skill-plugin-usage.md) | Agent tool | Agent | add or correct usage-event labels |
 | [Pi Code subagent](amp/docs/tools/pi-code-subagent.md) | Agent tool | Agent | ask Pi Coding Agent for read-only advice |
