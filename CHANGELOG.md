@@ -9,6 +9,7 @@ and this project does not currently use versioned releases.
 
 ### Added
 
+- Add `amp-runner list` to show installed runners with their LaunchAgent state and process ID.
 - Add size-only Amp runner log rotation, verified private rclone backup, retention checks, and restore support. [#185](https://github.com/lelouvincx/agent-skills/pull/185)
 - Add an `amp-runner` user LaunchAgent manager with AC-only sleep prevention, crash recovery, isolated private logs, lifecycle controls, and temporary debug logging. [#184](https://github.com/lelouvincx/agent-skills/pull/184)
 - Add an agent-browser lifecycle registry and CLI with current state, append-only audit history, fresh-profile sessions, and parent/child thread adoption. [#182](https://github.com/lelouvincx/agent-skills/pull/182)

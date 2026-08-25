@@ -32,8 +32,8 @@ contract:
   agent_mode_key: null
   required_inputs:
     - "command"
-    - "runner ID"
   optional_inputs:
+    - "runner ID"
     - "working directory"
     - "log level"
     - "log directory"
@@ -100,6 +100,7 @@ The launcher wraps Amp with `caffeinate -s`. AC power keeps the Mac awake while 
 Use these commands:
 
 - `install` writes the LaunchAgent and starts it
+- `list` shows every installed runner with its LaunchAgent state and process ID
 - `start`, `stop`, and `restart` control an installed runner
 - `status` prints the LaunchAgent state
 - `logs` follows the Amp and supervisor logs
@@ -107,7 +108,7 @@ Use these commands:
 
 ## Contract
 
-Pass a runner ID to every command. `install` also accepts a working directory and extra Amp arguments.
+Pass a runner ID to every command except `list`. `install` also accepts a working directory and extra Amp arguments.
 
 ```bash
 amp-runner install --workdir /path/to/project macbook.project-name
@@ -139,6 +140,7 @@ Install and inspect a runner:
 
 ```bash
 amp-runner install --workdir /Users/lelouvincx/Developer/agent-skills macbook.agent-skills
+amp-runner list
 amp-runner status macbook.agent-skills
 amp-runner logs macbook.agent-skills
 ```

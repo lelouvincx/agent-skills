@@ -61,6 +61,7 @@ It does not print, export, evaluate or copy resolved values to the clipboard.
 
 ```bash
 amp-runner install macbook.agent-skills
+amp-runner list
 amp-runner status macbook.agent-skills
 amp-runner logs macbook.agent-skills
 ```
