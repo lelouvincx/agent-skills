@@ -61,6 +61,7 @@ and this project does not currently use versioned releases.
 
 ### Changed
 
+- Remove the retired Logseq weekly-report schedule from RFC-0010's rollout stages and verification gates.
 - Select the personal 1Password account for every interactive `Agent Secrets` reference, and move shared Logseq agent tooling into the projected `agent-secrets` library while Logseq retains policy in its adapter. [#186](https://github.com/lelouvincx/agent-skills/pull/186)
 - Use the official `dbdiagram` CLI as the unified command-line interface for dbx, dbdiagram, dbdocs, and runsql work. [#183](https://github.com/lelouvincx/agent-skills/pull/183)
 - Move Logseq current-task parent thread renaming and labelling from the TypeScript coordinator into the logging worker prompt. [#181](https://github.com/lelouvincx/agent-skills/pull/181)
@@ -172,6 +173,7 @@ and this project does not currently use versioned releases.
 ### Fixed
 
 - Align `amp-runner list` columns for runner IDs and states of different lengths. [#189](https://github.com/lelouvincx/agent-skills/pull/189)
+- Hash dash-prefixed repository paths safely when validating shared agent output. [#187](https://github.com/lelouvincx/agent-skills/pull/187)
 - Correct the Google Sheets semantic-layer demo path and GitHub mapping. [#173](https://github.com/lelouvincx/agent-skills/pull/173)
 - Restore the FFmpeg MCP connection by replacing its removed npm package with the working pinned package. [#116](https://github.com/lelouvincx/agent-skills/pull/116)
 - Support Claude Fable 5 in Claude Code subagents and remove obsolete Claude Code tool names that prevented the read-only agent from launching. [#109](https://github.com/lelouvincx/agent-skills/pull/109)

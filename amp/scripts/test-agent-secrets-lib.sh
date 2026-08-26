@@ -37,6 +37,20 @@ agent_path_matches_patterns 'notes/keep.md' "${AGENT_MAINTENANCE_ALLOWED_PATTERN
 ! agent_path_matches_patterns 'pages/keep.md' "${AGENT_MAINTENANCE_ALLOWED_PATTERNS[@]}"
 agent_path_matches_patterns 'notes/Generated - report.md' "${AGENT_MAINTENANCE_PROTECTED_PATTERNS[@]}"
 
+SNAPSHOT_REPO="$TMP_DIR/snapshot-repo"
+mkdir "$SNAPSHOT_REPO"
+(
+	cd "$SNAPSHOT_REPO"
+	git init -q
+	printf 'tracked image\n' >'-.png'
+	git add -- '-.png'
+	git -c user.name=test -c user.email=test@example.com commit -qm 'Add tracked image'
+	printf 'untracked image\n' >'--sample.jpg'
+	agent_snapshot_worktree "$TMP_DIR/snapshot.manifest"
+)
+grep -Eq '^[[:xdigit:]]{64}[[:space:]]+\-\.png$' "$TMP_DIR/snapshot.manifest"
+grep -Eq '^[[:xdigit:]]{64}[[:space:]]+\-\-sample\.jpg$' "$TMP_DIR/snapshot.manifest"
+
 if grep -Eq 'amp-runtime|lelouvincx-bot|pages/Weekly|reviewers\[\]=lelouvincx' "$LIB"; then
 	echo "ERROR: Shared agent library contains repository policy" >&2
 	exit 1
