@@ -1,0 +1,198 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+tool="$repo_root/bin/amp-chatgpt-subscription-selector"
+tmp="$(mktemp -d "$HOME/.check-amp-chatgpt-selector.XXXXXX")"
+trap 'rm -rf "$tmp"' EXIT
+mkdir -p "$tmp/bin" "$tmp/home" "$tmp/agents"
+
+cat > "$tmp/bin/amp" <<'EOF'
+#!/usr/bin/env bash
+case "$3" in
+show)
+	id="$4"
+	printf 'show %s\n' "$id" >> "$TEST_CALLS"
+	case "${TEST_SHOW_MODE:-valid}" in
+		empty) exit 0 ;;
+		missing-active) printf '{"id":"%s"}\n' "$id"; exit 0 ;;
+		conflicting) printf '{"active":true,"nested":{"active":false}}\n'; exit 0 ;;
+		fail) exit 8 ;;
+	 esac
+	active=false
+	[ -f "$TEST_ACTIVE" ] && [ "$(cat "$TEST_ACTIVE")" = "$id" ] && active=true
+	printf '{\n  "id": "%s",\n  "type": "model_provider_openai_chatgpt",\n  "active": %s\n}\n' "$id" "$active"
+	;;
+test)
+	printf 'test %s\n' "$4" >> "$TEST_CALLS"
+	if [ -n "${TEST_HOLD:-}" ]; then
+		: > "${TEST_ENTERED:?entered path required}"
+		while [ -e "$TEST_HOLD" ]; do sleep 0.05; done
+	fi
+	printf '%s\n' "${TEST_QUOTA:?quota fixture required}"
+	[ "${TEST_FAIL:-0}" = 0 ] || exit 9
+	;;
+activate)
+	printf 'activate %s\n' "$4" >> "$TEST_CALLS"
+	printf '%s\n' "$4" > "$TEST_ACTIVE"
+	printf '%s\n' "$4" >> "$TEST_ACTIVATIONS"
+	;;
+*) exit 8 ;;
+esac
+EOF
+cat > "$tmp/bin/launchctl" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >> "$TEST_LAUNCHCTL_LOG"
+case "$1" in
+print)
+	[ "${TEST_PRINT_FAIL:-0}" = 0 ] || { printf '%s\n' 'unexpected launchctl error' >&2; exit 7; }
+	[ -f "$TEST_LOADED" ] || { printf '%s\n' 'Could not find service' >&2; exit 113; }
+	;;
+bootout)
+	[ "${TEST_BOOTOUT_FAIL:-0}" = 0 ] || exit 8
+	rm -f "$TEST_LOADED"
+	;;
+bootstrap)
+	[ "${TEST_BOOTSTRAP_FAIL:-0}" = 0 ] || exit 9
+	touch "$TEST_LOADED"
+	;;
+esac
+EOF
+cat > "$tmp/bin/plutil" <<'EOF'
+#!/usr/bin/env bash
+[ "${TEST_PLUTIL_FAIL:-0}" = 0 ]
+EOF
+cat > "$tmp/bin/lockf" <<'EOF'
+#!/usr/bin/env python3
+import fcntl
+import sys
+
+fd = int(sys.argv[-1])
+try:
+    fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+except BlockingIOError:
+    raise SystemExit(75)
+EOF
+chmod +x "$tmp/bin/"*
+
+run_tool() {
+	HOME="$tmp/home" TEST_ACTIVE="$tmp/active" TEST_ACTIVATIONS="$tmp/activations" \
+	TEST_CALLS="$tmp/calls" TEST_LAUNCHCTL_LOG="$tmp/launchctl.log" TEST_LOADED="$tmp/loaded" \
+	AMP_CHATGPT_SELECTOR_STATE_DIR="$tmp/state" AMP_CHATGPT_SELECTOR_LAUNCH_AGENTS_DIR="$tmp/agents" \
+	AMP_CHATGPT_SELECTOR_AMP="$tmp/bin/amp" AMP_CHATGPT_SELECTOR_LAUNCHCTL="$tmp/bin/launchctl" \
+	AMP_CHATGPT_SELECTOR_PLUTIL="$tmp/bin/plutil" AMP_CHATGPT_SELECTOR_LOCKF="$tmp/bin/lockf" "$tool" "$@"
+}
+
+primary=preferred-id
+fallback=fallback-id
+printf '%s\n' "$primary" > "$tmp/active"
+: > "$tmp/activations"
+: > "$tmp/calls"
+
+run_tool install --preferred "$primary" --fallback "$fallback"
+plist="$tmp/agents/com.ampcode.chatgpt-subscription-selector.plist"
+grep -Fq '<integer>300</integer>' "$plist"
+grep -Fq '<key>HOME</key>' "$plist"
+grep -Fq '<key>PATH</key>' "$plist"
+
+# Failed lifecycle operations do not publish staged configuration or report success.
+config_digest="$(shasum -a 256 "$tmp/state/config" | awk '{print $1}')"
+plist_digest="$(shasum -a 256 "$plist" | awk '{print $1}')"
+if TEST_PLUTIL_FAIL=1 run_tool install --preferred replacement-id --fallback "$fallback" >/dev/null 2>&1; then exit 1; fi
+[ "$(shasum -a 256 "$tmp/state/config" | awk '{print $1}')" = "$config_digest" ]
+if TEST_BOOTOUT_FAIL=1 run_tool install --preferred replacement-id --fallback "$fallback" >/dev/null 2>&1; then exit 1; fi
+[ "$(shasum -a 256 "$tmp/state/config" | awk '{print $1}')" = "$config_digest" ]
+[ "$(shasum -a 256 "$plist" | awk '{print $1}')" = "$plist_digest" ]
+[ -f "$tmp/loaded" ]
+if TEST_PRINT_FAIL=1 run_tool install --preferred replacement-id --fallback "$fallback" >/dev/null 2>&1; then exit 1; fi
+[ "$(shasum -a 256 "$tmp/state/config" | awk '{print $1}')" = "$config_digest" ]
+[ "$(shasum -a 256 "$plist" | awk '{print $1}')" = "$plist_digest" ]
+[ -f "$tmp/loaded" ]
+
+# A failed bootstrap reports failure and leaves the new job unloaded.
+if TEST_BOOTSTRAP_FAIL=1 run_tool install --preferred replacement-id --fallback "$fallback" >/dev/null 2>&1; then exit 1; fi
+[ ! -f "$tmp/loaded" ]
+grep -Fxq 'PREFERRED=replacement-id' "$tmp/state/config"
+run_tool install --preferred "$primary" --fallback "$fallback" >/dev/null
+
+# Either window at 5% remaining selects the fallback.
+TEST_FAIL=1 TEST_QUOTA=$'x-codex-primary-window-minutes: 300\nx-codex-primary-used-percent: 95\nx-codex-secondary-window-minutes: 10080\nx-codex-secondary-used-percent: 20' run_tool run
+[ "$(cat "$tmp/active")" = "$fallback" ]
+[ "$(wc -l < "$tmp/activations" | tr -d ' ')" = 1 ]
+grep -Fxq 'five_hour_remaining=5' "$tmp/state/last-run"
+grep -Fxq 'weekly_remaining=80' "$tmp/state/last-run"
+
+# Header order does not matter and an already active selection is not reactivated.
+TEST_QUOTA=$'x-codex-primary-window-minutes: 10080\nx-codex-primary-used-percent: 95\nx-codex-secondary-window-minutes: 300\nx-codex-secondary-used-percent: 40' run_tool run
+[ "$(wc -l < "$tmp/activations" | tr -d ' ')" = 1 ]
+
+# Both windows above the threshold select the preferred connection again.
+TEST_QUOTA=$'x-codex-primary-window-minutes: 300\nx-codex-primary-used-percent: 94\nx-codex-secondary-window-minutes: 10080\nx-codex-secondary-used-percent: 94' run_tool run
+[ "$(cat "$tmp/active")" = "$primary" ]
+[ "$(wc -l < "$tmp/activations" | tr -d ' ')" = 2 ]
+
+# A missing window preserves the active connection and records a failure.
+if TEST_FAIL=1 TEST_QUOTA=$'x-codex-primary-window-minutes: 300\nx-codex-primary-used-percent: 99' run_tool run >/dev/null; then exit 1; fi
+[ "$(cat "$tmp/active")" = "$primary" ]
+grep -Fxq 'result=failed' "$tmp/state/last-run"
+grep -Fxq 'detail=provider-test-failed' "$tmp/state/last-run"
+
+# Invalid percentages preserve the active connection.
+for invalid in nope -1 101; do
+	before="$(wc -l < "$tmp/activations" | tr -d ' ')"
+	if TEST_QUOTA="x-codex-primary-window-minutes: 300
+x-codex-primary-used-percent: $invalid
+x-codex-secondary-window-minutes: 10080
+x-codex-secondary-used-percent: 20" run_tool run >/dev/null; then exit 1; fi
+	[ "$(wc -l < "$tmp/activations" | tr -d ' ')" = "$before" ]
+	grep -Fxq 'detail=invalid-quota-percentage' "$tmp/state/last-run"
+done
+
+# Malformed or unavailable provider state never triggers activation.
+valid_quota=$'x-codex-primary-window-minutes: 300\nx-codex-primary-used-percent: 95\nx-codex-secondary-window-minutes: 10080\nx-codex-secondary-used-percent: 20'
+for mode in empty missing-active conflicting; do
+	before="$(wc -l < "$tmp/activations" | tr -d ' ')"
+	if TEST_SHOW_MODE="$mode" TEST_QUOTA="$valid_quota" run_tool run >/dev/null; then exit 1; fi
+	[ "$(wc -l < "$tmp/activations" | tr -d ' ')" = "$before" ]
+	grep -Fxq 'detail=invalid-selected-provider-state' "$tmp/state/last-run"
+done
+before="$(wc -l < "$tmp/activations" | tr -d ' ')"
+if TEST_SHOW_MODE=fail TEST_QUOTA="$valid_quota" run_tool run >/dev/null; then exit 1; fi
+[ "$(wc -l < "$tmp/activations" | tr -d ' ')" = "$before" ]
+grep -Fxq 'detail=selected-provider-unavailable' "$tmp/state/last-run"
+
+# The kernel lock prevents concurrent checks and installation, then releases after its owner exits.
+touch "$tmp/hold"
+TEST_HOLD="$tmp/hold" TEST_ENTERED="$tmp/entered" TEST_QUOTA="$valid_quota" run_tool run >/dev/null &
+held_pid=$!
+while [ ! -e "$tmp/entered" ]; do sleep 0.05; done
+tests_before="$(grep -c '^test ' "$tmp/calls")"
+TEST_QUOTA="$valid_quota" run_tool run >/dev/null
+[ "$(grep -c '^test ' "$tmp/calls")" = "$tests_before" ]
+locked_config_digest="$(shasum -a 256 "$tmp/state/config" | awk '{print $1}')"
+if run_tool install --preferred replacement-id --fallback "$fallback" >/dev/null 2>&1; then exit 1; fi
+[ "$(shasum -a 256 "$tmp/state/config" | awk '{print $1}')" = "$locked_config_digest" ]
+rm "$tmp/hold"
+wait "$held_pid"
+TEST_QUOTA="$valid_quota" run_tool run >/dev/null
+[ "$(grep -c '^test ' "$tmp/calls")" = "$((tests_before + 1))" ]
+
+# A terminated lock owner cannot leave a stale lock.
+( exec 9>> "$tmp/state/selector.lock"; "$tmp/bin/lockf" -s -t 0 9; sleep 30 9>&- ) &
+lock_pid=$!
+sleep 0.1
+kill "$lock_pid"
+wait "$lock_pid" 2>/dev/null || true
+tests_before="$(grep -c '^test ' "$tmp/calls")"
+TEST_QUOTA="$valid_quota" run_tool run >/dev/null
+[ "$(grep -c '^test ' "$tmp/calls")" = "$((tests_before + 1))" ]
+
+run_tool status >/dev/null
+if TEST_BOOTOUT_FAIL=1 run_tool uninstall >/dev/null 2>&1; then exit 1; fi
+[ -e "$plist" ] && [ -f "$tmp/loaded" ]
+active_before_uninstall="$(cat "$tmp/active")"
+run_tool uninstall | grep -Fq 'active subscription was unchanged'
+[ ! -e "$plist" ]
+[ "$(cat "$tmp/active")" = "$active_before_uninstall" ]
+
+printf '%s\n' 'Amp ChatGPT subscription selector contracts passed.'

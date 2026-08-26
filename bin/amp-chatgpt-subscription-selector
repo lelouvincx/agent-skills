@@ -1,0 +1,288 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+usage() {
+	cat <<'EOF'
+Usage:
+  amp-chatgpt-subscription-selector install --preferred ID --fallback ID [--threshold PERCENT]
+  amp-chatgpt-subscription-selector uninstall
+  amp-chatgpt-subscription-selector run
+  amp-chatgpt-subscription-selector status
+
+Keep a preferred Amp ChatGPT subscription active until either its 5-hour or
+weekly Codex quota has the configured remaining percentage or less.
+EOF
+}
+
+fail() { printf 'amp-chatgpt-subscription-selector: %s\n' "$*" >&2; exit 2; }
+
+state_dir="${AMP_CHATGPT_SELECTOR_STATE_DIR:-$HOME/.local/state/amp-chatgpt-subscription-selector}"
+launch_agents_dir="${AMP_CHATGPT_SELECTOR_LAUNCH_AGENTS_DIR:-$HOME/Library/LaunchAgents}"
+agent_path="$launch_agents_dir/com.ampcode.chatgpt-subscription-selector.plist"
+config_file="$state_dir/config"
+last_run_file="$state_dir/last-run"
+log_file="$state_dir/selector.log"
+lock_file="$state_dir/selector.lock"
+launchctl_command="${AMP_CHATGPT_SELECTOR_LAUNCHCTL:-/bin/launchctl}"
+plutil_command="${AMP_CHATGPT_SELECTOR_PLUTIL:-/usr/bin/plutil}"
+lockf_command="${AMP_CHATGPT_SELECTOR_LOCKF:-/usr/bin/lockf}"
+preferred=
+fallback=
+threshold=5
+amp_command="${AMP_CHATGPT_SELECTOR_AMP:-}"
+
+prepare_state() {
+	umask 077
+	mkdir -p "$state_dir"
+	chmod 700 "$state_dir"
+	touch "$log_file"
+	chmod 600 "$log_file"
+}
+
+log() {
+	local message="$*"
+	printf '%s %s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "$message" >> "$log_file"
+	printf '%s\n' "$message"
+}
+
+write_result() {
+	local result="$1" selected="$2" five_remaining="$3" weekly_remaining="$4" detail="$5" tmp="$last_run_file.tmp.$$"
+	{
+		printf 'timestamp=%s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+		printf 'result=%s\nselected=%s\nfive_hour_remaining=%s\nweekly_remaining=%s\ndetail=%s\n' \
+			"$result" "$selected" "$five_remaining" "$weekly_remaining" "$detail"
+	} > "$tmp"
+	chmod 600 "$tmp"
+	mv "$tmp" "$last_run_file"
+}
+
+load_config() {
+	[ -f "$config_file" ] || fail 'not configured; run install first'
+	while IFS='=' read -r key value; do
+		case "$key" in
+			PREFERRED) preferred="$value" ;;
+			FALLBACK) fallback="$value" ;;
+			THRESHOLD) threshold="$value" ;;
+			AMP_COMMAND) [ -n "${AMP_CHATGPT_SELECTOR_AMP:-}" ] || amp_command="$value" ;;
+		esac
+	done < "$config_file"
+	[ -n "$preferred" ] && [ -n "$fallback" ] && [ -n "$amp_command" ] || fail 'configuration is incomplete; run install again'
+	[ -x "$amp_command" ] || fail "configured Amp command is not executable: $amp_command"
+}
+
+acquire_lock() {
+	exec 9>> "$lock_file"
+	chmod 600 "$lock_file"
+	"$lockf_command" -s -t 0 9
+}
+
+quota_usage() {
+	awk '
+		BEGIN { pwindow = pused = swindow = sused = "" }
+		{
+			key = tolower($1)
+			value = $2
+			gsub(/\r/, "", value)
+			if (key == "x-codex-primary-window-minutes:") pwindow = value
+			if (key == "x-codex-primary-used-percent:") pused = value
+			if (key == "x-codex-secondary-window-minutes:") swindow = value
+			if (key == "x-codex-secondary-used-percent:") sused = value
+		}
+		END {
+			five = weekly = ""
+			if (pwindow == 300) five = pused
+			if (swindow == 300) five = sused
+			if (pwindow == 10080) weekly = pused
+			if (swindow == 10080) weekly = sused
+			if (five == "" || weekly == "") exit 1
+			print five, weekly
+		}
+	'
+}
+
+valid_percent() {
+	awk -v value="$1" 'BEGIN { exit !(value ~ /^[0-9]+([.][0-9]+)?$/ && value >= 0 && value <= 100) }'
+}
+
+at_or_below_threshold() {
+	awk -v used="$1" -v limit="$threshold" 'BEGIN { exit !((100 - used) <= limit) }'
+}
+
+format_remaining() {
+	awk -v used="$1" 'BEGIN { printf "%g", 100 - used }'
+}
+
+active_state() {
+	local values count
+	values="$(sed -nE 's/^[[:space:]]*"active"[[:space:]]*:[[:space:]]*(true|false),?[[:space:]]*$/\1/p')"
+	count="$(printf '%s\n' "$values" | awk 'NF { count++ } END { print count + 0 }')"
+	[ "$count" -eq 1 ] || return 1
+	printf '%s\n' "$values"
+}
+
+agent_loaded() {
+	local output status
+	if output="$("$launchctl_command" print "gui/$(id -u)/com.ampcode.chatgpt-subscription-selector" 9>&- 2>&1)"; then
+		return 0
+	else
+		status=$?
+	fi
+	if printf '%s\n' "$output" | grep -Fq 'Could not find service'; then
+		return 1
+	fi
+	printf 'amp-chatgpt-subscription-selector: could not inspect LaunchAgent state: %s\n' "$output" >&2
+	return "$status"
+}
+
+run_selector() {
+	prepare_state
+	if ! acquire_lock; then
+		log 'another selector operation is already running'
+		return 0
+	fi
+	load_config
+	local output usage five_used weekly_used five_remaining weekly_remaining selected detail show state test_status=0
+	output="$("$amp_command" config model-providers test "$preferred" 9>&- 2>&1)" || test_status=$?
+	if ! usage="$(printf '%s\n' "$output" | quota_usage)"; then
+		if [ "$test_status" -eq 0 ]; then detail=quota-windows-missing; else detail=provider-test-failed; fi
+		write_result failed unchanged unknown unknown "$detail"
+		log 'preferred provider response omitted the 5-hour or weekly quota window; kept the current subscription'
+		return 1
+	fi
+	read -r five_used weekly_used <<< "$usage"
+	if ! valid_percent "$five_used" || ! valid_percent "$weekly_used"; then
+		write_result failed unchanged unknown unknown invalid-quota-percentage
+		log 'preferred provider returned an invalid quota percentage; kept the current subscription'
+		return 1
+	fi
+	five_remaining="$(format_remaining "$five_used")"
+	weekly_remaining="$(format_remaining "$weekly_used")"
+	selected="$preferred"
+	detail=preferred-has-capacity
+	if at_or_below_threshold "$five_used" || at_or_below_threshold "$weekly_used"; then
+		selected="$fallback"
+		detail=preferred-at-threshold
+	fi
+	if ! show="$("$amp_command" config model-providers show "$selected" 9>&- 2>&1)"; then
+		write_result failed unchanged "$five_remaining" "$weekly_remaining" selected-provider-unavailable
+		log 'could not inspect the selected provider; kept the current subscription'
+		return 1
+	fi
+	if ! state="$(printf '%s\n' "$show" | active_state)"; then
+		write_result failed unchanged "$five_remaining" "$weekly_remaining" invalid-selected-provider-state
+		log 'selected provider returned an invalid active state; kept the current subscription'
+		return 1
+	fi
+	if [ "$state" = false ]; then
+		if ! "$amp_command" config model-providers activate "$selected" 9>&- >/dev/null; then
+			write_result failed unchanged "$five_remaining" "$weekly_remaining" activation-failed
+			log 'could not activate the selected provider; kept the current subscription'
+			return 1
+		fi
+		detail="$detail-activated"
+	fi
+	write_result ok "$selected" "$five_remaining" "$weekly_remaining" "$detail"
+	log "selected $selected; preferred remaining: 5-hour ${five_remaining}%, weekly ${weekly_remaining}%"
+}
+
+xml_escape() { printf '%s' "$1" | sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g' -e 's/"/\&quot;/g'; }
+xml_string() { printf '\t\t<string>%s</string>\n' "$(xml_escape "$1")"; }
+
+install_agent() {
+	local script_path config_tmp plist_tmp loaded=false state_status
+	preferred=
+	fallback=
+	threshold=5
+	while [ "$#" -gt 0 ]; do
+		case "$1" in
+			--preferred) [ "$#" -ge 2 ] || fail '--preferred requires a value'; preferred="$2"; shift 2 ;;
+			--fallback) [ "$#" -ge 2 ] || fail '--fallback requires a value'; fallback="$2"; shift 2 ;;
+			--threshold) [ "$#" -ge 2 ] || fail '--threshold requires a value'; threshold="$2"; shift 2 ;;
+			*) fail "unknown install option: $1" ;;
+		esac
+	done
+	[ -n "$preferred" ] || fail '--preferred is required'
+	[ -n "$fallback" ] || fail '--fallback is required'
+	[ "$preferred" != "$fallback" ] || fail 'preferred and fallback connections must differ'
+	[[ "$threshold" =~ ^[0-9]+$ ]] && [ "$threshold" -le 100 ] || fail '--threshold must be an integer from 0 to 100'
+	[ -n "$amp_command" ] || amp_command="$(command -v amp || true)"
+	[ -n "$amp_command" ] && [ -x "$amp_command" ] || fail 'could not find an executable Amp CLI'
+	amp_command="$(CDPATH= cd -- "$(dirname "$amp_command")" && pwd)/$(basename "$amp_command")"
+	for connection in "$preferred" "$fallback"; do
+		local connection_json
+		connection_json="$("$amp_command" config model-providers show "$connection" 2>&1)" || fail "could not inspect model-provider connection $connection"
+		printf '%s\n' "$connection_json" | grep -q '"type": "model_provider_openai_chatgpt"' || fail "$connection is not a ChatGPT subscription"
+	done
+	prepare_state
+	mkdir -p "$launch_agents_dir"
+	config_tmp="$config_file.tmp.$$"
+	plist_tmp="$agent_path.tmp.$$"
+	trap 'rm -f "${config_tmp:-}" "${plist_tmp:-}"' EXIT
+	printf 'PREFERRED=%s\nFALLBACK=%s\nTHRESHOLD=%s\nAMP_COMMAND=%s\n' "$preferred" "$fallback" "$threshold" "$amp_command" > "$config_tmp"
+	chmod 600 "$config_tmp"
+	script_path="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/$(basename -- "${BASH_SOURCE[0]}")"
+	{
+		printf '%s\n' '<?xml version="1.0" encoding="UTF-8"?>' '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">' '<plist version="1.0">' '<dict>'
+		printf '\t<key>Label</key>\n'; xml_string 'com.ampcode.chatgpt-subscription-selector'
+		printf '\t<key>ProgramArguments</key>\n\t<array>\n'; xml_string "$script_path"; xml_string run; printf '\t</array>\n'
+		printf '\t<key>EnvironmentVariables</key>\n\t<dict>\n'
+		printf '\t\t<key>HOME</key>\n'; xml_string "$HOME"
+		printf '\t\t<key>PATH</key>\n'; xml_string "$PATH"
+		printf '\t</dict>\n'
+		printf '\t<key>StartInterval</key>\n\t<integer>300</integer>\n'
+		printf '\t<key>StandardOutPath</key>\n'; xml_string '/dev/null'
+		printf '\t<key>StandardErrorPath</key>\n'; xml_string '/dev/null'
+		printf '%s\n' '</dict>' '</plist>'
+	} > "$plist_tmp"
+	chmod 600 "$plist_tmp"
+	"$plutil_command" -lint "$plist_tmp" >/dev/null || fail 'generated LaunchAgent failed validation'
+	acquire_lock || fail 'another selector operation is running; retry installation'
+	if agent_loaded; then
+		loaded=true
+	else
+		state_status=$?
+		[ "$state_status" -eq 1 ] || fail 'could not determine whether the LaunchAgent is loaded'
+	fi
+	if [ "$loaded" = true ]; then
+		"$launchctl_command" bootout "gui/$(id -u)/com.ampcode.chatgpt-subscription-selector" 9>&- >/dev/null || fail 'could not stop the existing LaunchAgent; installation was not changed'
+	fi
+	mv "$config_tmp" "$config_file"
+	mv "$plist_tmp" "$agent_path"
+	"$launchctl_command" bootstrap "gui/$(id -u)" "$agent_path" 9>&-
+	trap - EXIT
+	printf 'Installed %s\n' "$agent_path"
+}
+
+uninstall_agent() {
+	local state_status
+	prepare_state
+	acquire_lock || fail 'another selector operation is running; retry uninstall'
+	if agent_loaded; then
+		"$launchctl_command" bootout "gui/$(id -u)/com.ampcode.chatgpt-subscription-selector" 9>&- >/dev/null || fail 'could not stop the LaunchAgent; uninstall was not changed'
+	else
+		state_status=$?
+		[ "$state_status" -eq 1 ] || fail 'could not determine whether the LaunchAgent is loaded'
+	fi
+	rm -f "$agent_path"
+	printf '%s\n' 'Uninstalled ChatGPT subscription selector; the active subscription was unchanged.'
+}
+
+status_agent() {
+	prepare_state
+	load_config
+	printf 'Preferred: %s\nFallback: %s\nThreshold: %s%% remaining\n' "$preferred" "$fallback" "$threshold"
+	if [ -f "$last_run_file" ]; then cat "$last_run_file"; else printf 'result=never-run\n'; fi
+	"$launchctl_command" print "gui/$(id -u)/com.ampcode.chatgpt-subscription-selector"
+}
+
+[ "$#" -gt 0 ] || { usage >&2; exit 2; }
+command_name="$1"
+shift
+case "$command_name" in
+	install) install_agent "$@" ;;
+	uninstall) [ "$#" -eq 0 ] || fail 'uninstall takes no arguments'; uninstall_agent ;;
+	run) [ "$#" -eq 0 ] || fail 'run takes no arguments'; run_selector ;;
+	status) [ "$#" -eq 0 ] || fail 'status takes no arguments'; status_agent ;;
+	-h|--help|help) usage ;;
+	*) fail "unknown command: $command_name" ;;
+esac
