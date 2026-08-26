@@ -546,9 +546,20 @@ Completed:
 - passed every initial pull-request validation job, then added the required separate changelog commit linking pull request 180
 - passed every pull-request validation job again after the changelog-link commit
 - merged agent-skills pull request 180 as `f7cc016` and projected the shared resolver
+- merged agent-skills pull request 186 as `3e83033` and projected the reusable Logseq agent library from `amp/agent-secrets/lib-agent.sh`
+- merged Logseq pull request 89 as `f58cf87`; Logseq now retains only repository policy in its adapter, and all 180 automation tests pass against the shared implementation
+- observed the naturally due Tuesday 25 August run start in service-account mode without fallback at 19:13 and retry at 20:19
+- confirmed that the first attempt failed closed before publication when concurrent work changed paths outside the output contract
+- confirmed that the retry failed before publication because `shasum` parsed a dash-prefixed repository path as options; no Tuesday stamp, remote weekly branch or report pull request was created
+- removed the unapproved `lelouvincx-bot/smartclass` fork and the bot's write collaborator grant on `lelouvincx/smartclass` after Chinh's separate approvals
+- passed the complete Logseq service-account doctor after the repository-access corrections
+- preserved failed weekly head `24cae39` at `backup/weekly-2026-08-24-failed-rfc-0010` and reconstructed `weekly/2026-08-24` from merged Logseq `master` with only its ten intended journal, backlog, report and planning paths
+- bot-signed reconstructed weekly source commit `56644fe`, report draft commit `38fb1e7` and whitespace-only cleanup `d8a8f0f`; the backup ref remains unchanged
 
 Pending:
 
+- merge and project the dash-prefixed path regression fix
+- obtain separate approval to install and load launchd again
 - observe and verify one naturally due loaded-job run
 - remove selector compatibility only after those checks pass
 
