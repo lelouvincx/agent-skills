@@ -97,9 +97,16 @@ grep -Fq "<$plist>" "$tmp_dir/launchctl-capture"
 touch "$tmp_dir/launch-agents/com.ampcode.runner.macbook.stopped.plist"
 touch "$tmp_dir/loaded"
 list_output="$(run_launcher list)"
-grep -Fqx $'RUNNER_ID\tSTATE\tPID' <<<"$list_output"
-grep -Fqx $'macbook.agent-skills\trunning\t12345' <<<"$list_output"
-grep -Fqx $'macbook.stopped\tnot-loaded\t-' <<<"$list_output"
+expected_list_output="$(cat <<'EOF'
+RUNNER_ID             STATE       PID
+macbook.agent-skills  running     12345
+macbook.stopped       not-loaded  -
+EOF
+)"
+[ "$list_output" = "$expected_list_output" ] || {
+	printf 'Expected aligned list output:\n%s\nActual output:\n%s\n' "$expected_list_output" "$list_output" >&2
+	exit 1
+}
 
 if run_launcher run 'bad/runner' >"$tmp_dir/stdout" 2>"$tmp_dir/stderr"; then
 	printf '%s\n' 'Expected an unsafe runner ID to fail.' >&2
