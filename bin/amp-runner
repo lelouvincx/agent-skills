@@ -318,8 +318,15 @@ list_runners() {
 	local details
 	local state
 	local pid
+	local runner_width=9
+	local state_width=5
+	local index
+	local row_count=0
 	local nullglob_was_set=false
 	local -a plists=()
+	local -a runner_ids=()
+	local -a states=()
+	local -a pids=()
 	launch_agents_dir="${AMP_RUNNER_LAUNCH_AGENTS_DIR:-$HOME/Library/LaunchAgents}"
 
 	if [ -d "$launch_agents_dir" ]; then
@@ -329,8 +336,7 @@ list_runners() {
 		[ "$nullglob_was_set" = true ] || shopt -u nullglob
 	fi
 
-	printf 'RUNNER_ID\tSTATE\tPID\n'
-	for plist in "${plists[@]}"; do
+	for plist in "${plists[@]+"${plists[@]}"}"; do
 		filename="${plist##*/}"
 		runner_id="${filename#com.ampcode.runner.}"
 		runner_id="${runner_id%.plist}"
@@ -342,7 +348,24 @@ list_runners() {
 			state="${state:-loaded}"
 			pid="${pid:--}"
 		fi
-		printf '%s\t%s\t%s\n' "$runner_id" "$state" "$pid"
+		runner_ids+=("$runner_id")
+		states+=("$state")
+		pids+=("$pid")
+		row_count=$((row_count + 1))
+		if [ "${#runner_id}" -gt "$runner_width" ]; then
+			runner_width=${#runner_id}
+		fi
+		if [ "${#state}" -gt "$state_width" ]; then
+			state_width=${#state}
+		fi
+	done
+
+	printf '%-*s  %-*s  %s\n' "$runner_width" RUNNER_ID "$state_width" STATE PID
+	for ((index = 0; index < row_count; index++)); do
+		printf '%-*s  %-*s  %s\n' \
+			"$runner_width" "${runner_ids[$index]}" \
+			"$state_width" "${states[$index]}" \
+			"${pids[$index]}"
 	done
 }
 
