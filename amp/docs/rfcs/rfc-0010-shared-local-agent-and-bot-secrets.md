@@ -7,7 +7,7 @@ file: "rfc-0010-shared-local-agent-and-bot-secrets.md"
 status: "Accepted"
 summary: "Provide named 1Password-backed capability bundles to approved local agents and deterministic bot commands without giving child processes the service-account token."
 created: "2026-08-22"
-updated: "2026-08-22"
+updated: "2026-08-26"
 amp_thread_id:
   T-01a027f3-f748-745c-99e0-42be89c4e177: "moved the shared successor design from Logseq into agent-skills and generalized access for local agents and bots"
   T-01a02845-76ae-715f-9569-84bba5c6e1d6: "reviewed command-class enforcement, Logseq cutover safety and child-environment construction"
@@ -247,7 +247,7 @@ The resolver rejects a bundle set that mixes agent and publisher audiences.
 Use 2 explicit 1Password authentication lanes:
 
 - interactive for manual runs through Chinh's desktop-backed account
-- service account for launchd and other unattended local runs
+- service account for approved unattended local runs
 
 `AGENT_SECRET_AUTH` selects the lane.
 
@@ -810,15 +810,17 @@ RFC-0009 remains authoritative for the GitHub event runner and keeps its separat
 
 ### Implementation order
 
-The accepted implementation plan defines 10 stages with dependencies, approval gates, completion criteria and rollback points.
+The accepted implementation plan defines 9 stages with dependencies, approval gates, completion criteria and rollback points.
 
 Stage 0 is complete when this RFC is accepted and the plan is stored in the repository.
 
 Stages 1 to 4 build and project the policy, resolver and doctor without live credentials.
 
-Stages 5 to 7 provision copied credentials, migrate Logseq and complete the local macOS cutover.
+Stages 5 and 6 provision copied credentials and migrate Logseq.
 
-Stages 8 and 9 replace upstream credentials and retire the legacy service account only after verification.
+The completed rollout record documents live projection and shared-shell verification. It does not require a scheduled run.
+
+Stages 7 and 8 replace upstream credentials and retire the legacy service account only after verification.
 
 ### Verification
 

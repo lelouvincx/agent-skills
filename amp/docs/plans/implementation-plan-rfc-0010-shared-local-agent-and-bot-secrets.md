@@ -1,6 +1,6 @@
 # RFC-0010 implementation plan
 
-Status: Stages 0 to 7 are complete. Shared shell extraction is in progress. One naturally due loaded-job run, credential replacement and legacy retirement remain pending.
+Status: Stages 0 to 6 and the shared-shell rollout are complete. Credential replacement and legacy retirement remain pending. Logseq weekly-report scheduling is retired and is not a rollout stage or verification gate.
 
 RFC: `amp/docs/rfcs/rfc-0010-shared-local-agent-and-bot-secrets.md`
 
@@ -12,7 +12,9 @@ Add one local `agent-secrets` command owned by `lelouvincx/agent-skills`.
 
 The command will resolve approved 1Password references and start one registered child process.
 
-Logseq will use the command without changing its schedule, output validation, repository allowlist or publishing policy.
+Logseq will use the command without changing its output validation, repository allowlist or publishing policy.
+
+The retired weekly-report schedule must remain uninstalled and unloaded.
 
 The migration will keep the legacy Logseq secret path available until replacement credentials pass.
 
@@ -29,6 +31,8 @@ The migration will keep the legacy Logseq secret path available until replacemen
 - preserve Logseq's deterministic credential preflight through a registered command class
 - register no Claude Code or Pi provider-credential bundle in the first release
 - let the deterministic bot wrapper serve only `lelouvincx/second-brain-logseq` and `lelouvincx/agent-skills`
+- keep the retired Logseq weekly-report schedule uninstalled and unloaded
+- require a new product decision before reintroducing scheduled weekly reports
 - require separate approval for every external provisioning, issuance, rotation and revocation action
 
 ## Ownership
@@ -67,7 +71,6 @@ Source files:
 
 Logseq retains:
 
-- hourly launchd scheduling and Tuesday or Friday due checks
 - duplicate-run stamps and locking
 - agent output snapshots and allowlists
 - commit-file allowlists
@@ -88,6 +91,8 @@ Files:
 - `automation/test-weekly-report.sh`
 - `automation/com.lelouvincx.logseq-weekly-report.plist`
 - `.gitconfig-bot`
+
+The existing launchd plist is historical Logseq source. RFC-0010 does not install, load or verify it. Removing the source file is separate Logseq cleanup.
 
 ### Local and external state
 
@@ -364,7 +369,7 @@ Rollback: revert Stage 3. Interactive mode remains available.
 
 Depends on Stage 3.
 
-Status: complete through isolated projection. Live projection remains part of Stage 7.
+Status: complete. Isolated and live projection passed.
 
 Files:
 
@@ -441,7 +446,7 @@ Rollback: continue using the untouched legacy path. Revoking the new service acc
 
 Depends on Stage 5.
 
-Status: complete in signed local Logseq commit `69841c5`. No push or publishing run has occurred.
+Status: complete.
 
 Files:
 
@@ -493,7 +498,7 @@ Result:
 - 169 isolated Logseq automation tests passed with no failures
 - weekly, 1-on-1 and knowledge-maintenance dry-runs passed
 - integrated weekly doctors passed through the source resolver in both authentication lanes without fallback
-- scheduling, output validation, repository and file allowlists, bot SSH transport, publishing policy and Amp medium mode remain enforced
+- output validation, repository and file allowlists, bot SSH transport, publishing policy and Amp medium mode remain enforced
 - bot commits sign directly with the hardened private key while SSH-agent variables are absent
 - pull request create and update operations use exact REST endpoints so the approved `repo`-only bot PAT needs no wider scope
 - publisher argument and path policy fails before fixed local-root lookup, including in CI
@@ -501,103 +506,25 @@ Result:
 
 Rollback: revert Stage 6 while the legacy path remains active.
 
-### Stage 7 cut over local macOS and launchd
+## Completed rollout record
+
+Shared-shell rollout is complete:
+
+- agent-skills pull request 180 merged the RFC, resolver, policy, validation, tests and projection
+- agent-skills pull request 186 moved the reusable Logseq agent implementation into `amp/agent-secrets/lib-agent.sh`
+- Logseq pull request 89 reduced its shell adapter to Logseq-owned paths, identities, bundles and policy
+- Logseq pull request 90 added deterministic bot GitHub operations without exposing a general-purpose command surface
+- agent-skills pull request 187 fixed dash-prefixed path hashing and projected the exact merged source
+- the latest 196 Logseq automation tests and all relevant agent-skills checks passed
+- the projected library matches the merged source byte for byte
+- the complete service-account doctor passed without interactive fallback
+- no launchd job or plist symlink is installed or loaded
+
+The earlier launchd trial and 25 August run are historical evidence only. They do not authorize another run or make scheduling a completion gate.
+
+### Stage 7 replace upstream credentials
 
 Depends on Stage 6.
-
-Status: in progress.
-
-Completed:
-
-- ran the live `./sync-skills.sh` projection
-- verified the projected resolver link, manifest and schema against source
-- passed `scripts/check-projection`
-- passed the projected integrated weekly doctor in interactive mode
-- passed the projected integrated weekly doctor in service-account mode without fallback
-- confirmed that the loaded plist still uses the compatible legacy `LOGSEQ_REPORT_AUTH=service-account` selector
-- created and verified signed local Logseq commit `69841c5` on `feat/rfc-0010-shared-agent-secrets`
-- opened Logseq pull request 82 as `lelouvincx-bot` and pushed reviewed fixes through commit `8cc9174`
-- passed the Logseq pull request's `test-report-automation` GitHub Actions job
-- merged Logseq pull request 82 as `c62386c` after Chinh's approval and passed post-merge CI
-- fast-forwarded local Logseq `master` to the merged revision without changing journal or page content
-- completed the approved missed-Friday service-account run through the compatible selector without fallback
-- published W34 report pull request 83, then added its established separate changelog commit
-- passed both GitHub Actions jobs for report pull request 83 and wrote the success stamp only after publication
-- created the approved isolated cutover worktree under the Logseq repository
-- opened cutover pull request 84 as `lelouvincx-bot`; its 169 tests and plist validation pass in CI
-- merged cutover pull request 84 as `3899a2e` and passed post-merge CI
-- merged the cutover into the local weekly branch without changing remote report pull request 83
-- confirmed that no launchd job is currently installed or loaded
-- found that the doctor still read only the legacy plist selector before any launchd load
-- created signed local fix `dfa390a`; 174 tests now cover shared, legacy, matching, conflicting and invalid selector states
-- opened launchd doctor fix pull request 85 as `lelouvincx-bot`; its GitHub Actions test job passes
-- merged launchd doctor fix pull request 85 as `1250d8e` and passed post-merge CI
-- merged the fix into the local weekly branch without changing remote report pull request 83
-- obtained Chinh's separate approval to install and load launchd
-- symlinked the merged plist into `~/Library/LaunchAgents/` and loaded `com.lelouvincx.logseq-weekly-report`
-- verified that the loaded job has only `AGENT_SECRET_AUTH=service-account`, with no legacy selector
-- passed the loaded/source service-account doctor without fallback; the job remained idle with zero scheduled runs
-- updated and projected the shared Logseq automation convention for `AGENT_SECRET_AUTH`, one-way operational fallback and legacy rollback-only state
-- found that the deterministic Logseq publisher could not open an agent-skills pull request without exposing a general-purpose GitHub command surface
-- merged Logseq pull request 86 as `79e1744`; the publisher now has an exact `open-pr` command for agent-skills with a fixed repository, fixed body path and no arbitrary file, comment or commit arguments
-- found that the Logseq-only `master` ruleset audit did not match agent-skills, which has no active equivalent repository ruleset
-- merged Logseq pull request 87 as `52d9eff`; each allowed repository now keeps its own verified publishing policy while both retain the shared bot identity, token-scope, repository-allowlist and operation checks
-- opened agent-skills pull request 180 with the accepted RFC, resolver, policy manifest, validation, tests, projection and rollout documentation
-- passed every initial pull-request validation job, then added the required separate changelog commit linking pull request 180
-- passed every pull-request validation job again after the changelog-link commit
-- merged agent-skills pull request 180 as `f7cc016` and projected the shared resolver
-- merged agent-skills pull request 186 as `3e83033` and projected the reusable Logseq agent library from `amp/agent-secrets/lib-agent.sh`
-- merged Logseq pull request 89 as `f58cf87`; Logseq now retains only repository policy in its adapter, and all 180 automation tests pass against the shared implementation
-- observed the naturally due Tuesday 25 August run start in service-account mode without fallback at 19:13 and retry at 20:19
-- confirmed that the first attempt failed closed before publication when concurrent work changed paths outside the output contract
-- confirmed that the retry failed before publication because `shasum` parsed a dash-prefixed repository path as options; no Tuesday stamp, remote weekly branch or report pull request was created
-- removed the unapproved `lelouvincx-bot/smartclass` fork and the bot's write collaborator grant on `lelouvincx/smartclass` after Chinh's separate approvals
-- passed the complete Logseq service-account doctor after the repository-access corrections
-- preserved failed weekly head `24cae39` at `backup/weekly-2026-08-24-failed-rfc-0010` and reconstructed `weekly/2026-08-24` from merged Logseq `master` with only its ten intended journal, backlog, report and planning paths
-- bot-signed reconstructed weekly source commit `56644fe`, report draft commit `38fb1e7` and whitespace-only cleanup `d8a8f0f`; the backup ref remains unchanged
-
-Pending:
-
-- merge and project the dash-prefixed path regression fix
-- obtain separate approval to install and load launchd again
-- observe and verify one naturally due loaded-job run
-- remove selector compatibility only after those checks pass
-
-Shared shell extraction is complete when:
-
-1. `amp/agent-secrets/lib-agent.sh` is committed as the shared source.
-2. Logseq CI pins the exact 40-character agent-skills commit that contains the source.
-3. All 180 Logseq automation tests pass locally and in CI against that source.
-4. Agent-skills shell contract, resolver, RFC and projection checks pass.
-5. The agent-skills commit merges and is projected before the Logseq adapter reaches `master`.
-6. The projected library matches the committed artifact byte for byte.
-7. The service-account doctor passes against the projected library.
-
-Project the reviewed agent-skills revision with `./sync-skills.sh`.
-
-Deploy Logseq with selector compatibility while launchd still sets `LOGSEQ_REPORT_AUTH`.
-
-Land the migration on the Logseq default branch before a live run. The workflow stashes tracked automation changes and then checks out the default branch. Running with an uncommitted migration could therefore carry implementation code into the weekly-report branch or remove a required wrapper during execution. Preparing a commit is local; pushing, opening a pull request and merging require Chinh's explicit approval.
-
-Observe one naturally due service-account run.
-
-Ask Chinh before forcing an immediate run because it publishes external state.
-
-Do not force or allow a due run while migration code remains uncommitted. The preserved workflow intentionally stashes report inputs and switches branches. Once the migration is on the default branch, journals and pages may be stashed only after Chinh confirms that they are ready for normal report publishing. Chinh gave that confirmation on 22 August 2026 and approved continuing with the forced service-account run.
-
-Change the plist to `AGENT_SECRET_AUTH=service-account` after the compatible run passes.
-
-Ask Chinh before installing, loading or reloading launchd.
-
-Remove selector compatibility only after the loaded job passes its doctor and one due run. The loaded-job doctor passed on 22 August 2026. The naturally due run remains pending.
-
-Completion: a real scheduled run publishes through the new topology.
-
-Rollback: unload the job and remove its symlink with `launchctl unload ~/Library/LaunchAgents/com.lelouvincx.logseq-weekly-report.plist` followed by `rm ~/Library/LaunchAgents/com.lelouvincx.logseq-weekly-report.plist`. Restore Logseq code and the previous plist if needed. Legacy credentials remain valid.
-
-### Stage 8 replace upstream credentials
-
-Depends on Stage 7.
 
 Replace one credential at a time in this order:
 
@@ -622,9 +549,9 @@ Rollback before revocation: restore the old value in `Agent Secrets` with approv
 
 Rollback after revocation: issue another replacement with approval. The old credential cannot be restored.
 
-### Stage 9 retire the legacy path
+### Stage 8 retire the legacy path
 
-Depends on Stage 8.
+Depends on Stage 7.
 
 Ask Chinh separately before:
 
@@ -640,7 +567,6 @@ Update:
 - `amp/AGENTS.md`
 - `amp/conventions/logseq-report-automation.md`
 - Logseq `AGENTS.md`
-- launchd authentication guidance
 - RFC implementation references and status
 - `CHANGELOG.md`
 
@@ -649,8 +575,7 @@ Keep the predecessor Logseq RFC unchanged.
 Final checks:
 
 - both shared doctors pass
-- Logseq tests and plist validation pass
-- one unattended scheduled run succeeds
+- Logseq automation tests pass
 - shared guidance contains no legacy service-account instruction
 - no resolved value appears in repositories, logs, arguments, files or the clipboard
 
@@ -671,8 +596,10 @@ The implementation agent must stop and ask Chinh before each of these actions:
 - revoke an upstream credential
 - revoke a service account
 - remove legacy local credential files
-- install, load or reload launchd
+- push a branch, open a pull request or merge it
 - force a publishing workflow
+
+The retired Logseq weekly-report schedule must remain uninstalled and unloaded. Reintroducing it needs a separate plan and explicit product decision from Chinh.
 
 ## Working-tree rule
 
