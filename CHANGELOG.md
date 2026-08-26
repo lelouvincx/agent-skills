@@ -171,7 +171,7 @@ and this project does not currently use versioned releases.
 
 ### Fixed
 
-- Hash dash-prefixed repository paths safely when validating shared agent output.
+- Hash dash-prefixed repository paths safely when validating shared agent output. [#187](https://github.com/lelouvincx/agent-skills/pull/187)
 - Correct the Google Sheets semantic-layer demo path and GitHub mapping. [#173](https://github.com/lelouvincx/agent-skills/pull/173)
 - Restore the FFmpeg MCP connection by replacing its removed npm package with the working pinned package. [#116](https://github.com/lelouvincx/agent-skills/pull/116)
 - Support Claude Fable 5 in Claude Code subagents and remove obsolete Claude Code tool names that prevented the read-only agent from launching. [#109](https://github.com/lelouvincx/agent-skills/pull/109)
