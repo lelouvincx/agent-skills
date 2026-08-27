@@ -5,20 +5,19 @@ description: Gets call transcripts from Read AI. Use when the user asks for a tr
 
 # Get a Read AI transcript
 
-1. Resolve one Read AI meeting ULID:
-   - If the user provides a ULID, use it unchanged.
-   - If the user provides a Read AI meeting URL, parse the final non-empty path segment and verify that it is a 26-character ULID.
-   - Otherwise, use `mcp__readai__list_meetings`, applying any time range the user supplied. Select a meeting only when the result is unambiguous; otherwise ask the user to choose from the candidate meetings.
+1. Resolve one meeting:
+   - If the user supplies a meeting ULID or URL, pass it directly to `readai transcript` as one quoted argument.
+   - Otherwise, run `readai meetings`. Add `--since` or `--until` with a `YYYY-MM-DD` or ISO 8601 value when the user supplies a time range.
+   - Select a meeting only when the result proves it is unique. When `truncated` is `true`, narrow the dates, increase `--limit` up to 100, or ask the user to choose.
 
-2. Fetch the resolved meeting with `mcp__readai__get_meeting_by_id`. Always request the transcript explicitly:
+2. Fetch the resolved transcript:
 
-   ```json
-   {
-     "id": "<meeting-ulid>",
-     "expand": ["transcript"]
-   }
+   ```bash
+   readai transcript '<meeting-ulid-or-url>'
    ```
 
 3. Return the transcript content from the response, preserving speaker attribution and including timestamps when the user requests them. If the transcript is absent or not yet available, state that instead of presenting other meeting fields as a transcript.
 
-The workflow is complete only after `mcp__readai__get_meeting_by_id` has been called for the resolved ULID with `expand: ["transcript"]` and its transcript result has been returned or reported unavailable.
+If the CLI reports that authentication is missing, ask the user to run `readai auth` in an interactive terminal. Do not attempt to retrieve summaries, metrics, action items, recordings, or other meeting fields.
+
+The workflow is complete only after `readai transcript` has returned the resolved meeting's transcript or reported it unavailable.

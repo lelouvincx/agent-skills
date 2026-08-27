@@ -19,17 +19,9 @@
   "amp.internal.deepReasoningEffort": "xhigh",
   "amp.remoteThreadCreation.enabled": true,
   "amp.mcpServers": {
-    "ffmpeg-mcp": {
-      "args": ["-y", "mcp-ffmpeg@1.0.5"],
-      "command": "npx"
-    },
     "sem": {
       "args": ["mcp"],
       "command": "/opt/homebrew/bin/sem"
-    },
-    "readai": {
-      "args": ["-y", "mcp-remote", "https://api.read.ai/mcp"],
-      "command": "npx"
     }
   },
   "amp.updates.mode": "auto",
