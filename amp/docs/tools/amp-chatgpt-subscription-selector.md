@@ -84,13 +84,13 @@ tags:
 
 ## Summary
 
-`amp-chatgpt-subscription-selector` keeps a preferred ChatGPT subscription active in Amp while both Codex quota windows have more than 5% remaining. It activates a fallback subscription when either window reaches 5% remaining. The installed preference uses Susan's subscription first and `dinhminhchinh3357` as fallback.
+`amp-chatgpt-subscription-selector` keeps the primary ChatGPT subscription active in Amp while both Codex quota windows have more than 5% remaining. It activates the secondary subscription when either window reaches 5% remaining.
 
 ## Invocation
 
 `sync-skills.sh` projects the command from `bin/amp-chatgpt-subscription-selector` to `~/.local/bin`.
 
-Use `install`, `uninstall`, `run` or `status`. Installation requires the preferred and fallback connection IDs from `amp config model-providers list`.
+Use `install`, `uninstall`, `run` or `status`. Run `amp config model-providers list` to find the primary and secondary connection IDs before installation.
 
 ## Contract
 
