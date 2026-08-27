@@ -21,7 +21,7 @@ amp:
   docs_sources:
     api_docs: null
     agent_options: null
-  last_verified: "2026-08-26"
+  last_verified: "2026-08-27"
 contract:
   input_kind: "command_line_arguments"
   output_kind: "active_amp_model_provider_and_local_status"
@@ -92,7 +92,7 @@ tags:
 
 Use `install`, `uninstall`, `run` or `status`. Run `amp config model-providers list` to find the primary and secondary connection IDs before installation.
 
-The install command accepts exactly one primary and one secondary subscription because Amp currently supports at most 2 linked ChatGPT subscriptions.
+As of 27 August 2026, Amp supports at most 2 linked ChatGPT subscriptions. The install command therefore accepts exactly one primary and one secondary subscription.
 
 ## Contract
 
@@ -104,6 +104,8 @@ The LaunchAgent checks every 5 minutes. Each check tests the preferred connectio
 The selector identifies the 5-hour window as 300 minutes and the weekly window as 10,080 minutes. Header order does not affect the result.
 
 The selector activates the fallback when either preferred window has 5% or less remaining. It switches back when both windows have more than 5% remaining.
+
+The selector does not read local Codex CLI authentication and does not require a Codex CLI sign-in. `amp config model-providers test CONNECTION_ID` tests the ChatGPT subscription already linked to Amp and returns its Codex quota headers.
 
 ## Behavior
 
