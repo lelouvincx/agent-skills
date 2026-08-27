@@ -123,8 +123,8 @@ Install and start the 5-minute check:
 
 ```bash
 amp-chatgpt-subscription-selector install \
-  --preferred b7321069-551d-4e02-9589-9a659fba18bd \
-  --fallback f012c77e-0e0e-4e21-a801-bff949d2e898
+  --preferred 00000000-0000-4000-8000-000000000001 \
+  --fallback 00000000-0000-4000-8000-000000000002
 ```
 
 Run a check or inspect the latest result:
