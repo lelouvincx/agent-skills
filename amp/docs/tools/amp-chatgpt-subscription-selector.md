@@ -92,6 +92,8 @@ tags:
 
 Use `install`, `uninstall`, `run` or `status`. Run `amp config model-providers list` to find the primary and secondary connection IDs before installation.
 
+The install command accepts exactly one primary and one secondary subscription because Amp currently supports at most 2 linked ChatGPT subscriptions.
+
 ## Contract
 
 The LaunchAgent checks every 5 minutes. Each check tests the preferred connection and reads these Codex response headers:
