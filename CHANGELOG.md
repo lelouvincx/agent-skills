@@ -9,6 +9,7 @@ and this project does not currently use versioned releases.
 
 ### Added
 
+- Add a 5-minute background selector that prioritises one Amp ChatGPT subscription until either Codex quota window has 5% remaining, then activates a fallback subscription. [#190](https://github.com/lelouvincx/agent-skills/pull/190)
 - Add `amp-runner list` to show installed runners with their LaunchAgent state and process ID.
 - Add size-only Amp runner log rotation, verified private rclone backup, retention checks, and restore support. [#185](https://github.com/lelouvincx/agent-skills/pull/185)
 - Add an `amp-runner` user LaunchAgent manager with AC-only sleep prevention, crash recovery, isolated private logs, lifecycle controls, and temporary debug logging. [#184](https://github.com/lelouvincx/agent-skills/pull/184)

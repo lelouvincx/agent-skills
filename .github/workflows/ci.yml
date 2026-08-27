@@ -205,6 +205,9 @@ jobs:
       - name: Validate projection in temporary runtime paths
         run: scripts/check-projection
 
+      - name: Test ChatGPT subscription selector
+        run: scripts/check-amp-chatgpt-subscription-selector
+
   validate-plugins:
     name: Validate plugin builds
     needs: select-checks
