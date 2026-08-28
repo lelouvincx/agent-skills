@@ -4,7 +4,7 @@
 
 - Do not change a plugin capability before updating its source-of-truth document under `../docs/tools/`.
 - Keep plugin behavior aligned with the documented contract, then run `./sync-skills.sh` from the repository root.
-- Prefer title case when registering commands. For example: "Logseq: Log Current Task" or "ChatGPT: Usage".
+- Prefer title case when registering commands. For example: "Logseq: Log Current Task".
 
 ## Built-in medium mode default rationale
 

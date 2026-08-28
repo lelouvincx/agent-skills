@@ -71,8 +71,7 @@ safety:
   risks:
     - "Each check sends a small test inference request through the preferred subscription."
     - "Activation changes the ChatGPT subscription used by new Amp inference requests for the user."
-related:
-  - "codex-usage-command"
+related: []
 tags:
   - "background-task"
   - "chatgpt"
