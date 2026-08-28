@@ -160,6 +160,7 @@ and this project does not currently use versioned releases.
 
 ### Removed
 
+- Remove the redundant ChatGPT usage command now that Amp provides usage checking.
 - Remove the macOS turn-end notification capability and plugin now that Amp runners operate as background LaunchAgents. [#184](https://github.com/lelouvincx/agent-skills/pull/184)
 - Remove the redundant Holistics development plugin and the unused `analyze-data`, `use-existing-viz`, and `visualize-data` skills. [#164](https://github.com/lelouvincx/agent-skills/pull/164)
 - Remove the `ponytail`, `ponytail-review`, and `ponytail-help` remote skills and clean their generated artifacts from existing projections. [#155](https://github.com/lelouvincx/agent-skills/pull/155)
