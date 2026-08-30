@@ -1,11 +1,5 @@
 # Amp plugin instructions
 
-## Docs-first workflow
-
-- Do not change a plugin capability before updating its source-of-truth document under `../docs/tools/`.
-- Keep plugin behavior aligned with the documented contract, then run `./sync-skills.sh` from the repository root.
-- Prefer title case when registering commands. For example: "Logseq: Log Current Task".
-
-## Built-in medium mode default rationale
-
-Rationale: [Amp's Dial announcement](https://ampcode.com/news/the-dial) says `medium` is backed by GPT-5.5 at medium reasoning effort. Chinh prefers this default while `medium` uses OpenAI models; reconsider if Amp changes `medium` away from OpenAI.
+- Before changing plugin documentation or code, read and follow `../conventions/amp-plugins.md`; it owns the docs-first workflow.
+- Use title case for new command-palette labels unless an existing capability contract requires preserving another label.
+- After plugin changes, run `./sync-skills.sh` from the repository root.
