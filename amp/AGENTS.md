@@ -12,13 +12,9 @@
 
 ## Delegation
 
-- Before starting non-trivial work, consider whether it contains independent, bounded workstreams that can run concurrently, but do not delegate simple reads, searches, localized edits, or unresolved product or design decisions. The parent remains responsible for synthesis, integration, and final verification.
-- Load the `delegating-subagents` skill before delegating and when hard review or expert judgment could use default Oracle or an Ultra child. The skill selects the reviewer and child-thread mechanism separately.
-- Every delegated task needs a bounded brief with scope, constraints and non-goals, success criteria, validation, a completion contract, the current working directory, any active Chrome CDP endpoint, and other relevant environment context.
-- Require a done report with evidence or a blocked report naming the smallest parent input needed. The parent verifies the result and closes any gap directly or through a focused follow-up.
-- Ask the user when a blocked subagent or the parent needs input only the user can provide. Subagents must report the required input and must not guess.
-- When a user message starts with `|subagent` or `/subagent`, call `create_thread` with the remaining message as the bounded subagent instructions.
-- Treat side questions introduced with `btw` or triggered with `|btw` as delegation requests so they do not displace the parent's current task. Load the `delegating-subagents` skill to choose the mechanism.
+- Before non-trivial work, consider whether it contains independent, bounded workstreams. Keep simple reads, exact searches, localized edits, and unresolved product or design decisions in the parent.
+- Before delegating or requesting hard expert review, load and follow `delegating-subagents`; it owns mechanism selection, brief contents, lifecycle, and completion handling.
+- Treat `/subagent`, `|subagent`, `btw`, and `|btw` according to the explicit-trigger rules in that skill.
 
 ## Conventions
 
@@ -54,6 +50,4 @@
 
 ## Project registry
 
-- Use `project-resolve <spoken-name> --json` to resolve project names, paths, and GitHub repositories before guessing. It is projected from the `agent-skills` repo into `~/.local/bin` by `sync-skills.sh` so it works from other project directories.
-- Respect `AGENTS_REGISTRY_ENV` when set; otherwise let the resolver auto-detect the environment.
-- Respect `AGENTS_REGISTRY_WORKSPACE_ROOT` when a host uses a different workspace root than the registry default.
+- Resolve spoken project names, paths, and repositories with `project-resolve <spoken-name> --json`; do not guess them.
