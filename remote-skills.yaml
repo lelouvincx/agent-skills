@@ -45,11 +45,24 @@ skills:
       - guides/accessibility/accessible-error-announcement.md
       - guides/built-in-ai/language-detection.md
       - guides/built-in-ai/language-model.md
+      - guides/built-in-ai/prompt-api.md
       - guides/built-in-ai/summarizer.md
       - guides/built-in-ai/translator.md
-      - guides/css-layout/css-layout.md
+      - guides/css/animate-to-intrinsic-sizes.md
+      - guides/css/calculate-with-intrinsic-sizes.md
+      - guides/css/child-state-based-styling.md
+      - guides/css/content-based-styling.md
+      - guides/css/css-layout.md
       - guides/css/css.md
-      - guides/css/highlight-text-ranges.md
+      - guides/css/design-token-reactivity.md
+      - guides/css/dynamic-sibling-styling.md
+      - guides/css/fluid-scaling.md
+      - guides/css/individual-transform-properties.md
+      - guides/css/overflow-clipping-control.md
+      - guides/css/reduce-style-repetition.md
+      - guides/css/size-aware-styling.md
+      - guides/css/style-parent-with-has.md
+      - guides/css/usage-aware-component-variations.md
       - guides/forms/animated-select-picker.md
       - guides/forms/autofill-address-form.md
       - guides/forms/autofill-highlight-inputs.md
@@ -66,22 +79,26 @@ skills:
       - guides/forms/select-menu-interaction.md
       - guides/forms/validate-input-after-interaction.md
       - guides/html/html.md
-      - guides/passkeys/passkey-authentication.md
-      - guides/passkeys/passkey-conditional-create.md
-      - guides/passkeys/passkey-management.md
-      - guides/passkeys/passkey-reauthentication.md
-      - guides/passkeys/passkey-registration.md
-      - guides/passkeys/passkeys.md
+      - guides/js/calculate-event-differentials.md
+      - guides/js/capture-location-agnostic-data.md
+      - guides/js/coordinate-global-events.md
+      - guides/js/format-human-readable-durations.md
+      - guides/js/manage-recurring-intervals.md
+      - guides/js/model-partial-time-concepts.md
+      - guides/js/stabilize-reactive-state.md
+      - guides/js/support-global-calendar-systems.md
       - guides/performance/batch-analytics-events.md
       - guides/performance/break-up-long-tasks.md
       - guides/performance/calculate-total-foreground-time.md
       - guides/performance/conditional-async-dependencies.md
       - guides/performance/defer-rendering-heavy-content.md
       - guides/performance/defer-work-until-scroll-ends.md
+      - guides/performance/deliver-optimized-decorative-images.md
       - guides/performance/deprioritize-background-fetches.md
       - guides/performance/detect-initial-visibility-state.md
       - guides/performance/efficient-background-processing.md
       - guides/performance/faster-spa-view-transitions.md
+      - guides/performance/flicker-free-client-side-ab-testing.md
       - guides/performance/full-session-analytics.md
       - guides/performance/identify-heavy-scripts.md
       - guides/performance/identify-inp-causes.md
@@ -95,86 +112,72 @@ skills:
       - guides/performance/schedule-tasks-by-priority.md
       - guides/performance/sequence-distributed-events.md
       - guides/privacy/privacy.md
+      - guides/security/passkey-authentication.md
+      - guides/security/passkey-conditional-create.md
+      - guides/security/passkey-management.md
+      - guides/security/passkey-reauthentication.md
+      - guides/security/passkey-registration.md
+      - guides/security/passkeys.md
       - guides/security/security.md
-      - guides/user-experience/adapt-scrollbar-to-contrast-preferences.md
-      - guides/user-experience/anchor-positioning-tab-underline.md
-      - guides/user-experience/animate-element-entry-exit.md
-      - guides/user-experience/animate-to-from-top-layer.md
-      - guides/user-experience/animate-to-intrinsic-sizes.md
-      - guides/user-experience/apply-webgl-shaders.md
-      - guides/user-experience/calculate-event-differentials.md
-      - guides/user-experience/calculate-with-intrinsic-sizes.md
-      - guides/user-experience/capture-location-agnostic-data.md
-      - guides/user-experience/carousel-slide-effects.md
-      - guides/user-experience/carousel-snap-highlights.md
-      - guides/user-experience/child-state-based-styling.md
-      - guides/user-experience/complex-shapes.md
-      - guides/user-experience/component-specific-light-dark-theme.md
-      - guides/user-experience/consistent-cross-document-transitions.md
-      - guides/user-experience/content-based-styling.md
-      - guides/user-experience/coordinate-global-events.md
-      - guides/user-experience/cross-document-transitions.md
-      - guides/user-experience/customize-scrollbar-color-and-thickness.md
-      - guides/user-experience/dark-mode.md
-      - guides/user-experience/custom-button-actions.md
-      - guides/user-experience/declarative-dialog-popover-control.md
-      - guides/user-experience/deliver-optimized-decorative-images.md
-      - guides/user-experience/design-token-reactivity.md
-      - guides/user-experience/directional-navigation-transitions.md
-      - guides/user-experience/dynamic-sibling-animations.md
-      - guides/user-experience/dynamic-sibling-styling.md
-      - guides/user-experience/export-html-media-from-canvas.md
-      - guides/user-experience/expose-canvas-content-to-browser-features.md
-      - guides/user-experience/flicker-free-client-side-ab-testing.md
-      - guides/user-experience/fluid-scaling.md
-      - guides/user-experience/format-human-readable-durations.md
-      - guides/user-experience/group-element-transitions.md
-      - guides/user-experience/improve-text-layout-and-legibility.md
-      - guides/user-experience/individual-transform-properties.md
-      - guides/user-experience/interactive-content-in-3d-scenes.md
-      - guides/user-experience/interactive-content-reveal.md
-      - guides/user-experience/interest-triggered-action-previews.md
-      - guides/user-experience/interest-triggered-tooltips.md
-      - guides/user-experience/light-dismiss-a-dialog.md
-      - guides/user-experience/manage-recurring-intervals.md
-      - guides/user-experience/model-partial-time-concepts.md
-      - guides/user-experience/move-dom-element-without-losing-state.md
-      - guides/user-experience/navigation-drawer.md
-      - guides/user-experience/overflow-clipping-control.md
-      - guides/user-experience/parallax-scroll-effects.md
-      - guides/user-experience/persistent-app-tours.md
-      - guides/user-experience/persistent-toast-notifications.md
-      - guides/user-experience/persistent-top-layer-ui.md
-      - guides/user-experience/physics-based-easing.md
-      - guides/user-experience/platform-controls-dismiss-dialog.md
-      - guides/user-experience/position-aware-tooltips.md
-      - guides/user-experience/precise-text-alignment.md
-      - guides/user-experience/prevent-text-wrapping.md
-      - guides/user-experience/pull-to-reveal.md
-      - guides/user-experience/reduce-style-repetition.md
-      - guides/user-experience/resilient-context-menus-and-nested-dropdowns.md
-      - guides/user-experience/same-document-transitions.md
-      - guides/user-experience/scroll-entry-exit-effects.md
-      - guides/user-experience/scroll-position-aware-elements.md
-      - guides/user-experience/scroll-progress-indicator.md
-      - guides/user-experience/scroll-snap-realtime-feedback.md
-      - guides/user-experience/scroll-snap-state-sync.md
-      - guides/user-experience/scroll-target-on-load.md
-      - guides/user-experience/scrollability-affordance-hints.md
-      - guides/user-experience/scrollytelling.md
-      - guides/user-experience/search-hidden-content.md
-      - guides/user-experience/shaped-cutouts.md
-      - guides/user-experience/shrinking-header-on-scroll.md
-      - guides/user-experience/size-aware-styling.md
-      - guides/user-experience/soft-edge-content-fade.md
-      - guides/user-experience/stabilize-reactive-state.md
-      - guides/user-experience/stack-drill-down.md
-      - guides/user-experience/style-parent-with-has.md
-      - guides/user-experience/support-global-calendar-systems.md
-      - guides/user-experience/swipe-to-remove.md
-      - guides/user-experience/visually-stable-font-fallbacks.md
-      - guides/user-experience/visually-stable-mixed-fonts.md
-      - guides/user-experience/visually-texture-content.md
+      - guides/ui-atoms/carousel-slide-effects.md
+      - guides/ui-atoms/component-specific-light-dark-theme.md
+      - guides/ui-atoms/position-aware-tooltips.md
+      - guides/ui-atoms/pull-to-reveal.md
+      - guides/ui-atoms/resilient-context-menus-and-nested-dropdowns.md
+      - guides/ui-atoms/scroll-position-aware-elements.md
+      - guides/ui-atoms/scroll-progress-indicator.md
+      - guides/ui-atoms/scrollability-affordance-hints.md
+      - guides/ui-atoms/shrinking-header-on-scroll.md
+      - guides/ui-atoms/state-aware-sticky-headers.md
+      - guides/ui-behaviors/anchor-positioning-tab-underline.md
+      - guides/ui-behaviors/animate-element-entry-exit.md
+      - guides/ui-behaviors/animate-to-from-top-layer.md
+      - guides/ui-behaviors/carousel-snap-highlights.md
+      - guides/ui-behaviors/consistent-cross-document-transitions.md
+      - guides/ui-behaviors/cross-document-transitions.md
+      - guides/ui-behaviors/custom-button-actions.md
+      - guides/ui-behaviors/declarative-dialog-popover-control.md
+      - guides/ui-behaviors/directional-navigation-transitions.md
+      - guides/ui-behaviors/dynamic-sibling-animations.md
+      - guides/ui-behaviors/group-element-transitions.md
+      - guides/ui-behaviors/highlight-text-ranges.md
+      - guides/ui-behaviors/interactive-content-reveal.md
+      - guides/ui-behaviors/interest-triggered-action-previews.md
+      - guides/ui-behaviors/interest-triggered-tooltips.md
+      - guides/ui-behaviors/light-dismiss-a-dialog.md
+      - guides/ui-behaviors/move-dom-element-without-losing-state.md
+      - guides/ui-behaviors/parallax-scroll-effects.md
+      - guides/ui-behaviors/persistent-top-layer-ui.md
+      - guides/ui-behaviors/physics-based-easing.md
+      - guides/ui-behaviors/platform-controls-dismiss-dialog.md
+      - guides/ui-behaviors/same-document-transitions.md
+      - guides/ui-behaviors/scroll-entry-exit-effects.md
+      - guides/ui-behaviors/scroll-snap-realtime-feedback.md
+      - guides/ui-behaviors/scroll-snap-state-sync.md
+      - guides/ui-behaviors/scroll-target-on-load.md
+      - guides/ui-behaviors/scrollytelling.md
+      - guides/ui-behaviors/search-hidden-content.md
+      - guides/ui-behaviors/swipe-to-remove.md
+      - guides/ui-components/navigation-drawer.md
+      - guides/ui-components/persistent-app-tours.md
+      - guides/ui-components/persistent-toast-notifications.md
+      - guides/ui-components/stack-drill-down.md
+      - guides/visual-design/adapt-scrollbar-to-contrast-preferences.md
+      - guides/visual-design/apply-webgl-shaders.md
+      - guides/visual-design/complex-shapes.md
+      - guides/visual-design/customize-scrollbar-color-and-thickness.md
+      - guides/visual-design/dark-mode.md
+      - guides/visual-design/export-html-media-from-canvas.md
+      - guides/visual-design/expose-canvas-content-to-browser-features.md
+      - guides/visual-design/improve-text-layout-and-legibility.md
+      - guides/visual-design/interactive-content-in-3d-scenes.md
+      - guides/visual-design/precise-text-alignment.md
+      - guides/visual-design/prevent-text-wrapping.md
+      - guides/visual-design/shaped-cutouts.md
+      - guides/visual-design/soft-edge-content-fade.md
+      - guides/visual-design/visually-stable-font-fallbacks.md
+      - guides/visual-design/visually-stable-mixed-fonts.md
+      - guides/visual-design/visually-texture-content.md
       - guides/webmcp/agentic-forms.md
       - guides/webmcp/agentic-javascript-tools.md
       - guides/webmcp/webmcp.md
