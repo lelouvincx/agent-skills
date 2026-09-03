@@ -338,6 +338,10 @@ skills:
     url: https://raw.githubusercontent.com/herdrdev/herdr/master/skills/herdr/SKILL.md
     enabled: true
 
+  - name: show-me
+    url: https://raw.githubusercontent.com/humanlayer/skills/main/plugins/show-me/skills/show-me/SKILL.md
+    enabled: true
+
   # Add more remote skills here:
   # - name: example-skill
   #   url: https://raw.githubusercontent.com/user/repo/main/skills/example/SKILL.md
