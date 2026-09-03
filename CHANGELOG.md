@@ -7,10 +7,6 @@ and this project does not currently use versioned releases.
 
 ## [Unreleased]
 
-### Changed
-
-- Rename `gmail` to `email` and allow read and explicitly requested write operations for Chinh's personal and bot mailboxes through `gog`. [#197](https://github.com/lelouvincx/agent-skills/pull/197)
-
 ### Added
 
 - Add a 5-minute background selector that prioritises one Amp ChatGPT subscription until either Codex quota window has 5% remaining, then activates a fallback subscription. [#190](https://github.com/lelouvincx/agent-skills/pull/190)
@@ -66,6 +62,7 @@ and this project does not currently use versioned releases.
 
 ### Changed
 
+- Rename `gmail` to `email` and allow read and explicitly requested write operations for Chinh's personal and bot mailboxes through `gog`. [#197](https://github.com/lelouvincx/agent-skills/pull/197)
 - Add explicit bot PR and post-merge workflow triggers to repository instructions. [#195](https://github.com/lelouvincx/agent-skills/pull/195)
 - Make `Logseq: Log Current Task` queue a parent-thread turn that gives native Task a structured handoff and active workspace root instead of relying on `read_thread` reconstruction in a hidden worker. [#196](https://github.com/lelouvincx/agent-skills/pull/196)
 - Refactor repository and projected agent instructions around concise operational contracts, scoped context pointers, and authoritative references. [#194](https://github.com/lelouvincx/agent-skills/pull/194)
