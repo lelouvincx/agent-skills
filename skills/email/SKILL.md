@@ -18,11 +18,13 @@ Map each identity to its authenticated Google account:
 
 Pass exactly `dinhminhchinh3357@gmail.com` or `lelouvincx@gmail.com` to `--account` on every Gmail API command. Never use `auto`, a `gog` account alias, a forwarding identity or any other account. Treat every other account, including work email, as outside this skill.
 
+Default to `dinhminhchinh3357@gmail.com` when the request or selected message or thread does not identify a mailbox or sending identity. Use the bot account only when the user or selected content identifies a bot identity.
+
 Use `--from` with exactly one identity in the table for sends, replies, forwards and draft creation or update. Before using `contact@lelouvincx.com` or `bot@lelouvincx.com`, list send-as identities for its mapped account with the read-only `gmail.settings.sendas.list` command. Proceed only when the matching object has `"verificationStatus": "accepted"`. If it is absent or not accepted, stop and explain that Gmail verification is required. Use the mapped Google address instead only when the user authorized that sender identity. Before sending an existing draft, retrieve it and verify that its From identity is one of the four mapped identities.
 
 ## Process
 
-1. Resolve the requested identity to one mapped Google account. Ask only when the request or selected message or thread does not determine it. Resolution is complete when `--account` is one of the two exact Google addresses and any sending identity is one mapped identity.
+1. Resolve the requested identity to one mapped Google account, using the personal Gmail account by default. Resolution is complete when `--account` is one of the two exact Google addresses and any sending identity is one mapped identity.
 2. When no hexadecimal API ID is supplied, search with `--max 10`. Search is complete when the target is identified, no match is found in those results, or the user is asked for disambiguation or permission to expand the search.
 3. Retrieve a selected message or thread only when its body is needed. Reading is complete when the answer cites its ID and reports any truncation or unavailable content.
 4. Before a mutation, derive one exact action, account and target scope from the user's current request. If any is missing or ambiguous, present the proposed operation and ask. A request to draft text authorizes neither creation of a Gmail draft nor sending. Perform no broader or follow-on mutation.
