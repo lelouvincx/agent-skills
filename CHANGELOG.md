@@ -9,7 +9,7 @@ and this project does not currently use versioned releases.
 
 ### Changed
 
-- Rename `gmail` to `email` and allow read and explicitly requested write operations for Chinh's personal and bot mailboxes through `gog`.
+- Rename `gmail` to `email` and allow read and explicitly requested write operations for Chinh's personal and bot mailboxes through `gog`. [#197](https://github.com/lelouvincx/agent-skills/pull/197)
 
 ### Added
 
