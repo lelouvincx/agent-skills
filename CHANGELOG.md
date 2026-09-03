@@ -7,6 +7,10 @@ and this project does not currently use versioned releases.
 
 ## [Unreleased]
 
+### Changed
+
+- Rename `gmail` to `email` and allow read and explicitly requested write operations for Chinh's personal and bot mailboxes through `gog`.
+
 ### Added
 
 - Add a 5-minute background selector that prioritises one Amp ChatGPT subscription until either Codex quota window has 5% remaining, then activates a fallback subscription. [#190](https://github.com/lelouvincx/agent-skills/pull/190)
