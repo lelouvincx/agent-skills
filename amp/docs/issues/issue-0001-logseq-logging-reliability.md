@@ -8,13 +8,14 @@ status: "Partially resolved"
 priority: "P0"
 summary: "Explains the incident, command-only scope and reliability decisions behind Logseq task logging."
 created: "2026-07-15"
-updated: "2026-08-18"
+updated: "2026-09-03"
 amp_thread_id:
   T-019f63f5-d4b8-76e8-870e-b6ec96584a2d: "incident thread containing the original Logseq logging request and recovery"
   T-019f6417-0880-755e-bc60-ce2faebe753d: "worker thread that completed Logseq writes after the coordinator reported a timeout"
   T-019f6428-596b-70ce-ae87-1a13d907cbb5: "investigated the incident and defined the prioritized reliability scope"
   T-019f645f-41cb-7434-a0d9-d9d4d88fa5c3: "reviewed and tightened the P0 implementation plan"
   T-019f644b-4e40-7721-be21-ad60c2cfd428: "organized the issue record and revised its scope after the command-only change"
+  T-01a064f2-224c-7097-8e0f-5ce6b560b10e: "made a parent-authored Task brief the primary intent source"
 artifacts:
   - "logseq-log-current-task-command"
 implementation:
@@ -40,9 +41,11 @@ tags:
 
 The original incident exposed 2 different problems. An in-thread request could bypass the agent tool, and the worker workflow could report a false failure while still writing.
 
-[PR #108](https://github.com/lelouvincx/agent-skills/pull/108) removed the agent-callable tool on 18 July 2026 because the command works on Amp Web. In-thread requests are no longer part of the supported contract. The command must still solve worker lifecycle and data integrity problems.
+[PR #108](https://github.com/lelouvincx/agent-skills/pull/108) removed the agent-callable tool on 18 July 2026 because the command works on Amp Web. In-thread requests were no longer part of the supported contract. At that point, the command still had to solve worker lifecycle and data integrity problems.
 
-PR #98 now applies its process-scoped coordinator and worker-attested read-back checks to the command only. [PR #111](https://github.com/lelouvincx/agent-skills/pull/111) also adds parent project and customer labels. Task identity, customer-aware titles, worker cost, graph configuration and timezone behaviour remain open.
+PR #98 added a process-scoped coordinator and worker-attested read-back checks. [PR #111](https://github.com/lelouvincx/agent-skills/pull/111) added parent project and customer labels.
+
+The command now queues a turn in the active parent thread. The parent uses its live conversation context to write a standalone brief for built-in Task. This replaces the hidden worker's dependence on lossy `read_thread` reconstruction and its separate lifecycle. Task may use a targeted thread lookup for a specific missing fact when that tool is available. Task-link labels, customer-aware titles, graph configuration and timezone behaviour remain open.
 
 The current contract is [Logseq: log current task command](../tools/logseq-log-current-task-command.md). This issue remains the source of truth for historical evidence, revised intent, decisions and follow-up.
 
@@ -59,6 +62,8 @@ The user needed further turns to recover the task ID, add Amp labels and correct
 The source investigation is [Amp thread T-019f6428](https://ampcode.com/threads/T-019f6428-596b-70ce-ae87-1a13d907cbb5). The reviewed P0 design was implemented in [PR #98](https://github.com/lelouvincx/agent-skills/pull/98).
 
 PR #108 later removed the agent tool and retained the command-palette workflow. [Amp thread T-019f644b](https://ampcode.com/threads/T-019f644b-4e40-7721-be21-ad60c2cfd428) revised this issue to reflect that decision.
+
+[Amp thread T-01a064f2](https://ampcode.com/threads/T-01a064f2-224c-7097-8e0f-5ce6b560b10e) later reported that `read_thread` did not preserve enough context or intention. It requested a Task brief written directly by the parent agent instead.
 
 ## Original intent
 
@@ -82,6 +87,20 @@ The workflow must:
 - write to Backlog first, then add a short journal pointer
 - preserve existing labels while adding project, working-project and customer labels
 - allow later work to add task identity without weakening P0 guarantees
+
+### Revised intent after parent-owned Task delegation
+
+The command palette remains the only supported entry point. Selecting the command now queues a normal turn in the active thread instead of creating a hidden worker.
+
+The workflow must:
+
+- keep intent interpretation with the parent agent that has the active conversation context
+- make the parent carry original intent, redirects, outcome, decisions, next action and important links into a standalone Task brief
+- use one built-in Task subagent for bounded Logseq and parent-metadata work
+- make Task inspect existing parent-linked state before writing
+- make Task verify both Logseq files before updating the parent thread
+- make the parent inspect Task's done report and report the result in the same thread
+- avoid `read_thread` as an intent-reconstruction boundary
 
 ## Evidence
 
@@ -196,11 +215,13 @@ PR #98 replaced prose with an exact, versioned JSON result. It uses typed worker
 
 ### P1: complete the end-to-end workflow
 
-#### The plugin does not return the Logseq task ID
+#### The plugin did not return the Logseq task ID
 
 The parent needs the generated task ID to link the Amp thread back to Logseq. The worker's required response does not include it. The parent must inspect the graph or worker transcript to recover it.
 
 The structured result should return the task ID, task state, Backlog location, and journal location.
+
+The parent-owned Task workflow now requires this metadata in Task's done report.
 
 #### Amp labels are outside the logging operation
 
@@ -218,7 +239,7 @@ The Logseq canonical rules should define one collision-safe compact encoding, su
 
 #### Thread title and customer conventions are missing from canonical Logseq rules
 
-The plugin currently derives `[Project] task title`, while the observed required title was `[Presales] DEX - <title>`.
+The plugin-derived title used `[Project] task title`, while the observed required title was `[Presales] DEX - <title>`.
 
 Add a canonical Logseq page such as `pages/Amp Thread Rules.md`. Link it from `pages/Canonical Pages.md` and define:
 
@@ -227,25 +248,25 @@ Add a canonical Logseq page such as `pages/Amp Thread Rules.md`. Link it from `p
 - normalized project and customer labels
 - task-ID label encoding
 
-The worker should read this page through the existing canonical-page workflow rather than embedding user conventions in TypeScript.
+Task should read this page through the canonical-page workflow rather than embedding user conventions in TypeScript.
 
 #### Recovery metadata remains too manual
 
-PR #98 reconciles pending and partial P0 operation state automatically. PR #111 supplies project and customer labels. Recovering task identity and enforcing customer-aware title conventions still requires separate work.
+PR #98 reconciled pending and partial P0 operation state. PR #111 supplied project and customer labels. The parent-owned Task workflow now returns task identity and file locations. Customer-aware title conventions remain open.
 
 ### P2: reasoning cost and worker design
 
 #### `high` is compensating for an under-structured workflow
 
-The current worker must reconstruct intent, resolve redirects and interpret canonical pages. It must also choose a task, edit 2 files and verify the result. Keep it on `high` while it owns all of these decisions and changes.
+The hidden worker had to reconstruct intent, resolve redirects and interpret canonical pages. It also had to choose a task, edit 2 files and verify the result. The implementation kept it on `high` while it owned all these decisions and changes.
 
-`read_thread` already summarises the parent thread before the worker applies canonical rules. Test normal cases on `medium` after the workflow has structured context, direct lookup, validated results and limited write actions. Keep `high` for conflicting redirects, several possible Backlog matches, unclear state or conflicting rules.
+The current workflow removes the fixed `high` worker. The active parent agent interprets its live conversation, then delegates bounded file and metadata work through native Task.
 
 #### Full-thread reconstruction is unconditional
 
 The worker must call `read_thread` even when the hint contains a complete task summary and source links. Long or multi-topic threads increase response time, token use and timeout risk.
 
-A future structured parent payload can act as a candidate result that `read_thread` verifies or enriches instead of forcing the worker to rediscover every detail.
+The parent-owned Task workflow resolves this finding. The parent writes a standalone brief from its active conversation context, and Task uses that brief as its primary intent source. When `read_thread` is available, Task may use it to resolve a specific missing fact rather than reconstructing the whole task.
 
 #### Canonical lookup uses broad general-purpose reads and searches
 
@@ -269,11 +290,15 @@ The graph or plugin configuration should specify the journal timezone explicitly
 
 Before PR #98, the plugin added worker IDs to an in-memory set and never removed them. The operation store now removes fully completed and terminal failed operations while retaining active and pending ownership.
 
+The parent-owned Task workflow removes the worker registry and operation store. Task completes inside the parent turn.
+
 #### Archive policy depended on unrelated downstream success
 
 Workers were archived only after title extraction and rename succeeded. A completed write with a downstream failure could remain open indefinitely.
 
 PR #98 made archive an independent operation stage and attempts it after verified Logseq completion even when rename fails.
+
+The parent-owned Task workflow creates no addressable worker thread, so it has no archive stage.
 
 #### Tests covered only a narrow timeout slice
 
@@ -281,7 +306,7 @@ Before PR #98, tests covered 3 `waitForWorkerResponse` cases. The focused suite 
 
 ## Decisions and scope
 
-The investigation set these boundaries:
+The investigation first set these boundaries:
 
 - support manual command-palette invocation only; do not register an agent tool or agent-turn routing hooks
 - keep Backlog-first logging followed by a short journal pointer
@@ -293,55 +318,62 @@ The investigation set these boundaries:
 - do not claim durable ownership before checkpoint commit or that the coordinator independently verifies the graph's meaning
 - let the worker follow Amp's native tool policy; Oracle prohibition is not part of the Logseq reliability contract
 
+The parent-owned Task change keeps manual command-palette invocation and Backlog-first logging. It replaces the other runtime boundaries:
+
+- the command queues one normal turn in the active parent thread
+- the parent interprets its live context and writes a standalone Task brief
+- Task owns Logseq writes, file read-back and parent metadata updates
+- Task returns task identity and verification evidence to the parent
+- the parent checks the result and reports completion in the same thread
+- retries run as later parent turns and inspect existing parent-linked state before writing
+
 ## Resolution status
 
 | Finding | Priority | Status | Resolution |
 | --- | --- | --- | --- |
 | In-thread agent routing | P0 | Superseded | PR #108 removed the agent tool; logging is command-only |
-| Truthful timeout state | P0 | Resolved | Active and uncertain operations report pending |
-| Explicit operation lifecycle | P0 | Resolved | Parent-scoped in-memory operation with a disposable reload checkpoint |
-| Duplicate active writers | P0 | Resolved after worker ID assignment | Ordered transitions reconnect to the checkpointed worker after reload |
-| Two-file partial state | P0 | Resolved within worker trust boundary | Exact result plus post-write read-back attestation and repair |
-| Downstream status conflation | P0 | Resolved | Independent Logseq, rename, labels and archive outcomes |
-| Free-form control protocol | P0 | Resolved | Strict versioned JSON and isolated timeout compatibility |
-| Project and customer labels | P1 | Resolved | PR #111 labels are part of the strict result and a retryable stage |
-| Task identity and task-link label | P1 | Open | Requires structured task metadata and collision-safe encoding |
+| Truthful timeout state | P0 | Superseded | No hidden worker wait remains; the normal parent turn reports Task outcome |
+| Explicit operation lifecycle | P0 | Superseded | Task completes inside the parent turn; the command only confirms queued delivery |
+| Duplicate active writers | P0 | Resolved | Parent turns run in order and every Task inspects parent-linked state before mutation |
+| Two-file partial state | P0 | Resolved within Task trust boundary | Task re-reads both files and a later invocation repairs existing state |
+| Downstream status conflation | P0 | Resolved | Task reports file verification and parent metadata separately to the parent |
+| Free-form control protocol | P0 | Superseded | The plugin no longer parses agent output; the parent checks Task's done report |
+| Project and customer labels | P1 | Resolved | Task derives and applies these labels after Logseq verification |
+| Task identity | P1 | Resolved | Task returns the UUID, title, state and file locations to the parent |
+| Task-link label | P1 | Open | Requires collision-safe UUID encoding |
 | Customer-aware title rules | P1 | Open | Must be defined in the Logseq canonical map |
-| Worker reasoning cost | P2 | Open | Benchmark only after inputs, lookup, and writes become more structured |
+| Worker reasoning cost and context fidelity | P2 | Resolved | Parent interprets live context and sends Task a standalone brief |
 | Graph resolution and timezone | P3 | Open | Requires explicit portable configuration |
-| Registry cleanup, archive policy, and focused lifecycle tests | P3 | Resolved | Delivered by PR #98 |
+| Registry cleanup and archive policy | P3 | Superseded | The current workflow has no hidden worker registry or archive stage |
 
 ## Follow-up
 
 1. Add canonical Amp thread rules inside the Logseq graph for task-ID encoding, customer aliases and title patterns.
-2. Add task identity and locations to the worker result. Then apply the task-link label and customer-aware title as separate actions.
+2. Apply the task-link label and customer-aware title from those canonical rules.
 3. Add portable graph resolution and an explicit journal timezone.
-4. Reduce context and canonical lookup work. Then test normal structured cases on `medium` while keeping `high` for unclear cases.
+4. Replace broad canonical page reads with a direct canonical index when lookup cost becomes material.
 
 ## Validation
 
-A P0 implementation must meet these criteria:
+A parent-owned Task implementation must meet these criteria:
 
-- a running worker timeout returns `pending`
-- a completed response is reconciled
-- concurrent or repeated calls for the same parent reuse one operation
-- successful Logseq write plus rename failure preserves Logseq success
-- successful Logseq write plus label failure preserves Logseq success and still attempts archive
-- successful Logseq write plus archive failure preserves Logseq success
-- malformed worker output is rejected without misreporting a write
-- partial Backlog/journal state is reported and can be reconciled
-- timeout compatibility fallback is isolated and tested
-- every create, append, result-consumption, rename, label and archive transition is handled in order
-- ambiguous worker creation or message delivery remains pending without launching duplicate work
-- only a fresh assistant message can satisfy the current worker turn
-- the plugin registers the command without an agent tool or agent-turn routing; worker tools follow Amp's native policy
-- a failed downstream stage can be retried without another Logseq write
+- the command appends one normal user turn to the active thread
+- the queued prompt requires built-in Task and a standalone parent-authored brief
+- the prompt makes original intent, redirects, outcome, decisions, next action and links explicit brief inputs
+- Task treats the parent-authored brief as its primary intent source and limits any available `read_thread` fallback to a specific missing fact
+- Task searches for an existing parent-linked task before mutation
+- Task writes Backlog first and adds a journal pointer to the same UUID
+- Task re-reads both files before updating parent metadata
+- Task returns task identity, file locations and separate verification results
+- the parent inspects the Task result and reports completion or a precise blocker
+- cancellation and missing-thread paths append no logging turn
+- command delivery failure is reported without claiming that work was queued
 
-PR #98 added focused tests in `amp/scripts/logseq-manual-log.test.ts`. It also passed document validation, plugin builds, isolated projection and live projection.
+PR #98 added focused tests for the former hidden-worker coordinator. The current focused suite tests prompt construction, command delivery, cancellation and failure reporting.
 
-Execute mode does not expose `agent.createThread`, so a full command-palette worker test remains open.
+A full command-palette test must confirm that the active parent agent calls Task with a context-rich brief and reports Task's verified result.
 
-Later work should test task-ID output and encoding, customer-aware titles, timezone behaviour and graph resolution.
+Later work should test task-link encoding, customer-aware titles, timezone behavior and graph resolution.
 
 ## Maintenance notes
 

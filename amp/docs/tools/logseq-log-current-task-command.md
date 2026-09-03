@@ -3,7 +3,7 @@ doc_schema: "amp-artifact/v2"
 title: "Logseq: log current task command"
 slug: "logseq-log-current-task-command"
 status: "active"
-summary: "Adds a command that reliably logs the current Amp task to Logseq and asks its worker to update the parent thread."
+summary: "Queues a parent-thread turn that briefs a Task subagent from the active conversation and logs the current work to Logseq."
 artifact:
   id: "logseq-log-current-task"
   type: "command"
@@ -22,10 +22,10 @@ amp:
   docs_sources:
     api_docs: "amp plugins show-docs"
     agent_options: "amp plugins show-agent-options --json"
-  last_verified: "2026-08-18"
+  last_verified: "2026-09-03"
 contract:
   input_kind: "ui_prompt"
-  output_kind: "ui_notification"
+  output_kind: "queued_parent_thread_turn"
   trigger: "command_palette"
   allowed_tools: []
   event: null
@@ -36,65 +36,66 @@ runtime:
     - "amp.registerCommand"
     - "ctx.ui.input"
     - "ctx.ui.notify"
-    - "amp.getBuiltinAgent"
-    - "Agent.createThread"
     - "PluginThread.appendUserMessage"
-    - "PluginThread.waitForResponse"
-    - "PluginThread.messages"
-    - "PluginThread.state"
-    - "node:fs/promises temporary checkpoint"
-    - "amp.threads.get(...).messages"
-    - "amp.$ amp threads archive"
+    - "PluginSystem.workspaceRoot"
+    - "PluginAPI.helpers.filePathFromURI"
+    - "built-in Task through the parent agent"
   dependencies:
     - "Amp CLI on PATH"
     - "Logseq graph directory"
+    - "current thread agent with the built-in Task tool"
   env:
     - "AMP_LOGSEQ_GRAPH_DIR"
   reads:
-    - "parent Amp thread through spawned worker via read_thread"
-    - "Logseq graph through spawned worker"
-    - "temporary parent-to-worker recovery checkpoint"
+    - "active conversation context through the parent agent"
+    - "active workspace root through PluginSystem"
+    - "Logseq graph through a Task subagent"
   writes:
-    - "Logseq graph through spawned worker"
-    - "parent Amp thread title through spawned worker"
-    - "parent Amp thread labels through spawned worker"
-    - "worker thread archive state"
-    - "temporary parent-to-worker recovery checkpoint"
+    - "delegation request to the active Amp thread"
+    - "Logseq graph through a Task subagent"
+    - "parent Amp thread title through a Task subagent"
+    - "parent Amp thread labels through a Task subagent"
   network:
-    - "Amp built-in high agent runtime"
+    - "current thread agent runtime"
+    - "built-in Task runtime"
   logs:
     - "plugin load log"
 safety:
-  permission_level: "manual-command-with-worker-write"
+  permission_level: "manual-command-with-delegated-write"
   user_gate: "manual command palette invocation"
   constraints:
     - "Requires an active Amp thread."
     - "Does not run automatically from lifecycle events."
-    - "Worker must reconstruct parent context with read_thread before editing Logseq."
-    - "Worker must re-read and verify both Logseq files before reporting completion."
-    - "Worker must rename and label the parent thread only after it verifies both Logseq files."
-    - "Coordinator must independently validate the parent-linked task schema and journal block reference before reporting completion."
-    - "Worker must return the exact versioned JSON result."
+    - "Parent agent must brief Task from its active conversation context."
+    - "Task brief must be standalone because a Task subagent starts fresh."
+    - "Task subagent must treat the parent-authored brief as its primary intent source."
+    - "Task subagent owns all Logseq file reads, writes, verification and repair."
+    - "Task subagent must re-read and verify both Logseq files before reporting completion."
+    - "Task subagent must rename and label the parent thread only after it verifies both Logseq files."
+    - "Parent agent must inspect the Task result before reporting completion."
     - "Each parent Amp thread label must not exceed 32 characters."
   risks:
-    - "Worker can edit the configured Logseq graph."
-    - "The coordinator validates the documented task fields and journal pointer, but it does not judge whether the worker summary is semantically complete."
-    - "A reload before Amp returns a worker ID can still lose ownership of an uncertain worker creation."
-related: []
+    - "Task subagent can edit the configured Logseq graph."
+    - "Command notification confirms delivery to the parent thread, not Logseq completion."
+    - "Logging quality depends on the parent agent carrying all material intent into the standalone Task brief."
+related:
+  - "delegating-subagents"
 tags:
   - "command"
   - "logseq"
   - "manual"
-  - "worker"
+  - "task"
 ---
 
 # Logseq: log current task command
 
 ## Summary
 
-`logseq-log-current-task` adds the command-palette action `Logseq: Log Current Task`. It asks for an optional hint, then logs the task through one coordinated worker operation.
+`logseq-log-current-task` adds the command-palette action `Logseq: Log Current Task`.
 
-[ISSUE-0001: Logseq logging reliability](../issues/issue-0001-logseq-logging-reliability.md) preserves the original incident, revised command-only intent and reliability decisions.
+The command asks for an optional hint. It then queues a normal turn in the active thread. The parent agent uses its current conversation context to brief a built-in Task subagent, which writes and verifies the Logseq record.
+
+[ISSUE-0001: Logseq logging reliability](../issues/issue-0001-logseq-logging-reliability.md) preserves the original incident and the reasons for this parent-owned delegation path.
 
 ## Invocation
 
@@ -104,9 +105,9 @@ tags:
 - Palette label: `Logseq: Log Current Task`
 - Plugin file: `plugins/logseq-manual-log.ts`
 
-## Contract
+You must run the command from an active thread whose agent can call the built-in `Task` tool.
 
-You must run the command from an active thread. It accepts no JSON input.
+## Contract
 
 The command opens `Log current task to Logseq`. You can enter:
 
@@ -114,186 +115,171 @@ The command opens `Log current task to Logseq`. You can enter:
 - a note
 - a source link
 
-Select `Log to Logseq` to start the operation. The notification reports these statuses separately:
+Select `Log to Logseq` to queue the logging turn. The notification confirms that Amp added the request to the active thread. It does not claim that Logseq was updated.
 
-- `Worker`
-- `Logseq`
-- `Parent thread`
-- `Archive`
+The parent agent must:
 
-`Pending` means the operation may still write or Amp cannot confirm whether it accepted the work. `Partial` means the worker verified the parent-linked Backlog task but not the matching journal pointer.
+1. Use its active conversation context to identify original intent, later redirects, current outcome, remaining work, decisions and important links.
+2. Call built-in Task as its next action with a standalone handoff and bounded execution contract.
+3. Inspect the Task result against the logging contract.
+4. Report the verified outcome or exact blocker in the parent thread.
 
-Each status completes on its own condition:
-
-- `Logseq: complete` means the worker and coordinator verified the parent-linked task and matching journal pointer
-- `Parent thread: complete` means the worker reported that both parent-thread commands succeeded
-- `Archive: complete` means the coordinator archived the worker
+A Task subagent starts fresh and receives the context in the parent's brief, not the full conversation. It treats that brief as the primary intent source. If one named material intent fact required for safe logging is absent, Task uses `read_thread` only to retrieve that fact when the tool is available. If the tool is unavailable, Task reports the missing fact as the blocker. It continues from the parent handoff for all other intent.
 
 ## Behavior
 
-### One operation owns each parent thread
+### Parent agent briefs Task from live context
 
-The command records one in-memory operation for each parent thread before it creates a worker. It handles each create, append, response and archive state change in order. A concurrent invocation returns the current status instead of starting duplicate work.
+The command appends one user message to the current thread. It does not create a hidden worker thread.
 
-The first invocation starts one hidden built-in `high` worker without copying recent parent messages. Later invocations use the same worker and retry only unfinished stages.
+The message tells the parent agent to call built-in Task as its next action and use the conversation context already available in its current inference turn. This includes the original request, accepted decisions, user redirects, work completed, remaining work and relevant source or deliverable links.
 
-As soon as Amp confirms that the worker thread was created, the command starts a notification containing the worker thread ID. It starts this creation notification once per worker, before waiting for the worker response. The command does not wait for the notification to finish. A failed or unresolved notification does not interrupt Logseq logging.
+The parent puts 4 sections in the Task prompt, in this order:
 
-After Amp returns the worker ID, the command writes a small parent-to-worker checkpoint at `$TMPDIR/amp-logseq-manual-log/<parent-thread-id>.json`. It stores no prompt or conversation content. The command does not send the worker prompt until this checkpoint is committed.
+1. `Parent handoff`
+2. `Runtime context`
+3. `Intent boundary`
+4. `Logging contract`
 
-A plugin reload pauses the operation. Run the command again from the parent thread to reconnect to the saved worker. The coordinator replays its latest result and validates Logseq again. If that recovered result is incomplete, run the command once more to ask the same worker to repair missing Logseq or parent-thread state. The coordinator retries worker archiving when needed. These actions are safe to repeat. The command deletes the checkpoint after every stage completes or the worker definitively fails.
+The `Parent handoff` includes each material fact once:
 
-Amp does not provide a way to list child threads. A reload before the checkpoint is committed, including before Amp returns the worker ID, can therefore still lose ownership of an uncertain worker creation.
+- the durable task or outcome to log
+- original intent and later redirects that affect the result
+- completed work, current state and one concrete next action when work remains
+- decisions, blockers and required authority
+- relevant source and deliverable links
 
-### Uncertain work stays pending
+`Runtime context` supplies the optional command hint, parent thread ID, active workspace root, Logseq graph, Backlog path, date and journal path. The plugin gets the workspace from `PluginSystem.workspaceRoot` and converts it with `PluginAPI.helpers.filePathFromURI`; it does not use the plugin process directory. When Amp has no workspace open, the value is `(none)`. `Intent boundary` tells Task how to resolve a missing intent fact. `Logging contract` carries the numbered execution and completion requirements below.
 
-Amp may not confirm whether it created a worker, delivered a message or stored a response. When this happens, the command keeps ownership and reports `pending`. It does not create another worker, append another message or cancel work that may still write.
+This boundary keeps interpretation with the agent that took part in the conversation. Task owns the bounded file and metadata work.
 
-The command waits up to 10 minutes for a worker response. Only a message with a new ID can satisfy the current worker turn.
+Task treats the parent-authored brief as authoritative for the requested outcome. When one named material intent fact required for safe logging is absent, Task may use `read_thread` to retrieve that fact if the tool is available. If the tool is unavailable, Task reports the missing fact as the blocker. It continues from the parent handoff for all other intent.
 
-A worker `error` state may be temporary because Amp can retry the same turn. The coordinator waits briefly for the worker to leave `error`, then continues waiting within the original 10-minute limit. It ends ownership only when the worker remains in `error` after that recovery window and has no fresh response.
+### Task writes Backlog first
 
-The Amp plugin API does not provide typed timeout errors. The plugin keeps the 2 required string checks in one compatibility helper.
+Task reads `pages/Canonical Pages.md` and relevant rule pages before writing. It uses those pages as the source of truth for project taxonomy, priority, placement and active Backlog matches.
 
-### The worker writes Backlog first
+Task first searches `pages/Backlog.md` for every actionable task whose direct `input::` contains the parent thread ID. It follows these branches:
 
-The worker must call `read_thread` for the parent thread before editing Logseq. If this fails, it returns a structured error without changing the graph.
+- If exactly one task exists, update it.
+- If no task exists, create one.
+- If several tasks exist, reconcile them into one only when every durable fact can be preserved. Otherwise, stop and report the duplicate task locations as the blocker.
 
-The worker reconstructs original user intent and latest coherent outcome. It then updates or creates the parent-linked task in `pages/Backlog.md`. Today's journal contains a short pointer to that task under `Done`, `Tasks` or `Notes`, based on task state.
+The mutation must finish with exactly one actionable parent-linked task.
 
-The worker reads `pages/Canonical Pages.md` and relevant rule pages before writing. It stores parent Amp thread and useful source links in the Backlog task's `input::` property.
+Every new task must have direct:
 
-New Backlog tasks must follow the Logseq task contract from RFC-0008 in the Logseq graph.
+- `id:: <uuid>`
+- `project:: [[...]]`
+- `priority:: #P...`
+- `input:: ...`
+- `updated-at:: YYYY-MM-DD`
 
-Each new task must have direct `id::`, `project::`, `priority::`, `input::` and `updated-at::` properties.
+Task must preserve a Linear issue ID in a direct `linear::` property when one exists. Only `DAT-`, `PS-` and `DOC-` prefixes count as Linear team IDs.
 
-The worker must preserve a Linear issue ID in `linear::` when one exists.
+An active task must have one concrete `next-action::`. Task adds `blocker::` only for a known blocker or waiting condition.
 
-An active task with remaining work must have a direct `next-action::` property.
+A `DONE` task must have `completed:: [[YYYY-MM-DD]]`. It must not keep `next-action::` or `blocker::`.
 
-The worker adds `blocker::` only when there is a known blocker or waiting condition.
+Task records the durable result as a directly nested activity bullet with its own stable `id::`, `observed-at::` and non-empty `outcome::`. It adds `decision::` and `input::` when the parent brief supports them.
 
-A `DONE` task must have `completed:: [[YYYY-MM-DD]]` and must not have a stale `next-action::` or `blocker::`.
+Useful source and deliverable links belong in the Backlog task's `input::`. Task always includes the parent Amp thread. It deduplicates equivalent links and omits incidental research links.
 
-The worker records a dated work result as a directly nested activity bullet with its own stable `id::`, `observed-at::` and `outcome::` properties.
+After the Backlog update, Task adds or updates one short journal pointer to the same task:
 
-It may add `decision::` and `input::` to the activity when the parent thread provides them.
+- under `### Done` when work is complete
+- under `### Tasks` when follow-up remains
+- under `### Notes` when the record is informational
 
-The worker must repair missing contract fields when it updates an existing parent-linked task.
+The journal entry points to the Backlog task UUID. It does not copy the task properties or source links.
 
-Before final read-back, the worker checks whether a fresh agent could safely:
+Task keeps the Backlog entry short. It does not paste the parent summary, private reasoning or transcript.
 
-- act on every recorded fact about the task
-- answer status and history questions
-- take the recorded next action without asking the user to repeat known context
-- identify a change in intent or missing authority precisely instead of guessing
+### Task verifies files and updates the parent
 
-The worker repairs the task or activity when this check finds missing durable context.
+After writing, Task re-reads `pages/Backlog.md` and today's journal. It reports Logseq complete only when it finds:
 
-### The coordinator validates the write
+- exactly one actionable task linked to the parent thread
+- all required direct task properties
+- a unique task UUID
+- a matching Linear property when required
+- valid state-specific properties
+- a directly nested activity for today with its own UUID and outcome
+- a journal block reference to the same task UUID
 
-The worker result is not enough to mark Logseq complete.
+Task then checks whether a fresh agent could understand the task, answer status and history questions, and take the next action without asking the user to repeat known context. It repairs missing durable context before reporting completion.
 
-The TypeScript coordinator independently reads `pages/Backlog.md` and today's journal.
+Only after both files pass read-back does Task update the parent thread. It derives:
 
-It finds exactly one actionable Backlog task whose direct `input::` property contains the parent thread ID.
+- title in the exact format `[Project] task title`
+- normalized Backlog project label
+- working-project label from `project-resolve <workspace-directory-name> --json`, or the normalized directory name when resolution fails; omit this label when the parent workspace is `(none)`
+- `customer-...` label when the task identifies a customer
 
-It validates these direct task properties:
+Task preserves a Linear issue ID immediately after the project prefix. It normalizes labels to lowercase words joined with hyphens, removes punctuation and duplicates, and limits each label to 32 characters. It preserves existing labels and adds no priority or task-state label.
 
-- a unique UUID in `id::`
-- a page reference in `project::`
-- a `#P` value in `priority::`
-- the parent thread in `input::`
-- today's date in `updated-at::`
-- a matching `linear::` value when the task title or input contains a `DAT-`, `PS-` or `DOC-` issue ID
-- a non-empty `next-action::` for active tasks
-- a valid `completed::` date and no stale next action or blocker for `DONE` tasks
+Task runs `amp threads rename` and `amp threads label` for the parent thread. It reports parent metadata complete only when both commands succeed.
 
-It also requires a directly nested activity for today.
+Task does not commit, push, run weekly report automation or modify unrelated Logseq blocks.
 
-That activity must have its own UUID in `id::`, today's date in `observed-at::` and a non-empty `outcome::`.
+### Parent agent checks the result
 
-The journal must contain a block reference to the validated task UUID.
+Task returns a compact done report with:
 
-Missing or duplicate tasks fail Backlog verification.
+- task UUID, title, state, Backlog path, journal path and concise outcome
+- Backlog verification evidence: parent-linked task count, UUID uniqueness result, required direct-field result, state-specific-field result, and today's activity UUID and date
+- journal verification evidence: the task UUID referenced by the journal pointer
+- parent metadata evidence: separate rename and label command results
+- exact blocker and smallest parent or user input needed when blocked
 
-The coordinator recognises only `DAT-`, `PS-` and `DOC-` prefixes as Linear team IDs. It does not treat other uppercase identifiers, such as `RFC-0012`, as Linear issue IDs.
+The parent agent checks the compact evidence report before replying. If required evidence is missing or a safe local gap remains, the parent calls one focused Task after the first finishes, passing the original parent handoff, runtime context, prior report and unmet checks. The repair Task re-reads or repairs the files and returns a revised report. Task calls run serially.
 
-A valid task with a missing journal reference remains partial.
+The parent response states what was logged, whether both files were verified, whether thread metadata was updated, and any blocker.
 
-The coordinator does not archive from worker claims that fail this validation.
+### Repeated invocations update one task
 
-### The worker returns strict JSON
+Each command invocation queues one parent-thread turn. Turns in one thread run in order.
 
-After editing, the worker re-reads both files. It returns one unfenced JSON object with this exact key set:
+Every Task brief requires a Backlog search for actionable tasks whose direct `input::` contains the parent thread ID before mutation. A later invocation therefore updates or safely reconciles parent-linked state instead of creating another task.
 
-```json
-{"version":2,"backlogVerified":true,"journalVerified":true,"parentThreadUpdated":true,"summary":"Short outcome","error":null}
-```
-
-`backlogVerified` means post-write read-back found exactly one actionable parent-linked task that satisfies the documented task contract. This includes its direct identity, project, priority, input, date and state-specific properties, plus a directly nested dated activity. `journalVerified` means post-write read-back found a journal pointer to that exact task UUID.
-
-`parentThreadUpdated` means both parent-thread commands exited successfully with the exact derived title and all required labels. The worker uses a title in the format `[Project] task title`. It derives labels for the Backlog project, working project and customer when present. It normalises each label, truncates it to 32 characters, removes any trailing hyphen, then removes empty values and duplicates.
-
-If the hint, parent thread or matching Backlog task contains a Linear issue ID, the worker keeps that ID unchanged after the project prefix. For example, it uses `[Internal] DAT-745 Support Quality Overview PR #111` rather than dropping `DAT-745`.
-
-The worker updates the parent only after it re-reads and verifies the complete Logseq task contract and journal pointer. It returns `parentThreadUpdated: false` and a concise error when either parent-thread action fails. An unverified Logseq result must also return `parentThreadUpdated: false`.
-
-The coordinator rejects extra keys, prose, code fences, invalid field types and contradictory verification results. Malformed output remains `unverified`. It never counts as complete or as a terminal failure.
-
-Completion requires worker-attested Logseq and parent-thread completion, plus independent TypeScript validation of the graph files.
-
-### The same worker repairs incomplete state
-
-The command keeps the same worker after a partial, malformed or validated failed result. A later invocation makes the worker inspect existing parent-linked state and repair missing work. For a parent-thread retry, the worker reapplies both idempotent commands. A malformed repair response does not erase earlier verified Logseq state.
-
-### Later actions run separately
-
-After the worker reports parent-thread completion and the coordinator verifies Logseq, the coordinator archives the worker. A later invocation retries a failed archive.
-
-The operation leaves memory after Logseq, parent-thread update and archive all complete. A sustained worker error with no fresh response also ends ownership so a later invocation can start a replacement worker.
+The command has no hidden-worker checkpoint or separate operation store. If the parent turn or Task fails, run the command again. The next Task must inspect and repair existing parent-linked state before it creates anything.
 
 ## Permissions and side effects
 
-The command can:
+The command can queue a user message in the active thread. The resulting parent turn can use Task to:
 
 - write to the configured Logseq graph
-- create and archive a hidden Amp worker thread
-- ask the worker to rename the parent Amp thread
-- ask the worker to add labels to the parent Amp thread
+- rename the parent Amp thread
+- add labels to the parent Amp thread
 
-The command does not run from an agent message or lifecycle event. You must select it from the command palette.
+The command does not create or archive an addressable worker thread. It does not run from an agent message or lifecycle event.
 
 ## Examples
 
 1. Choose `Logseq: Log Current Task` from the command palette.
 2. Enter an optional hint, such as `update DAT-594`.
 3. Select `Log to Logseq`.
+4. Review the parent agent's completion report in the same thread.
 
 ## Troubleshooting
 
-Use these checks when the command does not complete:
-
-- open an Amp thread before running the command
-- for `Worker: pending`, wait and run the command again to check the same operation
-- for `Logseq: partial`, `Logseq: unverified` or `Logseq: failed`, run the command again so the same worker can repair the state
-- for `Parent thread: failed`, run the command again so the same worker retries the parent update
-- for `Archive: failed`, run the command again to retry worker archiving
-- for `Worker: failed`, run the command again to start a replacement worker
-- if a checkpointed `Worker: pending` remains unresolved after repeated retries, inspect `$TMPDIR/amp-logseq-manual-log/<parent-thread-id>.json`; delete only that file as a last-resort escape hatch, because the original worker may still write when its availability is ambiguous
-- to use another graph, set `AMP_LOGSEQ_GRAPH_DIR` before starting Amp
+- No active thread: send a message to create one, then run the command again.
+- Task is unavailable: switch the thread to an agent mode that exposes the built-in Task tool, then run the command again.
+- Parent turn fails: run the command again. The next Task will search for existing parent-linked state before writing.
+- Backlog or journal verification fails: use the reported blocker to fix graph access or canonical rules, then run the command again.
+- Parent title or labels fail: check that Amp CLI is on `PATH`, then run the command again.
+- Parent workspace is `(none)`: open the repository or workspace in Amp before invoking the command if you want a working-project label.
+- Wrong graph: set `AMP_LOGSEQ_GRAPH_DIR` before starting Amp.
 
 ## Maintenance notes
 
 Update this document when any of these change:
 
-- the command ID, prompt or notifications
-- worker mode or startup timeout
-- context reconstruction
-- operation state, worker result or reconciliation
-- Backlog-first behaviour or journal verification
+- command ID, prompt or notification
+- parent-to-Task context boundary
+- Task result or repair behavior
+- Backlog-first behavior or journal verification
 - parent thread title or labels
-- parent-thread update or archive behaviour
-- default graph path or timeout compatibility
+- default graph path or date handling
 
 Keep historical intent and evidence in ISSUE-0001.
