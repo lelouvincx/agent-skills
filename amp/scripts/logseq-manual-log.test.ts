@@ -1,1027 +1,239 @@
 import { describe, expect, test } from 'bun:test'
-import { access, chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
 
-import plugin, {
-	classifyWorkerCompatibilityError,
-	logCurrentTask,
-	parseWorkerResult,
-	validateLogseqWrite,
-	waitForWorkerOutcome,
-	type LogseqOperationStore,
-} from '../plugins/logseq-manual-log'
+import plugin, { buildParentTaskPrompt, queueLogCurrentTask } from '../plugins/logseq-manual-log'
 
 const parentID = 'T-parent'
-const workerID = 'T-worker'
-const timing = {
-	startupTimeoutMs: 20,
-	workerTimeoutMs: 20,
-	checkpointDir: null,
-	verifyLogseqWrite: async () => ({ backlogVerified: true, journalVerified: true }),
-}
-const completeResult = {
-	version: 2,
-	backlogVerified: true,
-	journalVerified: true,
-	parentThreadUpdated: true,
-	summary: 'Logged and verified both files.',
-	error: null,
-}
-const partialResult = {
-	...completeResult,
-	journalVerified: false,
-	parentThreadUpdated: false,
-	summary: 'Backlog verified; journal still missing.',
-	error: 'Journal pointer was not found.',
-}
-const parentUpdateFailedResult = {
-	...completeResult,
-	parentThreadUpdated: false,
-	summary: 'Logseq verified; parent thread update failed.',
-	error: 'Parent thread rename failed.',
-}
-const failedResult = {
-	...completeResult,
-	backlogVerified: false,
-	journalVerified: false,
-	parentThreadUpdated: false,
-	summary: 'No Logseq writes verified.',
-	error: 'Canonical pages could not be read.',
-}
+const workspace = '/workspace/agent-skills'
+const logseqRepo = '/workspace/logseq'
+const today = new Date(2026, 8, 3, 12)
 
-function assistantResponse(id: string, result: unknown = completeResult) {
+function fakeThread(options: { appendError?: Error } = {}) {
+	const appended: Array<{ type: string; content: string }> = []
 	return {
-		role: 'assistant',
-		id,
-		content: [{ type: 'text', text: typeof result === 'string' ? result : JSON.stringify(result) }],
-	}
-}
-
-function workerPrompt(parentThreadID = parentID, workerThreadID = workerID) {
-	return `[logseq-manual-log]\n\n- Parent Amp thread id: ${parentThreadID}\n- Worker Amp thread id: ${workerThreadID}\n`
-}
-
-async function writeRecoveryCheckpoint(checkpointDir: string, parentThreadID = parentID, workerThreadID = workerID) {
-	await writeFile(join(checkpointDir, `${parentThreadID}.json`), JSON.stringify({
-		version: 1,
-		parentThreadID,
-		workerThreadID,
-	}), 'utf8')
-}
-
-function deferred<T>() {
-	let resolvePromise!: (value: T) => void
-	let rejectPromise!: (error: unknown) => void
-	const promise = new Promise<T>((resolve, reject) => {
-		resolvePromise = resolve
-		rejectPromise = reject
-	})
-	return { promise, resolve: resolvePromise, reject: rejectPromise }
-}
-
-function fakeWorker(options: {
-	id?: string
-	state?: string | (() => string | Promise<string>)
-	subscribe?: (onNext: (state: string) => void) => void
-	waitForResponse?: () => unknown | Promise<unknown>
-	messages?: (options?: unknown) => unknown[] | Promise<unknown[]>
-	appendUserMessage?: (message: { content: string }) => void | Promise<void>
-} = {}) {
-	const appended: string[] = []
-	const state = options.state ?? 'running'
-	const worker = {
-		id: options.id ?? workerID,
-		state: {
-			get: async () => typeof state === 'function' ? state() : state,
-			subscribe: (onNext: (state: string) => void) => {
-				options.subscribe?.(onNext)
-				return { unsubscribe() {} }
+		thread: {
+			id: parentID,
+			async appendUserMessage(message: { type: string; content: string }) {
+				if (options.appendError) throw options.appendError
+				appended.push(message)
 			},
 		},
-		waitForResponse: async () => options.waitForResponse ? options.waitForResponse() : assistantResponse('response-1'),
-		messages: async (messageOptions: unknown) => options.messages ? options.messages(messageOptions) : [],
-		appendUserMessage: (message: { content: string }) => {
-			appended.push(message.content)
-			return Promise.resolve(options.appendUserMessage?.(message))
-		},
+		appended,
 	}
-	return { worker, appended }
 }
 
-function fakeShell(handler?: (command: string, values: unknown[]) => { exitCode: number; stdout?: string; stderr?: string } | Promise<{ exitCode: number; stdout?: string; stderr?: string }>) {
-	const calls: string[] = []
-	const shell = async (strings: TemplateStringsArray, ...values: unknown[]) => {
-		const command = strings.join('{}')
-		calls.push(command)
-		const result = await handler?.(command, values) ?? { exitCode: 0 }
-		return { stdout: '', stderr: '', ...result }
-	}
-	return { shell, calls }
-}
-
-function fakeAmp(options: {
-	createThread?: () => unknown | Promise<unknown>
-	getThread?: (threadID: string) => unknown
-	shell?: ReturnType<typeof fakeShell>['shell']
-} = {}) {
-	let createCalls = 0
-	const hooks = new Map<string, (event: never, ctx?: never) => unknown>()
-	let registeredTool: { execute(input: Record<string, unknown>, ctx: unknown): Promise<unknown> } | undefined
-	let commandHandler: ((ctx: unknown) => Promise<void>) | undefined
-	const defaultShell = fakeShell()
+function fakeAmp() {
+	let command: ((ctx: unknown) => Promise<void>) | undefined
+	let commandMetadata: Record<string, unknown> | undefined
+	let getBuiltinAgentCalls = 0
+	const logs: string[] = []
 	const amp = {
-		logger: { log() {} },
-		on(event: string, handler: (event: never, ctx?: never) => unknown) {
-			hooks.set(event, handler)
-			return { unsubscribe() {} }
+		logger: { log(message: string) { logs.push(message) } },
+		helpers: {
+			filePathFromURI(uri: { toString(): string }) {
+				return decodeURIComponent(new URL(uri.toString()).pathname)
+			},
 		},
-		registerTool(tool: typeof registeredTool) {
-			registeredTool = tool
-			return { unsubscribe() {} }
-		},
-		registerCommand(_id: string, _metadata: unknown, handler: (ctx: unknown) => Promise<void>) {
-			commandHandler = handler
+		registerCommand(_id: string, metadata: Record<string, unknown>, handler: (ctx: unknown) => Promise<void>) {
+			commandMetadata = metadata
+			command = handler
 			return { unsubscribe() {}, setAvailability() {} }
 		},
 		getBuiltinAgent() {
-			return {
-				createThread: () => {
-					createCalls += 1
-					return Promise.resolve(options.createThread?.())
-				},
-			}
-		},
-		$: options.shell ?? defaultShell.shell,
-		threads: {
-			get: (threadID: string) => options.getThread?.(threadID) ?? { messages: async () => [] },
+			getBuiltinAgentCalls += 1
+			throw new Error('The command must not create a worker')
 		},
 	}
 	return {
 		amp,
-		hooks,
-		get tool() { return registeredTool },
-		get command() { return commandHandler },
-		get createCalls() { return createCalls },
-		defaultShell,
+		logs,
+		get command() { return command },
+		get commandMetadata() { return commandMetadata },
+		get getBuiltinAgentCalls() { return getBuiltinAgentCalls },
 	}
 }
 
-function context(id = parentID) {
-	return { thread: { id } }
+function commandContext(options: {
+	hint?: string
+	thread?: ReturnType<typeof fakeThread>['thread']
+	workspaceRoot?: URL | null
+} = {}) {
+	const notifications: string[] = []
+	let inputCalls = 0
+	return {
+		ctx: {
+			thread: options.thread,
+			system: {
+				workspaceRoot: options.workspaceRoot === undefined
+					? new URL('file:///workspace/agent-skills')
+					: options.workspaceRoot,
+			},
+			ui: {
+				async input() {
+					inputCalls += 1
+					return options.hint
+				},
+				async notify(message: string) {
+					notifications.push(message)
+				},
+			},
+		},
+		notifications,
+		get inputCalls() { return inputCalls },
+	}
 }
 
-function neverStartupGuard() {
-	return { promise: new Promise<never>(() => {}), cancel() {} }
-}
+describe('parent Task prompt', () => {
+	test('makes the parent synthesize live context into a standalone Task brief', () => {
+		const prompt = buildParentTaskPrompt(parentID, 'update DAT-594 from Slack', workspace, logseqRepo, today)
 
-describe('worker result protocol', () => {
-	test('accepts complete, partial, and verified failed results', () => {
-		expect(parseWorkerResult(JSON.stringify(completeResult)).ok).toBe(true)
-		expect(parseWorkerResult(JSON.stringify(partialResult)).ok).toBe(true)
-		expect(parseWorkerResult(JSON.stringify(failedResult)).ok).toBe(true)
+		expect(prompt).toStartWith('[logseq-log-current-task]')
+		expect(prompt).toContain('Call the built-in Task tool as your next action')
+		expect(prompt).toContain('Task starts with fresh context')
+		expect(prompt).toContain('Include each material fact once')
+		expect(prompt).toContain('Treat the Parent handoff as the primary intent source')
+		expect(prompt).toContain('use read_thread only to retrieve that fact')
+		expect(prompt).toContain('original user intent and any later redirect')
+		expect(prompt).toContain('work completed and its durable result')
+		expect(prompt).toContain('decisions, known blockers, and authority still required')
+		expect(prompt).toContain('actual task inputs and important deliverables')
+		expect(prompt.indexOf('### Parent handoff'))
+			.toBeLessThan(prompt.indexOf('### Runtime context'))
+		expect(prompt.indexOf('### Runtime context'))
+			.toBeLessThan(prompt.indexOf('### Intent boundary'))
+		expect(prompt.indexOf('### Intent boundary'))
+			.toBeLessThan(prompt.indexOf('### Logging contract'))
 	})
 
-	test.each([
-		['prose', `result: ${JSON.stringify(completeResult)}`],
-		['old version', JSON.stringify({ ...completeResult, version: 1 })],
-		['extra key', JSON.stringify({ ...completeResult, taskId: 'not-p0' })],
-		['missing parent update', JSON.stringify(Object.fromEntries(Object.entries(completeResult).filter(([key]) => key !== 'parentThreadUpdated')))],
-		['non-boolean parent update', JSON.stringify({ ...completeResult, parentThreadUpdated: 'yes' })],
-		['journal without backlog', JSON.stringify({ ...failedResult, journalVerified: true })],
-		['parent update without Logseq', JSON.stringify({ ...failedResult, parentThreadUpdated: true })],
-		['complete with error', JSON.stringify({ ...completeResult, error: 'contradiction' })],
-		['failed without error', JSON.stringify({ ...failedResult, error: null })],
-		['parent update failure without error', JSON.stringify({ ...completeResult, parentThreadUpdated: false, error: null })],
-	])('rejects %s', (_label, value) => {
-		expect(parseWorkerResult(value).ok).toBe(false)
-	})
-})
+	test('carries command context and the complete logging contract', () => {
+		const prompt = buildParentTaskPrompt(parentID, 'update DAT-594 from Slack', workspace, logseqRepo, today)
 
-describe('independent Logseq validation', () => {
-	const taskID = '14ad357e-9b55-414e-8de1-607ef93c72ea'
-	const activityID = '19c65474-045a-4ed2-a222-21c71dcd6249'
-	const today = '2026-07-21'
-	const backlog = `- ## Internal
-	- TODO DAT-745 Make the report reliable
-	  id:: ${taskID}
-	  updated-at:: ${today}
-	  project:: [[Internal]]
-	  priority:: #P1
-	  linear:: DAT-745
-	  input:: [1-Ampcode](${parentID}) [2-Linear](https://linear.app/holistics/issue/DAT-745/task)
-	  next-action:: Reconcile the unknown cohort
-		- Reviewed the current output
-		  id:: ${activityID}
-		  observed-at:: ${today}
-		  outcome:: Confirmed the report still needs correction
-`
-
-	test('accepts one complete parent-linked task and matching journal pointer', () => {
-		expect(validateLogseqWrite(backlog, `- TODO ((${taskID}))`, parentID, today)).toEqual({
-			backlogVerified: true,
-			journalVerified: true,
-			error: undefined,
-		})
+		expect(prompt).toContain(`Parent Amp thread: ${parentID}`)
+		expect(prompt).toContain(`Parent workspace: ${workspace}`)
+		expect(prompt).toContain(`Logseq graph: ${logseqRepo}`)
+		expect(prompt).toContain(`Today's date: 2026-09-03`)
+		expect(prompt).toContain(`Today's journal: ${logseqRepo}/journals/2026_09_03.md`)
+		expect(prompt).toContain('Optional user hint: update DAT-594 from Slack')
+		expect(prompt).toContain('If exactly one exists, update it')
+		expect(prompt).toContain('If none exists, create one')
+		expect(prompt).toContain('If several exist, reconcile them into one')
+		expect(prompt).toContain('Finish with exactly one actionable parent-linked task')
+		expect(prompt).toContain('Write the durable task or outcome to Backlog.md first')
+		expect(prompt).toContain('id:: <uuid>')
+		expect(prompt).toContain('next-action::')
+		expect(prompt).toContain('observed-at:: 2026-09-03')
+		expect(prompt).toContain('journal pointer to the same task UUID')
+		expect(prompt).toContain('Re-read Backlog.md and today\'s journal after mutation')
+		expect(prompt).toContain('Only after both files pass read-back, update parent thread T-parent')
+		expect(prompt).toContain('amp threads rename and amp threads label')
+		expect(prompt).toContain('task UUID, title, state, Backlog path, journal path')
+		expect(prompt).toContain('parent-linked task count, UUID uniqueness result')
+		expect(prompt).toContain('journal verification: the task UUID referenced by the journal pointer')
+		expect(prompt).not.toContain("read Backlog.md and today's journal yourself")
+		expect(prompt).toContain('That Task owns the file re-read or repair')
+		expect(prompt).toContain('Keep Task calls serial')
 	})
 
-	test('does not treat RFC-0012 as a Linear issue ID', () => {
-		const rfcBacklog = backlog
-			.replaceAll('DAT-745', 'RFC-0012')
-			.replace(`\t  linear:: RFC-0012\n`, '')
-		expect(validateLogseqWrite(rfcBacklog, `- TODO ((${taskID}))`, parentID, today)).toEqual({
-			backlogVerified: true,
-			journalVerified: true,
-			error: undefined,
-		})
-	})
-
-	test.each(['DAT-745', 'PS-123', 'DOC-123'])('requires a matching linear:: property for %s', (linearID) => {
-		const matchingBacklog = backlog.replaceAll('DAT-745', linearID)
-		const withoutLinear = matchingBacklog.replace(`\t  linear:: ${linearID}\n`, '')
-		const mismatchedLinear = matchingBacklog.replace(`linear:: ${linearID}`, 'linear:: DAT-999')
-
-		expect(validateLogseqWrite(matchingBacklog, `- TODO ((${taskID}))`, parentID, today).backlogVerified).toBe(true)
-		expect(validateLogseqWrite(withoutLinear, `- TODO ((${taskID}))`, parentID, today).error).toContain('linear:: must match')
-		expect(validateLogseqWrite(mismatchedLinear, `- TODO ((${taskID}))`, parentID, today).error).toContain('linear:: must match')
-	})
-
-	test.each([
-		['task UUID', `\t  id:: ${taskID}\n`, ''],
-		['project', '\t  project:: [[Internal]]\n', ''],
-		['priority', '\t  priority:: #P1\n', ''],
-		['updated date', `\t  updated-at:: ${today}\n`, ''],
-		['next action', '\t  next-action:: Reconcile the unknown cohort\n', ''],
-		['matching Linear property', '\t  linear:: DAT-745\n', ''],
-		['dated activity', `\t\t- Reviewed the current output\n\t\t  id:: ${activityID}\n\t\t  observed-at:: ${today}\n\t\t  outcome:: Confirmed the report still needs correction\n`, ''],
-	])('rejects a task missing %s', (_label, remove, replacement) => {
-		const result = validateLogseqWrite(backlog.replace(remove, replacement), `- TODO ((${taskID}))`, parentID, today)
-		expect(result.backlogVerified).toBe(false)
-		expect(result.journalVerified).toBe(false)
-		expect(result.error).toContain('Independent Logseq validation failed')
-	})
-
-	test('keeps a valid task partial when the journal does not reference its UUID', () => {
-		expect(validateLogseqWrite(backlog, '- TODO unrelated', parentID, today)).toEqual({
-			backlogVerified: true,
-			journalVerified: false,
-			error: 'Independent Logseq validation found no journal block reference to the parent-linked task.',
-		})
-	})
-
-	test('rejects duplicate parent-linked tasks', () => {
-		const result = validateLogseqWrite(`${backlog}\n${backlog}`, `- TODO ((${taskID}))`, parentID, today)
-		expect(result.backlogVerified).toBe(false)
-		expect(result.error).toContain('found 2 parent-linked Backlog tasks')
+	test('represents a blank hint explicitly', () => {
+		expect(buildParentTaskPrompt(parentID, '', workspace, logseqRepo, today)).toContain('Optional user hint: (none)')
 	})
 })
 
-describe('worker wait outcomes', () => {
-	test('consumes a fresh stored response', async () => {
-		const response = assistantResponse('stored')
-		const { worker } = fakeWorker({ state: 'idle', messages: () => [response] })
-		expect(await waitForWorkerOutcome(worker as never, undefined, neverStartupGuard(), 1)).toEqual({ kind: 'response', response })
+describe('queueLogCurrentTask', () => {
+	test('appends one normal user turn to the active parent thread', async () => {
+		const target = fakeThread()
+
+		await queueLogCurrentTask({ thread: target.thread } as never, 'keep TODO', workspace, logseqRepo, today)
+
+		expect(target.appended).toHaveLength(1)
+		expect(target.appended[0].type).toBe('user-message')
+		expect(target.appended[0].content).toContain('Optional user hint: keep TODO')
 	})
 
-	test.each(['running', 'awaiting-approval'])('does not consume a fresh stored response while the worker is %s', async (state) => {
-		const response = assistantResponse('intermediate')
-		const { worker } = fakeWorker({
-			state,
-			messages: () => [response],
-			waitForResponse: async () => { throw new Error('Timed out waiting for agent response') },
-		})
-		const outcome = await waitForWorkerOutcome(worker as never, undefined, neverStartupGuard(), 1)
-		expect(outcome.kind).toBe('pending')
-	})
-
-	test('does not consume a stored response when worker state is unresolved', async () => {
-		const response = assistantResponse('possibly-intermediate')
-		const { worker } = fakeWorker({
-			state: () => { throw new Error('state unavailable') },
-			messages: () => [response],
-			waitForResponse: async () => { throw new Error('Timed out waiting for agent response') },
-		})
-		const outcome = await waitForWorkerOutcome(worker as never, undefined, neverStartupGuard(), 1)
-		expect(outcome.kind).toBe('pending')
-	})
-
-	test('returns pending while a timed-out worker is running', async () => {
-		const { worker } = fakeWorker({ waitForResponse: async () => { throw new Error('Timed out waiting for agent response') } })
-		const outcome = await waitForWorkerOutcome(worker as never, undefined, neverStartupGuard(), 1)
-		expect(outcome.kind).toBe('pending')
-	})
-
-	test('still waits when the initial stored-response lookup fails', async () => {
-		const response = assistantResponse('awaited')
-		const { worker } = fakeWorker({
-			messages: async () => { throw new Error('Plugin thread.messages timed out') },
-			waitForResponse: () => response,
-		})
-		expect(await waitForWorkerOutcome(worker as never, undefined, neverStartupGuard(), 1)).toEqual({ kind: 'response', response })
-	})
-
-	test('returns failed for a typed worker error with no fresh response', async () => {
-		const { worker } = fakeWorker({ state: 'error', waitForResponse: async () => { throw new Error('worker failed') } })
-		const outcome = await waitForWorkerOutcome(worker as never, undefined, neverStartupGuard(), 1)
-		expect(outcome.kind).toBe('failed')
-	})
-
-	test('keeps waiting when Amp retries a transient worker error', async () => {
-		let state = 'running'
-		let waits = 0
-		const response = assistantResponse('recovered')
-		const { worker } = fakeWorker({
-			state: () => state,
-			subscribe: (onNext) => queueMicrotask(() => {
-				state = 'running'
-				onNext(state)
-			}),
-			waitForResponse: async () => {
-				waits += 1
-				if (waits === 1) {
-					state = 'error'
-					throw new Error('OpenAI WebSocket closed: 1006')
-				}
-				return response
-			},
-		})
-
-		expect(await waitForWorkerOutcome(worker as never, undefined, neverStartupGuard(), 20)).toEqual({ kind: 'response', response })
-		expect(waits).toBe(2)
-	})
-
-	test('never reuses the previous assistant message', async () => {
-		const previous = assistantResponse('previous')
-		const { worker } = fakeWorker({ messages: () => [previous], waitForResponse: () => previous })
-		const outcome = await waitForWorkerOutcome(worker as never, 'previous', neverStartupGuard(), 1)
-		expect(outcome.kind).toBe('pending')
-	})
-
-	test('isolates timeout compatibility strings', () => {
-		expect(classifyWorkerCompatibilityError(new Error('Plugin thread.messages timed out'))).toBe('thread-messages-timeout')
-		expect(classifyWorkerCompatibilityError(new Error('Timed out waiting for agent response'))).toBe('worker-response-timeout')
-		expect(classifyWorkerCompatibilityError(new Error('other'))).toBeNull()
-	})
-})
-
-describe('operation coordinator', () => {
-	test('completes Logseq and parent-thread work, archives the worker, then cleans up one operation', async () => {
-		const { worker, appended } = fakeWorker()
-		const harness = fakeAmp({ createThread: () => worker })
-		const operations: LogseqOperationStore = new Map()
-		const output = await logCurrentTask(harness.amp as never, context() as never, '', 500, operations, timing)
-
-		expect(output).toContain('Logseq: complete')
-		expect(output).toContain('Parent thread: complete')
-		expect(output).toContain('Archive: complete')
-		expect(harness.createCalls).toBe(1)
-		expect(appended).toHaveLength(1)
-		expect(appended[0]).toContain('Every newly created backlog task must follow the RFC-0008 task contract')
-		expect(appended[0]).toContain('id:: <uuid>')
-		expect(appended[0]).toContain('next-action::')
-		expect(appended[0]).toContain('observed-at::')
-		expect(appended[0]).toContain('outcome::')
-		expect(appended[0]).toContain('can a fresh agent safely act on every recorded fact')
-		expect(appended[0]).toContain('update parent Amp thread')
-		expect(appended[0]).toContain('amp threads label')
-		expect(appended[0]).toContain('exactly one actionable task')
-		expect(appended[0]).toContain('parentThreadUpdated requires both parent-thread commands')
-		expect(appended[0]).toContain('"version":2')
-		expect(harness.defaultShell.calls).toEqual(['amp threads archive {}'])
-		expect(operations.size).toBe(0)
-	})
-
-	test('does not wait for an unresolved worker creation notification', async () => {
-		const events: string[] = []
-		const { worker } = fakeWorker({ appendUserMessage: () => { events.push('append') } })
-		const harness = fakeAmp({ createThread: () => worker })
-		const operations: LogseqOperationStore = new Map()
-		const output = await logCurrentTask(harness.amp as never, context() as never, '', 500, operations, {
-			...timing,
-			onWorkerCreated: () => {
-				events.push('notify')
-				return new Promise(() => {})
-			},
-		})
-
-		expect(output).toContain('Logseq: complete')
-		expect(events).toEqual(['notify', 'append'])
-	})
-
-	test('continues when the worker creation notification rejects', async () => {
-		const { worker, appended } = fakeWorker()
-		const harness = fakeAmp({ createThread: () => worker })
-		const operations: LogseqOperationStore = new Map()
-		const output = await logCurrentTask(harness.amp as never, context() as never, '', 500, operations, {
-			...timing,
-			onWorkerCreated: async () => { throw new Error('notification failed') },
-		})
-
-		expect(output).toContain('Logseq: complete')
-		expect(appended).toHaveLength(1)
-	})
-
-	test('does not complete downstream stages when independent validation fails', async () => {
-		const { worker } = fakeWorker()
-		const harness = fakeAmp({ createThread: () => worker })
-		const operations: LogseqOperationStore = new Map()
-		const output = await logCurrentTask(harness.amp as never, context() as never, '', 500, operations, {
-			...timing,
-			verifyLogseqWrite: async () => ({
-				backlogVerified: false,
-				journalVerified: false,
-				error: 'Independent Logseq validation failed: missing task id::.',
-			}),
-		})
-
-		expect(output).toContain('Logseq: failed')
-		expect(output).toContain('Parent thread: complete')
-		expect(output).toContain('Archive: not-attempted')
-		expect(output).toContain('missing task id::')
-		expect(harness.defaultShell.calls).toHaveLength(0)
-		expect(operations.size).toBe(1)
-	})
-
-	test('returns pending and reuses one running worker', async () => {
-		const { worker, appended } = fakeWorker({ waitForResponse: async () => { throw new Error('Timed out waiting for agent response') } })
-		const harness = fakeAmp({ createThread: () => worker })
-		const operations: LogseqOperationStore = new Map()
-
-		const first = await logCurrentTask(harness.amp as never, context() as never, '', 500, operations, timing)
-		const second = await logCurrentTask(harness.amp as never, context() as never, '', 500, operations, timing)
-		expect(first).toContain('Worker: pending')
-		expect(second).toContain('Worker: pending')
-		expect(harness.createCalls).toBe(1)
-		expect(appended).toHaveLength(1)
-	})
-
-	test('recovers a completed worker after reload and removes its disposable checkpoint', async () => {
-		const checkpointDir = await mkdtemp(join(tmpdir(), 'logseq-manual-log-test-'))
-		let state = 'running'
-		const response = assistantResponse('recovered-response')
-		const { worker } = fakeWorker({
-			state: () => state,
-			messages: (options) => {
-				const request = options as { from?: string }
-				if (request.from === 'start') {
-					return [{ role: 'user', id: 'initial-prompt', content: [{ type: 'text', text: workerPrompt() }] }]
-				}
-				return state === 'idle' ? [response] : []
-			},
-			waitForResponse: async () => { throw new Error('Timed out waiting for agent response') },
-		})
-		const recoveryTiming = { ...timing, checkpointDir, workerTimeoutMs: 1 }
-
-		try {
-			const firstHarness = fakeAmp({ createThread: () => worker })
-			const first = await logCurrentTask(firstHarness.amp as never, context() as never, '', 500, new Map(), recoveryTiming)
-			expect(first).toContain('Worker: pending')
-			expect(JSON.parse(await readFile(join(checkpointDir, `${parentID}.json`), 'utf8'))).toEqual({
-				version: 1,
-				parentThreadID: parentID,
-				workerThreadID: workerID,
-			})
-
-			state = 'idle'
-			const secondHarness = fakeAmp({
-				createThread: () => { throw new Error('must not create another worker') },
-				getThread: () => worker,
-			})
-			const recovered = await logCurrentTask(secondHarness.amp as never, context() as never, '', 500, new Map(), recoveryTiming)
-			expect(recovered).toContain('Logseq: complete')
-			expect(recovered).toContain('Parent thread: complete')
-			expect(recovered).toContain('Archive: complete')
-			expect(secondHarness.createCalls).toBe(0)
-			expect(access(join(checkpointDir, `${parentID}.json`))).rejects.toThrow()
-		} finally {
-			await rm(checkpointDir, { recursive: true, force: true })
-		}
-	})
-
-	test('recovers a parent-update failure after reload and repairs it on the next invocation', async () => {
-		const checkpointDir = await mkdtemp(join(tmpdir(), 'logseq-manual-log-test-'))
-		await writeRecoveryCheckpoint(checkpointDir)
-		const failedResponse = assistantResponse('parent-update-failed', parentUpdateFailedResult)
-		const completeResponse = assistantResponse('parent-update-complete', completeResult)
-		const recovered = fakeWorker({
-			state: 'idle',
-			messages: (options) => {
-				const request = options as { from?: string; roles?: string[] }
-				if (request.from === 'start') return [{ role: 'user', id: 'initial-prompt', content: [{ type: 'text', text: workerPrompt() }] }]
-				return request.roles?.includes('assistant') ? [failedResponse] : [failedResponse]
-			},
-			waitForResponse: () => completeResponse,
-		})
-		const harness = fakeAmp({
-			createThread: () => { throw new Error('must not create another worker') },
-			getThread: () => recovered.worker,
-		})
-		const operations: LogseqOperationStore = new Map()
-
-		try {
-			const replayed = await logCurrentTask(harness.amp as never, context() as never, '', 500, operations, { ...timing, checkpointDir })
-			expect(replayed).toContain('Parent thread: failed')
-			expect(recovered.appended).toHaveLength(0)
-			expect(access(join(checkpointDir, `${parentID}.json`))).resolves.toBeNull()
-
-			const repaired = await logCurrentTask(harness.amp as never, context() as never, '', 500, operations, { ...timing, checkpointDir })
-			expect(repaired).toContain('Parent thread: complete')
-			expect(repaired).toContain('Archive: complete')
-			expect(recovered.appended).toHaveLength(1)
-			expect(recovered.appended[0]).toContain('Reapply both idempotent commands')
-			expect(harness.createCalls).toBe(0)
-			expect(access(join(checkpointDir, `${parentID}.json`))).rejects.toThrow()
-		} finally {
-			await rm(checkpointDir, { recursive: true, force: true })
-		}
-	})
-
-	test('does not prompt a worker until its checkpoint can be written', async () => {
-		const root = await mkdtemp(join(tmpdir(), 'logseq-manual-log-test-'))
-		const checkpointDir = join(root, 'blocked')
-		await mkdir(checkpointDir)
-		await chmod(checkpointDir, 0o500)
-		const { worker, appended } = fakeWorker()
-		const harness = fakeAmp({ createThread: () => worker })
-		const operations: LogseqOperationStore = new Map()
-		const recoveryTiming = { ...timing, checkpointDir }
-
-		try {
-			const first = await logCurrentTask(harness.amp as never, context() as never, '', 500, operations, recoveryTiming)
-			expect(first).toContain('Checkpoint write failed; worker prompt was not sent')
-			expect(appended).toHaveLength(0)
-			expect(harness.createCalls).toBe(1)
-
-			await chmod(checkpointDir, 0o700)
-			const second = await logCurrentTask(harness.amp as never, context() as never, '', 500, operations, recoveryTiming)
-			expect(second).toContain('Logseq: complete')
-			expect(appended).toHaveLength(1)
-			expect(harness.createCalls).toBe(1)
-		} finally {
-			await rm(root, { recursive: true, force: true })
-		}
-	})
-
-	test.each([
-		['an unrelated first message', 'unrelated work'],
-		['a prompt bound to another parent', workerPrompt('T-other-parent')],
-	])('discards a checkpoint with %s without prompting that thread', async (_label, initialText) => {
-		const checkpointDir = await mkdtemp(join(tmpdir(), 'logseq-manual-log-test-'))
-		await writeRecoveryCheckpoint(checkpointDir)
-		const stale = fakeWorker({ messages: () => [{ role: 'user', id: 'wrong-prompt', content: [{ type: 'text', text: initialText }] }] })
-		const replacement = fakeWorker({ id: 'T-replacement-worker' })
-		const harness = fakeAmp({ createThread: () => replacement.worker, getThread: () => stale.worker })
-
-		try {
-			const output = await logCurrentTask(harness.amp as never, context() as never, '', 500, new Map(), { ...timing, checkpointDir })
-			expect(output).toContain('Logseq: complete')
-			expect(stale.appended).toHaveLength(0)
-			expect(replacement.appended).toHaveLength(1)
-			expect(harness.createCalls).toBe(1)
-		} finally {
-			await rm(checkpointDir, { recursive: true, force: true })
-		}
-	})
-
-	test('prompts an empty checkpointed worker exactly once', async () => {
-		const checkpointDir = await mkdtemp(join(tmpdir(), 'logseq-manual-log-test-'))
-		await writeRecoveryCheckpoint(checkpointDir)
-		const recovered = fakeWorker({ messages: () => [] })
-		const harness = fakeAmp({
-			createThread: () => { throw new Error('must not create another worker') },
-			getThread: () => recovered.worker,
-		})
-
-		try {
-			const output = await logCurrentTask(harness.amp as never, context() as never, '', 500, new Map(), { ...timing, checkpointDir })
-			expect(output).toContain('Logseq: complete')
-			expect(recovered.appended).toHaveLength(1)
-			expect(harness.createCalls).toBe(0)
-		} finally {
-			await rm(checkpointDir, { recursive: true, force: true })
-		}
-	})
-
-	test('does not reuse a response that predates a queued repair after reload', async () => {
-		const checkpointDir = await mkdtemp(join(tmpdir(), 'logseq-manual-log-test-'))
-		await writeRecoveryCheckpoint(checkpointDir)
-		const previousResponse = assistantResponse('partial-response', partialResult)
-		const repairMessage = { role: 'user', id: 'repair-prompt', content: [{ type: 'text', text: '[logseq-manual-log]\nrepair' }] }
-		const recovered = fakeWorker({
-			state: 'idle',
-			messages: (options) => {
-				const request = options as { from?: string; roles?: string[] }
-				if (request.from === 'start') return [{ role: 'user', id: 'initial-prompt', content: [{ type: 'text', text: workerPrompt() }] }]
-				return request.roles?.includes('user') ? [repairMessage] : [previousResponse]
-			},
-			waitForResponse: async () => { throw new Error('Timed out waiting for agent response') },
-		})
-		const operations: LogseqOperationStore = new Map()
-		const harness = fakeAmp({ getThread: () => recovered.worker })
-
-		try {
-			const output = await logCurrentTask(harness.amp as never, context() as never, '', 500, operations, { ...timing, checkpointDir, workerTimeoutMs: 1 })
-			expect(output).toContain('Worker: pending')
-			expect(output).toContain('Logseq: unverified')
-			expect(recovered.appended).toHaveLength(0)
-			expect(operations.get(parentID)?.lastConsumedAssistantMessageID).toBe('partial-response')
-		} finally {
-			await rm(checkpointDir, { recursive: true, force: true })
-		}
-	})
-
-	test('retries worker archiving after reload', async () => {
-		const checkpointDir = await mkdtemp(join(tmpdir(), 'logseq-manual-log-test-'))
-		let state = 'running'
-		let failedCalls = 0
-		const response = assistantResponse('complete-response')
-		const recovered = fakeWorker({
-			state: () => state,
-			messages: (options) => {
-				const request = options as { from?: string }
-				if (request.from === 'start') return [{ role: 'user', id: 'initial-prompt', content: [{ type: 'text', text: workerPrompt() }] }]
-				return state === 'idle' ? [response] : []
-			},
-			waitForResponse: () => response,
-		})
-		const shell = fakeShell((command) => {
-			if (!command.includes('archive')) return { exitCode: 0 }
-			failedCalls += 1
-			return failedCalls === 1 ? { exitCode: 1, stderr: 'archive failed' } : { exitCode: 0 }
-		})
-		const recoveryTiming = { ...timing, checkpointDir }
-
-		try {
-			const firstHarness = fakeAmp({ createThread: () => recovered.worker, shell: shell.shell })
-			const first = await logCurrentTask(firstHarness.amp as never, context() as never, '', 500, new Map(), recoveryTiming)
-			expect(first).toContain('Archive: failed')
-
-			state = 'idle'
-			const secondHarness = fakeAmp({
-				createThread: () => { throw new Error('must not create another worker') },
-				getThread: () => recovered.worker,
-				shell: shell.shell,
-			})
-			const second = await logCurrentTask(secondHarness.amp as never, context() as never, '', 500, new Map(), recoveryTiming)
-			expect(second).toContain('Parent thread: complete')
-			expect(second).toContain('Archive: complete')
-			expect(secondHarness.createCalls).toBe(0)
-			expect(recovered.appended).toHaveLength(1)
-			expect(failedCalls).toBe(2)
-			expect(access(join(checkpointDir, `${parentID}.json`))).rejects.toThrow()
-		} finally {
-			await rm(checkpointDir, { recursive: true, force: true })
-		}
-	})
-
-	test('serializes concurrent calls during worker creation', async () => {
-		const creation = deferred<unknown>()
-		const { worker } = fakeWorker()
-		const harness = fakeAmp({ createThread: () => creation.promise })
-		const operations: LogseqOperationStore = new Map()
-		const first = logCurrentTask(harness.amp as never, context() as never, '', 500, operations, { ...timing, startupTimeoutMs: 100 })
-		await Promise.resolve()
-		const second = await logCurrentTask(harness.amp as never, context() as never, '', 500, operations, timing)
-		expect(second).toContain('already reconciling')
-		expect(harness.createCalls).toBe(1)
-		creation.resolve(worker)
-		await first
-	})
-
-	test('serializes concurrent calls during archive', async () => {
-		const archive = deferred<{ exitCode: number }>()
-		const { worker } = fakeWorker()
-		const shell = fakeShell((command) => command.includes('archive') ? archive.promise : { exitCode: 0 })
-		const harness = fakeAmp({ createThread: () => worker, shell: shell.shell })
-		const operations: LogseqOperationStore = new Map()
-		const first = logCurrentTask(harness.amp as never, context() as never, '', 500, operations, timing)
-		while (!shell.calls.some((call) => call.includes('archive'))) await Promise.resolve()
-		const second = await logCurrentTask(harness.amp as never, context() as never, '', 500, operations, timing)
-		expect(second).toContain('already reconciling')
-		expect(shell.calls.filter((call) => call.includes('archive'))).toHaveLength(1)
-		archive.resolve({ exitCode: 0 })
-		await first
-	})
-
-	test('keeps Logseq complete and asks the worker to retry a failed parent-thread update', async () => {
-		const responses = [assistantResponse('first', parentUpdateFailedResult), assistantResponse('second', completeResult)]
-		const { worker, appended } = fakeWorker({ waitForResponse: () => responses.shift()! })
-		const harness = fakeAmp({ createThread: () => worker })
-		const operations: LogseqOperationStore = new Map()
-
-		const first = await logCurrentTask(harness.amp as never, context() as never, '', 500, operations, timing)
-		expect(first).toContain('Logseq: complete')
-		expect(first).toContain('Parent thread: failed')
-		expect(first).toContain('Archive: not-attempted')
-		expect(harness.defaultShell.calls).toHaveLength(0)
-		expect(first.match(/Parent thread rename failed\./g)).toHaveLength(1)
-		const second = await logCurrentTask(harness.amp as never, context() as never, '', 500, operations, timing)
-		expect(second).toContain('Parent thread: complete')
-		expect(second).toContain('Archive: complete')
-		expect(appended).toHaveLength(2)
-		expect(appended[1]).toContain('amp threads rename')
-		expect(appended[1]).toContain('amp threads label')
-		expect(operations.size).toBe(0)
-	})
-
-	test('preserves Logseq success across archive failure', async () => {
-		const { worker } = fakeWorker()
-		const shell = fakeShell((command) => command.includes('archive') ? { exitCode: 1, stderr: 'archive failed' } : { exitCode: 0 })
-		const harness = fakeAmp({ createThread: () => worker, shell: shell.shell })
-		const operations: LogseqOperationStore = new Map()
-		const output = await logCurrentTask(harness.amp as never, context() as never, '', 500, operations, timing)
-		expect(output).toContain('Logseq: complete')
-		expect(output).toContain('Parent thread: complete')
-		expect(output).toContain('Archive: failed')
-		expect(operations.size).toBe(1)
-	})
-
-	test.each([
-		['partial', partialResult],
-		['malformed', 'not json'],
-		['verified failure', failedResult],
-		['parent-thread failure', parentUpdateFailedResult],
-	])('reconciles %s through the same worker', async (_label, firstResult) => {
-		const responses = [assistantResponse('first', firstResult), assistantResponse('second', completeResult)]
-		const { worker, appended } = fakeWorker({ waitForResponse: () => responses.shift()! })
-		const harness = fakeAmp({ createThread: () => worker })
-		const operations: LogseqOperationStore = new Map()
-
-		await logCurrentTask(harness.amp as never, context() as never, '', 500, operations, timing)
-		const output = await logCurrentTask(harness.amp as never, context() as never, '', 500, operations, timing)
-		expect(output).toContain('Logseq: complete')
-		expect(harness.createCalls).toBe(1)
-		expect(appended).toHaveLength(2)
-		expect(appended[1]).toContain('do not create a duplicate task')
-		expect(appended[1]).toContain('RFC-0008 task contract')
-		expect(appended[1]).toContain('observed-at::')
-		expect(appended[1]).toContain('can a fresh agent safely act on every recorded fact')
-		expect(appended[1]).toContain('exactly one actionable task')
-		expect(appended[1]).toContain('parentThreadUpdated requires both parent-thread commands')
-		expect(appended[1]).toContain('"version":2')
-	})
-
-	test('preserves prior partial verification when a repair result is malformed', async () => {
-		const responses = [assistantResponse('first', partialResult), assistantResponse('second', 'not json')]
-		const { worker } = fakeWorker({ waitForResponse: () => responses.shift()! })
-		const harness = fakeAmp({ createThread: () => worker })
-		const operations: LogseqOperationStore = new Map()
-
-		await logCurrentTask(harness.amp as never, context() as never, '', 500, operations, timing)
-		const output = await logCurrentTask(harness.amp as never, context() as never, '', 500, operations, timing)
-		expect(output).toContain('Logseq: partial')
-		expect(output).toContain('must be exactly one unfenced JSON object')
-	})
-
-	test('releases a typed-error worker so a later invocation can start a fresh worker', async () => {
-		const failedWorker = fakeWorker({
-			id: 'T-failed-worker',
-			state: 'error',
-			waitForResponse: async () => { throw new Error('worker failed') },
-		})
-		const replacementWorker = fakeWorker({ id: 'T-replacement-worker' })
-		const workers = [failedWorker.worker, replacementWorker.worker]
-		const harness = fakeAmp({ createThread: () => workers.shift() })
-		const operations: LogseqOperationStore = new Map()
-
-		const first = await logCurrentTask(harness.amp as never, context() as never, '', 500, operations, timing)
-		expect(first).toContain('Worker: failed')
-		expect(first).toContain('Logseq: unverified')
-		expect(operations.size).toBe(0)
-
-		const second = await logCurrentTask(harness.amp as never, context() as never, '', 500, operations, timing)
-		expect(second).toContain('Logseq: complete')
-		expect(harness.createCalls).toBe(2)
-		expect(failedWorker.appended).toHaveLength(1)
-		expect(replacementWorker.appended).toHaveLength(1)
-	})
-
-	test('does not append another repair while one is processing', async () => {
-		const repair = deferred<unknown>()
-		const responses = [assistantResponse('first', partialResult)]
-		const { worker, appended } = fakeWorker({
-			waitForResponse: () => responses.length ? responses.shift()! : repair.promise,
-		})
-		const harness = fakeAmp({ createThread: () => worker })
-		const operations: LogseqOperationStore = new Map()
-		await logCurrentTask(harness.amp as never, context() as never, '', 500, operations, timing)
-
-		const second = logCurrentTask(harness.amp as never, context() as never, '', 500, operations, { ...timing, workerTimeoutMs: 100 })
-		while (appended.length < 2) await Promise.resolve()
-		const third = await logCurrentTask(harness.amp as never, context() as never, '', 500, operations, timing)
-		expect(third).toContain('already reconciling')
-		expect(appended).toHaveLength(2)
-		repair.resolve(assistantResponse('second', completeResult))
-		await second
-	})
-
-	test('accepts a fresh stored response when append settlement is unresolved', async () => {
-		const response = assistantResponse('stored-after-append')
-		const { worker, appended } = fakeWorker({
-			state: 'idle',
-			appendUserMessage: () => new Promise(() => {}),
-			messages: () => [response],
-		})
-		const harness = fakeAmp({ createThread: () => worker })
-		const operations: LogseqOperationStore = new Map()
-		const output = await logCurrentTask(harness.amp as never, context() as never, '', 500, operations, { ...timing, startupTimeoutMs: 1 })
-		expect(output).toContain('Logseq: complete')
-		expect(appended).toHaveLength(1)
-	})
-
-	test('does not consume or append after a fresh intermediate message from a running worker', async () => {
-		const response = assistantResponse('intermediate')
-		const { worker, appended } = fakeWorker({
-			state: 'running',
-			messages: () => [response],
-			waitForResponse: async () => { throw new Error('Timed out waiting for agent response') },
-		})
-		const harness = fakeAmp({ createThread: () => worker })
-		const operations: LogseqOperationStore = new Map()
-
-		const first = await logCurrentTask(harness.amp as never, context() as never, '', 500, operations, timing)
-		const second = await logCurrentTask(harness.amp as never, context() as never, '', 500, operations, timing)
-		expect(first).toContain('Worker: pending')
-		expect(second).toContain('Worker: pending')
-		expect(appended).toHaveLength(1)
-		expect(operations.get(parentID)?.lastConsumedAssistantMessageID).toBeUndefined()
-	})
-
-	test('does not duplicate an unresolved initial append', async () => {
-		const { worker, appended } = fakeWorker({
-			appendUserMessage: () => new Promise(() => {}),
-			waitForResponse: async () => { throw new Error('Timed out waiting for agent response') },
-		})
-		const harness = fakeAmp({ createThread: () => worker })
-		const operations: LogseqOperationStore = new Map()
-		const shortTiming = { startupTimeoutMs: 1, workerTimeoutMs: 1 }
-		await logCurrentTask(harness.amp as never, context() as never, '', 500, operations, shortTiming)
-		const output = await logCurrentTask(harness.amp as never, context() as never, '', 500, operations, shortTiming)
-		expect(output).toContain('Worker: pending')
-		expect(appended).toHaveLength(1)
-	})
-
-	test('does not duplicate an unresolved repair append', async () => {
-		let appendCalls = 0
-		const responses = [assistantResponse('first', partialResult)]
-		const { worker, appended } = fakeWorker({
-			appendUserMessage: () => {
-				appendCalls += 1
-				return appendCalls === 1 ? undefined : new Promise(() => {})
-			},
-			waitForResponse: () => responses.length
-				? responses.shift()!
-				: Promise.reject(new Error('Timed out waiting for agent response')),
-		})
-		const harness = fakeAmp({ createThread: () => worker })
-		const operations: LogseqOperationStore = new Map()
-		const shortTiming = { startupTimeoutMs: 1, workerTimeoutMs: 1 }
-		await logCurrentTask(harness.amp as never, context() as never, '', 500, operations, shortTiming)
-		await logCurrentTask(harness.amp as never, context() as never, '', 500, operations, shortTiming)
-		const output = await logCurrentTask(harness.amp as never, context() as never, '', 500, operations, shortTiming)
-		expect(output).toContain('Worker: pending')
-		expect(appended).toHaveLength(2)
-	})
-
-	test('keeps unresolved creation owned without a worker ID', async () => {
-		const harness = fakeAmp({ createThread: () => new Promise(() => {}) })
-		const operations: LogseqOperationStore = new Map()
-		const output = await logCurrentTask(harness.amp as never, context() as never, '', 500, operations, { ...timing, startupTimeoutMs: 1 })
-		expect(output).toContain('Worker: pending (ID not assigned yet)')
-		expect(operations.size).toBe(1)
-	})
-
-	test('adopts a delayed creation result without creating another worker', async () => {
-		const creation = deferred<unknown>()
-		const { worker } = fakeWorker()
-		const harness = fakeAmp({ createThread: () => creation.promise })
-		const operations: LogseqOperationStore = new Map()
-		const notifications: string[] = []
-		const shortTiming = {
-			startupTimeoutMs: 1,
-			workerTimeoutMs: 20,
-			onWorkerCreated: (id: string) => { notifications.push(id) },
-		}
-
-		const first = await logCurrentTask(harness.amp as never, context() as never, '', 500, operations, shortTiming)
-		expect(first).toContain('Worker: pending (ID not assigned yet)')
-		creation.resolve(worker)
-		await Promise.resolve()
-		expect(notifications).toEqual([workerID])
-		const second = await logCurrentTask(harness.amp as never, context() as never, '', 500, operations, timing)
-		expect(second).toContain('Logseq: complete')
-		expect(harness.createCalls).toBe(1)
-		expect(notifications).toEqual([workerID])
-	})
-
-	test('keeps rejected creation owned because remote acceptance is unknown', async () => {
-		const harness = fakeAmp({ createThread: () => Promise.reject(new Error('transport rejected')) })
-		const operations: LogseqOperationStore = new Map()
-		const notifications: string[] = []
-		const rejectionTiming = { ...timing, onWorkerCreated: (id: string) => { notifications.push(id) } }
-		const first = await logCurrentTask(harness.amp as never, context() as never, '', 500, operations, rejectionTiming)
-		const second = await logCurrentTask(harness.amp as never, context() as never, '', 500, operations, rejectionTiming)
-		expect(first).toContain('Worker: pending (ID not assigned yet)')
-		expect(second).toContain('Worker: pending (ID not assigned yet)')
-		expect(harness.createCalls).toBe(1)
-		expect(notifications).toEqual([])
-	})
-
-	test('releases a definite synchronous creation failure', async () => {
-		const harness = fakeAmp({ createThread: () => { throw new Error('invalid create request') } })
-		const operations: LogseqOperationStore = new Map()
-		const output = await logCurrentTask(harness.amp as never, context() as never, '', 500, operations, timing)
-		expect(output).toContain('Worker: failed (ID not assigned yet)')
-		expect(output).toContain('invalid create request')
-		expect(operations.size).toBe(0)
-	})
-
-	test('keeps a rejected append owned when message acceptance is unknown', async () => {
-		const { worker, appended } = fakeWorker({
-			appendUserMessage: async () => { throw new Error('transport rejected') },
-			waitForResponse: async () => { throw new Error('Timed out waiting for agent response') },
-		})
-		const harness = fakeAmp({ createThread: () => worker })
-		const operations: LogseqOperationStore = new Map()
-
-		const first = await logCurrentTask(harness.amp as never, context() as never, '', 500, operations, timing)
-		const second = await logCurrentTask(harness.amp as never, context() as never, '', 500, operations, timing)
-		expect(first).toContain('Worker: pending')
-		expect(second).toContain('Worker: pending')
-		expect(harness.createCalls).toBe(1)
-		expect(appended).toHaveLength(1)
-	})
-
-	test('retries a synchronous append failure on the same worker', async () => {
-		let appendCalls = 0
-		const { worker, appended } = fakeWorker({
-			appendUserMessage: () => {
-				appendCalls += 1
-				if (appendCalls === 1) throw new Error('invalid append request')
-			},
-		})
-		const harness = fakeAmp({ createThread: () => worker })
-		const operations: LogseqOperationStore = new Map()
-
-		const first = await logCurrentTask(harness.amp as never, context() as never, '', 500, operations, timing)
-		expect(first).toContain('Worker: pending')
-		expect(first).toContain('failed before acceptance')
-		expect(operations.size).toBe(1)
-
-		const second = await logCurrentTask(harness.amp as never, context() as never, '', 500, operations, timing)
-		expect(second).toContain('Logseq: complete')
-		expect(harness.createCalls).toBe(1)
-		expect(appended).toHaveLength(2)
-	})
-
-	test('keeps different parent operations independent', async () => {
-		const firstWorker = fakeWorker({ id: 'T-worker-1', waitForResponse: async () => { throw new Error('Timed out waiting for agent response') } }).worker
-		const secondWorker = fakeWorker({ id: 'T-worker-2', waitForResponse: async () => { throw new Error('Timed out waiting for agent response') } }).worker
-		const workers = [firstWorker, secondWorker]
-		const harness = fakeAmp({ createThread: () => workers.shift() })
-		const operations: LogseqOperationStore = new Map()
-		await Promise.all([
-			logCurrentTask(harness.amp as never, context('T-parent-1') as never, '', 500, operations, timing),
-			logCurrentTask(harness.amp as never, context('T-parent-2') as never, '', 500, operations, timing),
-		])
-		expect(harness.createCalls).toBe(2)
-		expect(operations.size).toBe(2)
+	test('requires an active thread', async () => {
+		expect(queueLogCurrentTask({ thread: undefined } as never, '', workspace, logseqRepo, today))
+			.rejects.toThrow('Open an Amp thread')
 	})
 })
 
 describe('command-only plugin surface', () => {
-	test('registers one command without an agent tool or lifecycle routing', () => {
+	test('registers the command without creating a hidden worker', () => {
 		const harness = fakeAmp()
-		plugin(harness.amp as never, { checkpointDir: null })
+
+		plugin(harness.amp as never)
+
 		expect(harness.command).toBeFunction()
-		expect(harness.tool).toBeUndefined()
-		expect([...harness.hooks.keys()]).toEqual([])
+		expect(harness.commandMetadata).toMatchObject({
+			title: 'Log Current Task',
+			category: 'Logseq',
+		})
+		expect(harness.getBuiltinAgentCalls).toBe(0)
 	})
 
-	test('notifies when the Logseq worker thread is created', async () => {
-		const events: string[] = []
-		const { worker } = fakeWorker({ waitForResponse: () => {
-			events.push('wait')
-			return assistantResponse('response-1')
-		} })
-		const harness = fakeAmp({ createThread: () => worker })
-		const notifications: string[] = []
-		plugin(harness.amp as never, { checkpointDir: null })
+	test('queues a trimmed hint in the current thread and reports delivery', async () => {
+		const harness = fakeAmp()
+		const target = fakeThread()
+		const command = commandContext({ hint: '  update DAT-594  ', thread: target.thread })
+		plugin(harness.amp as never)
 
-		await harness.command!({
-			thread: { id: parentID },
-			ui: {
-				input: async () => '',
-				notify: async (message: string) => {
-					notifications.push(message)
-					events.push(message.startsWith('Logseq Amp thread created:') ? 'notify-created' : 'notify-result')
-				},
-			},
-		} as never)
+		await harness.command!(command.ctx as never)
 
-		expect(notifications[0]).toBe(`Logseq Amp thread created: ${workerID}`)
-		expect(notifications[1]).toContain('Worker: result-received')
-		expect(events).toEqual(['notify-created', 'wait', 'notify-result'])
+		expect(target.appended).toHaveLength(1)
+		expect(target.appended[0].content).toContain('Optional user hint: update DAT-594')
+		expect(target.appended[0].content).toContain('Parent workspace: /workspace/agent-skills')
+		expect(command.notifications).toEqual([
+			'Logseq logging queued in this thread. The parent agent will delegate it through Task.',
+		])
+		expect(harness.getBuiltinAgentCalls).toBe(0)
 	})
 
+	test('does not open the prompt or append when no thread is active', async () => {
+		const harness = fakeAmp()
+		const command = commandContext()
+		plugin(harness.amp as never)
+
+		await harness.command!(command.ctx as never)
+
+		expect(command.inputCalls).toBe(0)
+		expect(command.notifications).toEqual([
+			'Open an Amp thread before running Logseq: Log Current Task.',
+		])
+	})
+
+	test('does not append when the user cancels', async () => {
+		const harness = fakeAmp()
+		const target = fakeThread()
+		const command = commandContext({ hint: undefined, thread: target.thread })
+		plugin(harness.amp as never)
+
+		await harness.command!(command.ctx as never)
+
+		expect(target.appended).toHaveLength(0)
+		expect(command.notifications).toEqual(['Logseq logging cancelled.'])
+	})
+
+	test('represents a missing active workspace without using the plugin process directory', async () => {
+		const harness = fakeAmp()
+		const target = fakeThread()
+		const command = commandContext({ hint: '', thread: target.thread, workspaceRoot: null })
+		plugin(harness.amp as never)
+
+		await harness.command!(command.ctx as never)
+
+		expect(target.appended).toHaveLength(1)
+		expect(target.appended[0].content).toContain('Parent workspace: (none)')
+		expect(target.appended[0].content).not.toContain(process.cwd())
+	})
+
+	test('reports delivery failure without claiming the turn was queued', async () => {
+		const harness = fakeAmp()
+		const target = fakeThread({ appendError: new Error('thread unavailable') })
+		const command = commandContext({ hint: '', thread: target.thread })
+		plugin(harness.amp as never)
+
+		await harness.command!(command.ctx as never)
+
+		expect(target.appended).toHaveLength(0)
+		expect(command.notifications).toEqual(['Could not queue Logseq logging: thread unavailable'])
+		expect(harness.logs).toContain('[logseq-manual-log] parent turn delivery failed: thread unavailable')
+	})
 })
