@@ -3,7 +3,7 @@ doc_schema: "amp-artifact/v2"
 title: "Amp ChatGPT subscription selector"
 slug: "amp-chatgpt-subscription-selector"
 status: "active"
-summary: "Keeps a preferred ChatGPT subscription active in Amp until either Codex quota window has 5% remaining."
+summary: "Keeps a preferred ChatGPT subscription active in Amp until an available Codex quota window is at or below a configured remaining threshold."
 artifact:
   id: "amp-chatgpt-subscription-selector"
   type: "local_cli"
@@ -21,7 +21,7 @@ amp:
   docs_sources:
     api_docs: null
     agent_options: null
-  last_verified: "2026-08-27"
+  last_verified: "2026-09-03"
 contract:
   input_kind: "command_line_arguments"
   output_kind: "active_amp_model_provider_and_local_status"
@@ -63,10 +63,11 @@ safety:
   permission_level: "local-process-management-and-remote-account-write"
   user_gate: "manual installation or explicit invocation"
   constraints:
-    - "Selects the fallback when either preferred quota window has 5% or less remaining."
-    - "Selects the preferred subscription only when both quota windows have more than 5% remaining."
+    - "Selects the fallback when any available preferred quota window is at or below the configured remaining threshold."
+    - "Selects the preferred subscription only when every available quota window is above the configured remaining threshold."
+    - "Ignores a quota window that the provider explicitly disables with a duration of 0 minutes."
     - "Uses complete quota headers from a usage-limit response even when Amp exits with an error."
-    - "Preserves the active subscription when the response omits either expected window."
+    - "Preserves the active subscription when the response omits either window header pair or provides no supported active window."
     - "Activates a subscription only when the selected connection is not already active."
   risks:
     - "Each check sends a small test inference request through the preferred subscription."
@@ -83,7 +84,7 @@ tags:
 
 ## Summary
 
-`amp-chatgpt-subscription-selector` keeps the primary ChatGPT subscription active in Amp while both Codex quota windows have more than 5% remaining. It activates the secondary subscription when either window reaches 5% remaining.
+`amp-chatgpt-subscription-selector` keeps the primary ChatGPT subscription active in Amp while every available Codex quota window is above your configured remaining threshold. It activates the secondary subscription when any available window is at or below that threshold.
 
 ## Invocation
 
@@ -100,19 +101,19 @@ The LaunchAgent checks every 5 minutes. Each check tests the preferred connectio
 - `x-codex-primary-window-minutes` and `x-codex-primary-used-percent`
 - `x-codex-secondary-window-minutes` and `x-codex-secondary-used-percent`
 
-The selector identifies the 5-hour window as 300 minutes and the weekly window as 10,080 minutes. Header order does not affect the result.
+The selector identifies the 5-hour window as 300 minutes and the weekly window as 10,080 minutes. Header order does not affect the result. Some plans explicitly disable one window by reporting a duration of 0 minutes; the selector ignores that window and evaluates the remaining supported window.
 
-The selector activates the fallback when either preferred window has 5% or less remaining. It switches back when both windows have more than 5% remaining.
+The selector activates the fallback when any available preferred window is at or below the configured remaining threshold. It switches back when every available window is above that threshold. You set the threshold during installation.
 
 The selector does not read local Codex CLI authentication and does not require a Codex CLI sign-in. `amp config model-providers test CONNECTION_ID` tests the ChatGPT subscription already linked to Amp and returns its Codex quota headers.
 
 ## Behavior
 
-The command runs `amp config model-providers test` for the preferred connection. This sends a small inference request and returns current quota headers. Amp can exit with an error when the subscription has reached its limit. The selector still uses the response when it contains both expected quota windows.
+The command runs `amp config model-providers test` for the preferred connection. This sends a small inference request and returns current quota headers. Amp can exit with an error when the subscription has reached its limit. The selector still uses the response when it contains both header pairs and at least one supported active window.
 
 The command calculates remaining quota as `100 - used_percent`. It checks the selected connection with `amp config model-providers show`. It runs `amp config model-providers activate` only when a change is needed.
 
-A kernel-managed file lock prevents checks, installation and removal from overlapping. A response with a missing window, invalid percentage or invalid provider state leaves the current subscription active and records a failed result.
+A kernel-managed file lock prevents checks, installation and removal from overlapping. A response with a missing window header pair, no supported active window, invalid percentage or invalid provider state leaves the current subscription active and records a failed result.
 
 ## Permissions and side effects
 
@@ -127,7 +128,8 @@ Install and start the 5-minute check:
 ```bash
 amp-chatgpt-subscription-selector install \
   --preferred 00000000-0000-4000-8000-000000000001 \
-  --fallback 00000000-0000-4000-8000-000000000002
+  --fallback 00000000-0000-4000-8000-000000000002 \
+  --threshold PERCENT
 ```
 
 Run a check or inspect the latest result:
@@ -146,7 +148,7 @@ amp-chatgpt-subscription-selector uninstall
 ## Troubleshooting
 
 - if `run` reports a provider test failure, run `amp config model-providers test CONNECTION_ID`
-- if a quota window is missing, inspect the test response headers for changed window durations or names
+- if no usable quota window is found, inspect the test response headers for a missing header pair or changed window duration or name
 - if activation fails, confirm both subscriptions still appear in `amp config model-providers list`
 - if the background task does not run, inspect `status` and the private selector log
 
