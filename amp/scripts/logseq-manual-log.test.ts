@@ -99,6 +99,8 @@ describe('parent Task prompt', () => {
 		expect(prompt.indexOf('### Parent handoff'))
 			.toBeLessThan(prompt.indexOf('### Runtime context'))
 		expect(prompt.indexOf('### Runtime context'))
+			.toBeLessThan(prompt.indexOf('### Optional user hint'))
+		expect(prompt.indexOf('### Optional user hint'))
 			.toBeLessThan(prompt.indexOf('### Intent boundary'))
 		expect(prompt.indexOf('### Intent boundary'))
 			.toBeLessThan(prompt.indexOf('### Logging contract'))
@@ -112,7 +114,7 @@ describe('parent Task prompt', () => {
 		expect(prompt).toContain(`Logseq graph: ${logseqRepo}`)
 		expect(prompt).toContain(`Today's date: 2026-09-03`)
 		expect(prompt).toContain(`Today's journal: ${logseqRepo}/journals/2026_09_03.md`)
-		expect(prompt).toContain('Optional user hint: update DAT-594 from Slack')
+		expect(prompt).toContain('### Optional user hint\n\nupdate DAT-594 from Slack')
 		expect(prompt).toContain('If exactly one exists, update it')
 		expect(prompt).toContain('If none exists, create one')
 		expect(prompt).toContain('If several exist, reconcile them into one')
@@ -134,7 +136,7 @@ describe('parent Task prompt', () => {
 	})
 
 	test('represents a blank hint explicitly', () => {
-		expect(buildParentTaskPrompt(parentID, '', workspace, logseqRepo, today)).toContain('Optional user hint: (none)')
+		expect(buildParentTaskPrompt(parentID, '', workspace, logseqRepo, today)).toContain('### Optional user hint\n\n(none)')
 	})
 })
 
@@ -146,7 +148,7 @@ describe('queueLogCurrentTask', () => {
 
 		expect(target.appended).toHaveLength(1)
 		expect(target.appended[0].type).toBe('user-message')
-		expect(target.appended[0].content).toContain('Optional user hint: keep TODO')
+		expect(target.appended[0].content).toContain('### Optional user hint\n\nkeep TODO')
 	})
 
 	test('requires an active thread', async () => {
@@ -178,7 +180,7 @@ describe('command-only plugin surface', () => {
 		await harness.command!(command.ctx as never)
 
 		expect(target.appended).toHaveLength(1)
-		expect(target.appended[0].content).toContain('Optional user hint: update DAT-594')
+		expect(target.appended[0].content).toContain('### Optional user hint\n\nupdate DAT-594')
 		expect(target.appended[0].content).toContain('Parent workspace: /workspace/agent-skills')
 		expect(command.notifications).toEqual([
 			'Logseq logging queued in this thread. The parent agent will delegate it through Task.',

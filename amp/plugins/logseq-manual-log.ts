@@ -101,7 +101,10 @@ Synthesize from your live conversation context. Include each material fact once:
 - Backlog: ${logseqRepo}/pages/Backlog.md
 - Today's date: ${today.isoDate}
 - Today's journal: ${logseqRepo}/journals/${today.journalFile}
-- Optional user hint: ${hint || '(none)'}
+
+### Optional user hint
+
+${hint || '(none)'}
 
 ### Intent boundary
 
@@ -133,7 +136,7 @@ Copy every numbered requirement below into the Task prompt:
 - parent metadata: separate rename and label command results
 If blocked, name the exact blocker and the smallest parent or user input needed. Return this report as Task's final result to the parent.
 
-After Task returns, verify that its report contains every item required by requirement 15 and that each successful verification includes the listed evidence. When the evidence is complete, reply in this parent thread with what was logged, the task UUID and state, whether both files were verified, whether parent metadata was updated, and any blocker. If evidence is missing or a safe local repair remains, call one focused Task with the Parent handoff, Runtime context, prior report, and unmet requirements. That Task owns the file re-read or repair and returns a revised report. Keep Task calls serial.`
+After Task returns, verify that its report contains every item required by requirement 15 and that each successful verification includes the listed evidence. When the evidence is complete, reply in this parent thread with what was logged, the task UUID and state, whether both files were verified, whether parent metadata was updated, and any blocker. If evidence is missing or a safe local repair remains, call one focused Task with the Parent handoff, Runtime context, Optional user hint, prior report, and unmet requirements. That Task owns the file re-read or repair and returns a revised report. Keep Task calls serial.`
 }
 
 function localDateParts(now: Date): { isoDate: string; journalFile: string } {
