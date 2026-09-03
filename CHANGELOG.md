@@ -9,6 +9,7 @@ and this project does not currently use versioned releases.
 
 ### Added
 
+- Add a Grok 4.6 agent mode with max reasoning effort and the Fable 5 prompt and tools. [#199](https://github.com/lelouvincx/agent-skills/pull/199)
 - Add a 5-minute background selector that prioritises one Amp ChatGPT subscription until either Codex quota window reaches the configured remaining threshold, then activates a fallback subscription. [#190](https://github.com/lelouvincx/agent-skills/pull/190)
 - Add `amp-runner list` to show installed runners with their LaunchAgent state and process ID.
 - Add size-only Amp runner log rotation, verified private rclone backup, retention checks, and restore support. [#185](https://github.com/lelouvincx/agent-skills/pull/185)

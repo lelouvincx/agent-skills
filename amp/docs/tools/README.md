@@ -51,6 +51,7 @@ All active documents use `amp-artifact/v2`, which supports skills, local CLIs, a
 - [Gemini 3.5 Flash](./gemini-3-5-flash.md)
 - [GPT-5.5 Medium](./gpt-5-5-medium.md)
 - [GPT-5.5 XHigh](./gpt-5-5-xhigh.md)
+- [Grok 4.6 Max](./grok-4-6-max.md)
 - [Smart Classic](./smart-classic.md)
 
 ### Commands
