@@ -95,7 +95,7 @@ Local skills are maintained in this repository. Remote skills are fetched and pr
 | [domain-modeling](skills/domain-modeling/SKILL.md) | Remote | define domain terms, context, and architectural decisions |
 | [technical-precision](skills/technical-precision/SKILL.md) | Local | explain technical concepts and write or edit unambiguous technical documentation |
 | [figma-design-to-code](skills/figma-design-to-code/SKILL.md) | Remote | inspect Figma designs and implement them as code |
-| [gmail](skills/gmail/SKILL.md) | Local | search and read Gmail through a read-only `gog` account |
+| [email](skills/email/SKILL.md) | Local | read, send, and organize personal and bot email through `gog` |
 | [govuk-style](skills/govuk-style/SKILL.md) | Local | write clear plain-English prose |
 | [grill-me](skills/grill-me/SKILL.md) | Remote | sharpen a plan or design through a focused interview |
 | [grill-with-docs](skills/grill-with-docs/SKILL.md) | Remote | sharpen a plan while recording decisions and domain terms |
