@@ -7,6 +7,8 @@
 - Never expose bot publisher credentials to an agent shell or fall back to a personal identity. If the approved bot path is unavailable, stop and ask Chinh.
 - Add a `CHANGELOG.md` entry for every pull request. After opening the pull request, add its number and link in a separate commit.
 - Check `CHANGELOG.md` before searching Git or pull-request history for a historical change.
+- When Chinh says "open bot PR", open the pull request with the bot identity in the current worktree.
+- When Chinh says "PR merged", sync the local Git repository, switch back to the branch that was active before the bot PR work, run `./sync-skills.sh`, reload Amp plugins, clear the schedule, and archive the working thread.
 
 ## Source and projection
 
