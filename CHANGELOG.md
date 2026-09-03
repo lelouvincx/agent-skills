@@ -9,7 +9,7 @@ and this project does not currently use versioned releases.
 
 ### Added
 
-- Add a 5-minute background selector that prioritises one Amp ChatGPT subscription until either Codex quota window has 5% remaining, then activates a fallback subscription. [#190](https://github.com/lelouvincx/agent-skills/pull/190)
+- Add a 5-minute background selector that prioritises one Amp ChatGPT subscription until either Codex quota window reaches the configured remaining threshold, then activates a fallback subscription. [#190](https://github.com/lelouvincx/agent-skills/pull/190)
 - Add `amp-runner list` to show installed runners with their LaunchAgent state and process ID.
 - Add size-only Amp runner log rotation, verified private rclone backup, retention checks, and restore support. [#185](https://github.com/lelouvincx/agent-skills/pull/185)
 - Add an `amp-runner` user LaunchAgent manager with AC-only sleep prevention, crash recovery, isolated private logs, lifecycle controls, and temporary debug logging. [#184](https://github.com/lelouvincx/agent-skills/pull/184)
@@ -180,6 +180,7 @@ and this project does not currently use versioned releases.
 
 ### Fixed
 
+- Handle ChatGPT plans that disable one quota window so the subscription selector can use the remaining active window. [#198](https://github.com/lelouvincx/agent-skills/pull/198)
 - Align `amp-runner list` columns for runner IDs and states of different lengths. [#189](https://github.com/lelouvincx/agent-skills/pull/189)
 - Hash dash-prefixed repository paths safely when validating shared agent output. [#187](https://github.com/lelouvincx/agent-skills/pull/187)
 - Correct the Google Sheets semantic-layer demo path and GitHub mapping. [#173](https://github.com/lelouvincx/agent-skills/pull/173)
