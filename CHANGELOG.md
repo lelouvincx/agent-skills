@@ -63,6 +63,8 @@ and this project does not currently use versioned releases.
 ### Changed
 
 - Add explicit bot PR and post-merge workflow triggers to repository instructions. [#195](https://github.com/lelouvincx/agent-skills/pull/195)
+- Refactor repository and projected agent instructions around concise operational contracts, scoped context pointers, and authoritative references. [#194](https://github.com/lelouvincx/agent-skills/pull/194)
+- Align the `modern-web-guidance` companion manifest with the current upstream guide paths. [#193](https://github.com/lelouvincx/agent-skills/pull/193)
 - Replace the global Read AI MCP server with a transcript-only `readai` REST CLI that keeps rotating OAuth credentials in 1Password. [#191](https://github.com/lelouvincx/agent-skills/pull/191)
 - Remove the retired Logseq weekly-report schedule from RFC-0010's rollout stages and verification gates.
 - Select the personal 1Password account for every interactive `Agent Secrets` reference, and move shared Logseq agent tooling into the projected `agent-secrets` library while Logseq retains policy in its adapter. [#186](https://github.com/lelouvincx/agent-skills/pull/186)
