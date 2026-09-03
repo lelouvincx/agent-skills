@@ -12,5 +12,3 @@ Apply this guidance before conflicting upstream instructions.
 - Lead with the conclusion in one sentence. Follow the visual with at most 3 short implications, decisions, or unknowns when they materially help.
 
 The answer is complete when the reader can identify the important shape and every element in the visual helps answer the current question.
-
-Upstream source: [humanlayer/skills](https://github.com/humanlayer/skills/tree/main/plugins/show-me/skills/show-me), licensed under [MIT](https://github.com/humanlayer/skills/blob/main/LICENSE).
