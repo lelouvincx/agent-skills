@@ -89,12 +89,16 @@ quota_usage() {
 			if (key == "x-codex-secondary-used-percent:") sused = value
 		}
 		END {
-			five = weekly = ""
+			if (pwindow == "" || pused == "" || swindow == "" || sused == "") exit 1
+			if (pwindow != 0 && pwindow != 300 && pwindow != 10080) exit 1
+			if (swindow != 0 && swindow != 300 && swindow != 10080) exit 1
+			if (pwindow != 0 && pwindow == swindow) exit 1
+			five = weekly = "unavailable"
 			if (pwindow == 300) five = pused
 			if (swindow == 300) five = sused
 			if (pwindow == 10080) weekly = pused
 			if (swindow == 10080) weekly = sused
-			if (five == "" || weekly == "") exit 1
+			if (five == "unavailable" && weekly == "unavailable") exit 1
 			print five, weekly
 		}
 	'
@@ -105,11 +109,15 @@ valid_percent() {
 }
 
 at_or_below_threshold() {
-	awk -v used="$1" -v limit="$threshold" 'BEGIN { exit !((100 - used) <= limit) }'
+	[ "$1" != unavailable ] && awk -v used="$1" -v limit="$threshold" 'BEGIN { exit !((100 - used) <= limit) }'
 }
 
 format_remaining() {
-	awk -v used="$1" 'BEGIN { printf "%g", 100 - used }'
+	if [ "$1" = unavailable ]; then
+		printf unavailable
+	else
+		awk -v used="$1" 'BEGIN { printf "%g", 100 - used }'
+	fi
 }
 
 active_state() {
@@ -141,22 +149,26 @@ run_selector() {
 		return 0
 	fi
 	load_config
-	local output usage five_used weekly_used five_remaining weekly_remaining selected detail show state test_status=0
+	local output usage five_used weekly_used five_remaining weekly_remaining five_suffix=% weekly_suffix=% selected detail show state test_status=0
 	output="$("$amp_command" config model-providers test "$preferred" 9>&- 2>&1)" || test_status=$?
 	if ! usage="$(printf '%s\n' "$output" | quota_usage)"; then
 		if [ "$test_status" -eq 0 ]; then detail=quota-windows-missing; else detail=provider-test-failed; fi
 		write_result failed unchanged unknown unknown "$detail"
-		log 'preferred provider response omitted the 5-hour or weekly quota window; kept the current subscription'
+		log 'preferred provider response did not provide a usable 5-hour or weekly quota window; kept the current subscription'
 		return 1
 	fi
 	read -r five_used weekly_used <<< "$usage"
-	if ! valid_percent "$five_used" || ! valid_percent "$weekly_used"; then
-		write_result failed unchanged unknown unknown invalid-quota-percentage
-		log 'preferred provider returned an invalid quota percentage; kept the current subscription'
-		return 1
-	fi
+	for used in "$five_used" "$weekly_used"; do
+		if [ "$used" != unavailable ] && ! valid_percent "$used"; then
+			write_result failed unchanged unknown unknown invalid-quota-percentage
+			log 'preferred provider returned an invalid quota percentage; kept the current subscription'
+			return 1
+		fi
+	done
 	five_remaining="$(format_remaining "$five_used")"
 	weekly_remaining="$(format_remaining "$weekly_used")"
+	[ "$five_remaining" != unavailable ] || five_suffix=
+	[ "$weekly_remaining" != unavailable ] || weekly_suffix=
 	selected="$preferred"
 	detail=preferred-has-capacity
 	if at_or_below_threshold "$five_used" || at_or_below_threshold "$weekly_used"; then
@@ -182,7 +194,7 @@ run_selector() {
 		detail="$detail-activated"
 	fi
 	write_result ok "$selected" "$five_remaining" "$weekly_remaining" "$detail"
-	log "selected $selected; preferred remaining: 5-hour ${five_remaining}%, weekly ${weekly_remaining}%"
+	log "selected $selected; preferred remaining: 5-hour ${five_remaining}${five_suffix}, weekly ${weekly_remaining}${weekly_suffix}"
 }
 
 xml_escape() { printf '%s' "$1" | sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g' -e 's/"/\&quot;/g'; }

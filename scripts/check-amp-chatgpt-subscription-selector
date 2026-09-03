@@ -115,7 +115,15 @@ if TEST_BOOTSTRAP_FAIL=1 run_tool install --preferred replacement-id --fallback 
 grep -Fxq 'PREFERRED=replacement-id' "$tmp/state/config"
 run_tool install --preferred "$primary" --fallback "$fallback" >/dev/null
 
-# Either window at 5% remaining selects the fallback.
+# A plan with one explicitly disabled window uses its supported active window.
+disabled_output="$(TEST_QUOTA=$'x-codex-primary-window-minutes: 10080\nx-codex-primary-used-percent: 96\nx-codex-secondary-window-minutes: 0\nx-codex-secondary-used-percent: 0' run_tool run)"
+printf '%s\n' "$disabled_output" | grep -Fq 'preferred remaining: 5-hour unavailable, weekly 4%'
+[ "$(cat "$tmp/active")" = "$fallback" ]
+[ "$(wc -l < "$tmp/activations" | tr -d ' ')" = 1 ]
+grep -Fxq 'five_hour_remaining=unavailable' "$tmp/state/last-run"
+grep -Fxq 'weekly_remaining=4' "$tmp/state/last-run"
+
+# Either window at the configured threshold selects the fallback.
 TEST_FAIL=1 TEST_QUOTA=$'x-codex-primary-window-minutes: 300\nx-codex-primary-used-percent: 95\nx-codex-secondary-window-minutes: 10080\nx-codex-secondary-used-percent: 20' run_tool run
 [ "$(cat "$tmp/active")" = "$fallback" ]
 [ "$(wc -l < "$tmp/activations" | tr -d ' ')" = 1 ]
@@ -136,6 +144,16 @@ if TEST_FAIL=1 TEST_QUOTA=$'x-codex-primary-window-minutes: 300\nx-codex-primary
 [ "$(cat "$tmp/active")" = "$primary" ]
 grep -Fxq 'result=failed' "$tmp/state/last-run"
 grep -Fxq 'detail=provider-test-failed' "$tmp/state/last-run"
+
+# No supported active window preserves the active connection.
+for quota in \
+	$'x-codex-primary-window-minutes: 0\nx-codex-primary-used-percent: 0\nx-codex-secondary-window-minutes: 0\nx-codex-secondary-used-percent: 0' \
+	$'x-codex-primary-window-minutes: 1440\nx-codex-primary-used-percent: 99\nx-codex-secondary-window-minutes: 0\nx-codex-secondary-used-percent: 0'; do
+	before="$(wc -l < "$tmp/activations" | tr -d ' ')"
+	if TEST_QUOTA="$quota" run_tool run >/dev/null; then exit 1; fi
+	[ "$(wc -l < "$tmp/activations" | tr -d ' ')" = "$before" ]
+	grep -Fxq 'detail=quota-windows-missing' "$tmp/state/last-run"
+done
 
 # Invalid percentages preserve the active connection.
 for invalid in nope -1 101; do
