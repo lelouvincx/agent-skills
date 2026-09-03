@@ -134,12 +134,13 @@ The command appends one user message to the current thread. It does not create a
 
 The message tells the parent agent to call built-in Task as its next action and use the conversation context already available in its current inference turn. This includes the original request, accepted decisions, user redirects, work completed, remaining work and relevant source or deliverable links.
 
-The parent puts 4 sections in the Task prompt, in this order:
+The parent puts 5 sections in the Task prompt, in this order:
 
 1. `Parent handoff`
 2. `Runtime context`
-3. `Intent boundary`
-4. `Logging contract`
+3. `Optional user hint`
+4. `Intent boundary`
+5. `Logging contract`
 
 The `Parent handoff` includes each material fact once:
 
@@ -149,7 +150,7 @@ The `Parent handoff` includes each material fact once:
 - decisions, blockers and required authority
 - relevant source and deliverable links
 
-`Runtime context` supplies the optional command hint, parent thread ID, active workspace root, Logseq graph, Backlog path, date and journal path. The plugin gets the workspace from `PluginSystem.workspaceRoot` and converts it with `PluginAPI.helpers.filePathFromURI`; it does not use the plugin process directory. When Amp has no workspace open, the value is `(none)`. `Intent boundary` tells Task how to resolve a missing intent fact. `Logging contract` carries the numbered execution and completion requirements below.
+`Runtime context` supplies the parent thread ID, active workspace root, Logseq graph, Backlog path, date and journal path. The plugin gets the workspace from `PluginSystem.workspaceRoot` and converts it with `PluginAPI.helpers.filePathFromURI`; it does not use the plugin process directory. When Amp has no workspace open, the value is `(none)`. `Optional user hint` supplies the command hint or `(none)`. `Intent boundary` tells Task how to resolve a missing intent fact. `Logging contract` carries the numbered execution and completion requirements below.
 
 This boundary keeps interpretation with the agent that took part in the conversation. Task owns the bounded file and metadata work.
 
