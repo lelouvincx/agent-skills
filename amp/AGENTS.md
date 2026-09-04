@@ -51,3 +51,4 @@
 ## Project registry
 
 - Resolve spoken project names, paths, and repositories with `project-resolve <spoken-name> --json`; do not guess them.
+- When adding or updating a project in the root `projects.yaml` of the `agent-skills` repository, create its Amp project if none exists: run `amp projects create <github>` when `github` is non-null, or `amp projects create --amp-hosted --name <project-key>` when `github` is null.
