@@ -63,7 +63,7 @@ and this project does not currently use versioned releases.
 
 ### Changed
 
-- Require a corresponding Amp project whenever a project is added to or updated in the canonical registry, including projects without a GitHub repository.
+- Require a corresponding Amp project whenever a project is added to or updated in the canonical registry, including projects without a GitHub repository. [#202](https://github.com/lelouvincx/agent-skills/pull/202)
 - Replace the local `showing-code` skill with HumanLayer's remote `show-me` skill while preserving exact-source, plain-diagram, and artifact-path guidance. [#201](https://github.com/lelouvincx/agent-skills/pull/201)
 - Move the Logseq current-task optional user hint from runtime context into its own prompt section. [#200](https://github.com/lelouvincx/agent-skills/pull/200)
 - Rename `gmail` to `email` and allow read and explicitly requested write operations for Chinh's personal and bot mailboxes through `gog`. [#197](https://github.com/lelouvincx/agent-skills/pull/197)
