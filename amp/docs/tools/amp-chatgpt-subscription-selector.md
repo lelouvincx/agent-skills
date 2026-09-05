@@ -96,7 +96,7 @@ As of 27 August 2026, Amp supports at most 2 linked ChatGPT subscriptions. The i
 
 ## Contract
 
-The LaunchAgent checks every 5 minutes. Each check tests the preferred connection and reads these Codex response headers:
+The LaunchAgent checks when you log in to macOS and every 5 minutes after that. Each check tests the preferred connection and reads these Codex response headers:
 
 - `x-codex-primary-window-minutes` and `x-codex-primary-used-percent`
 - `x-codex-secondary-window-minutes` and `x-codex-secondary-used-percent`
