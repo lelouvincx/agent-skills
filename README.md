@@ -202,8 +202,6 @@ Run the relevant repository command directly:
 | [Claude Code subagent](amp/docs/tools/claude-code-subagent.md) | Agent tool | Agent | ask Claude Code for read-only advice |
 | [Label skill and plugin usage](amp/docs/tools/label-skill-plugin-usage.md) | Agent tool | Agent | add or correct usage-event labels |
 | [Pi Code subagent](amp/docs/tools/pi-code-subagent.md) | Agent tool | Agent | ask Pi Coding Agent for read-only advice |
-| [GPT-5.5 Medium](amp/docs/tools/gpt-5-5-medium.md) | Agent mode | Mode picker | run an experimental GPT-5.5 agent mode with medium reasoning effort |
-| [GPT-5.5 XHigh](amp/docs/tools/gpt-5-5-xhigh.md) | Agent mode | Mode picker | run an experimental GPT-5.5 agent mode with xhigh reasoning effort |
 | [Grok 4.6 Max](amp/docs/tools/grok-4-6-max.md) | Agent mode | Mode picker | run an experimental Grok 4.6 agent mode with max reasoning effort |
 | [Logseq log current task](amp/docs/tools/logseq-log-current-task-command.md) | Command | Command palette | log the current Amp task into Logseq |
 | [Track event](amp/docs/tools/track-event.md) | Command | Command palette | record skill or plugin usage manually |

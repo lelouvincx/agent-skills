@@ -181,7 +181,7 @@ and this project does not currently use versioned releases.
 
 ### Removed
 
-- Remove the unused DeepSeek V4 Flash and Gemini 3.5 Flash agent modes and their capability documentation. [#216](https://github.com/lelouvincx/agent-skills/pull/216)
+- Remove the unused DeepSeek V4 Flash, Gemini 3.5 Flash, GPT-5.5 Medium, and GPT-5.5 XHigh agent modes and their capability documentation. [#216](https://github.com/lelouvincx/agent-skills/pull/216)
 - Remove the redundant ChatGPT usage command now that Amp provides usage checking. [#192](https://github.com/lelouvincx/agent-skills/pull/192)
 - Remove the macOS turn-end notification capability and plugin now that Amp runners operate as background LaunchAgents. [#184](https://github.com/lelouvincx/agent-skills/pull/184)
 - Remove the redundant Holistics development plugin and the unused `analyze-data`, `use-existing-viz`, and `visualize-data` skills. [#164](https://github.com/lelouvincx/agent-skills/pull/164)

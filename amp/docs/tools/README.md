@@ -47,8 +47,6 @@ All active documents use `amp-artifact/v2`, which supports skills, local CLIs, a
 
 ### Agent modes
 
-- [GPT-5.5 Medium](./gpt-5-5-medium.md)
-- [GPT-5.5 XHigh](./gpt-5-5-xhigh.md)
 - [Grok 4.6 Max](./grok-4-6-max.md)
 - [Smart Classic](./smart-classic.md)
 
