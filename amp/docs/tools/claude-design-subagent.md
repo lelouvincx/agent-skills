@@ -22,7 +22,7 @@ amp:
   docs_sources:
     api_docs: "amp plugins show-docs"
     agent_options: null
-  last_verified: "2026-08-21"
+  last_verified: "2026-08-24"
 contract:
   input_kind: "json_schema"
   output_kind: "json_text"
@@ -36,14 +36,16 @@ contract:
     - "skillSha256"
 runtime:
   uses:
-    - "spawn: claude"
+    - "spawn: bun amp/plugins/claude-design-sdk-runner.mjs"
     - "collaborating-with-claude-design skill instructions"
+    - "Claude Agent SDK canUseTool callback"
     - "Claude Code ToolSearch"
     - "Claude Code DesignSync"
     - "Claude Design MCP tools"
     - "ctx.thread.id"
   dependencies:
     - "Claude Code 2.1.181 or newer on PATH"
+    - "@anthropic-ai/claude-agent-sdk 0.3.207"
     - "~/.agents/skills/collaborating-with-claude-design/SKILL.md"
     - "Claude Code signed in with a Claude subscription"
     - "Claude Design enabled for the account or organization"
@@ -55,10 +57,12 @@ runtime:
   reads:
     - "workingDirectory"
     - "~/.agents/skills/collaborating-with-claude-design/SKILL.md"
+    - "local files named by an approvedDesignSyncUpload input"
     - "Claude Design projects"
     - "Claude Code session state when sessionId is supplied"
   writes:
     - "Claude Design projects through mcp__claude-design__*"
+    - "approved files through Claude Code DesignSync"
     - "~/.config/amp/logs/claude-code-subagent/*.json"
   network:
     - "Claude Code model provider via claude CLI"
@@ -73,6 +77,7 @@ safety:
     - "Uses Claude Code as the authenticated proxy; Amp does not connect to Claude Design MCP directly."
     - "Allows Read, Grep, Glob, ToolSearch, DesignSync, and mcp__claude-design__* only."
     - "Denies Bash, Edit, Write, and NotebookEdit."
+    - "Approves DesignSync only when Amp passes an exact, user-approved upload plan. The approval covers one project, one local directory, exact local-to-remote file mappings, and no deletions."
     - "Loads only Claude Code user settings; project and local settings cannot add hooks, plugins, skills, or permission rules."
     - "Injects the collaborating-with-claude-design skill into the child prompt independently of Claude Code setting sources."
     - "Fails before starting Claude when the skill cannot be read."
@@ -144,6 +149,7 @@ Optional inputs:
 | `model` | `fable \| opus \| sonnet` | `opus` | Use Fable for the most ambitious work or Sonnet for a faster or lighter orchestration turn. |
 | `timeoutMinutes` | `number` | `10` | Rounded up and capped at `30`. |
 | `workingDirectory` | `string` | plugin process cwd | Repository whose design system or local files Claude may read. |
+| `approvedDesignSyncUpload` | `object` | none | Exact upload plan the user approved. Requires `projectId`, `localDir` and `files` with a remote `path` and local `localPath` for each file. Local paths must name existing regular files under `localDir`; globs, traversal and deletions are not supported. |
 | `includeRawTranscript` | `boolean` | `false` | Stores raw Claude CLI output for debugging. |
 
 Output is JSON containing:
@@ -189,6 +195,16 @@ It allows only:
 
 It denies `Bash`, `Edit`, `Write` and `NotebookEdit`.
 
+Claude Design project writes and `DesignSync.finalize_plan` can each request a user-interaction handshake. Claude Code 2.1.199 and newer deliberately prevents `--permission-prompt-tool` from approving tools marked as requiring user interaction, while bare auto-allow rules shadow an SDK callback. The proxy therefore uses the supported Claude Agent SDK `canUseTool` callback and SDK `default` permission mode for design calls. Claude Design MCP tools remain available but are removed from the SDK's auto-allow rules so project-grant handshakes reach the callback. `DesignSync` is also never auto-allowed: without `approvedDesignSyncUpload` the callback denies it; with approval, the callback allows one matching `DesignSync.finalize_plan` request and exact `write_files` mappings from that finalized plan. Claude Code adds internal `__consent*` metadata before these callbacks; the proxy strips every field with that reserved prefix from `updatedInput` before the target tool validates its public schema. The metadata never participates in an approval decision, and every other tool request is denied.
+
+The upload approval must contain:
+
+- one Claude Design project UUID
+- one existing local directory inside `workingDirectory`
+- 1 to 256 exact local-to-remote path mappings
+
+Each local file must exist inside `localDir`, be a regular file and be no larger than 256 KiB. Local and remote paths cannot contain globs or traversal. The proxy records each approved file's byte size and SHA-256 and rechecks it before upload approval. It approves only the mapped remote paths and no deletions. The existing local tool denylist remains active in both permission modes.
+
 Claude Code discovers deferred Design tools through `ToolSearch`. It returns project IDs, URLs or source in its response when requested.
 
 The child receives a sanitized environment. It does not inherit ambient `ANTHROPIC_API_KEY` or similar secret-looking variables.
@@ -214,7 +230,7 @@ Design-system attachment remains qualified. The ID was requested during creation
 
 Direct canvas-edit synchronization and inline-comment ingestion remain inconclusive. Helium's approval-only automation target was isolated behind a Cloudflare challenge. No UI mutation was attempted.
 
-`DesignSync` remains experimental.
+`DesignSync` remains experimental. Exact, user-approved local file uploads are covered by deterministic runner-input, permission-callback and source-identity tests. A live upload still needs supervised verification against the target project.
 
 Response-mediated source handoff is verified. A fresh proxy session can reopen a known project and return exact file content.
 
@@ -284,7 +300,7 @@ Claude may read the selected working directory. It may create or modify Claude D
 
 `includeRawTranscript: true` stores sensitive raw stdout and stderr. Use it only for necessary debugging.
 
-`DesignSync` may read local design-system files and sync their representation to Claude Design. It remains experimental.
+`DesignSync` may read the approved local source directory and sync only the mapped files to the named Claude Design project. Use the narrowest source directory that contains those files. It remains experimental.
 
 Setup is a one-time local prerequisite:
 
@@ -321,6 +337,33 @@ Apply one delta after visual review:
 }
 ```
 
+Upload exact local files after the user approves the project, source directory and path list:
+
+```json
+{
+  "prompt": "Reopen project <project ID>. Upload only the approved files with DesignSync, verify the remote file list, then apply the named design delta.",
+  "skillSha256": "<64-character SHA-256 of the loaded projected skill>",
+  "sessionId": "<session ID returned by the earlier call>",
+  "workingDirectory": "/path/to/project",
+  "approvedDesignSyncUpload": {
+    "projectId": "<Claude Design project UUID>",
+    "localDir": "/path/to/project/app/raw-traces",
+    "files": [
+      {
+        "path": "raw-traces/raw/q9.jsonl",
+        "localPath": "raw/q9.jsonl"
+      },
+      {
+        "path": "raw-traces/amql/q9.jsonl",
+        "localPath": "amql/q9.jsonl"
+      }
+    ]
+  }
+}
+```
+
+Pass `approvedDesignSyncUpload` only after the user approves that exact project, directory and path list. A general request to use Claude Design does not approve a local upload.
+
 Recover source in a fresh session for an authorized local handoff:
 
 ```json
@@ -335,7 +378,9 @@ Recover source in a fresh session for an authorized local handoff:
 
 - `/design` is unavailable: update Claude Code to 2.1.181 or newer.
 - Claude Design is disconnected: remove ambient API-key authentication and run `/design consent` using the Claude subscription login.
-- Design tool denied in `dontAsk` mode: confirm the wrapper passes `ToolSearch,mcp__claude-design__*` through `--allowedTools`.
+- Claude Design returns `needs_project_grant` while the project settings already show write access: confirm the Agent SDK runner uses `default` mode, removes `mcp__claude-design__*` from `allowedTools`, and handles the project handshake through `canUseTool`.
+- `DesignSync.finalize_plan` is denied: get approval for the exact upload plan, pass it as `approvedDesignSyncUpload`, and confirm the Agent SDK runner handled the request through `canUseTool`. Do not use `--permission-prompt-tool`, `auto` or bypass mode for this approval.
+- DesignSync approval mismatch: compare the requested project, resolved `localDir`, ordered remote paths, local mappings and empty delete list with `approvedDesignSyncUpload`. Ask for new approval if any value changes.
 - Enterprise account: ask an administrator to enable Claude Design.
 - Wrong design context: stop the mutation, omit `sessionId` to start fresh, and provide the complete handoff packet with the intended project ID or URL.
 - Timeout or ambiguous mutation: use the audit path and session ID to inspect the project before retrying; request only the missing delta.
