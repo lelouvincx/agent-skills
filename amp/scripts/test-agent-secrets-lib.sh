@@ -51,8 +51,33 @@ mkdir "$SNAPSHOT_REPO"
 grep -Eq '^[[:xdigit:]]{64}[[:space:]]+\-\.png$' "$TMP_DIR/snapshot.manifest"
 grep -Eq '^[[:xdigit:]]{64}[[:space:]]+\-\-sample\.jpg$' "$TMP_DIR/snapshot.manifest"
 
-if grep -Eq 'amp-runtime|lelouvincx-bot|pages/Weekly|reviewers\[\]=lelouvincx' "$LIB"; then
-	echo "ERROR: Shared agent library contains repository policy" >&2
+EXPECTED_REPOSITORIES=$'lelouvincx/agent-skills\nlelouvincx/dotfiles\nlelouvincx/lms-leitner-material\nlelouvincx/nvim\nlelouvincx/second-brain-logseq\nlelouvincx/smartclass'
+AGENT_BOT_GITHUB_LOGIN=lelouvincx-bot
+[[ "$(agent_bot_repository_allowlist)" == "$EXPECTED_REPOSITORIES" ]]
+
+MISSING_POLICY_DIR="$TMP_DIR/missing-policy"
+mkdir "$MISSING_POLICY_DIR"
+cp "$LIB" "$MISSING_POLICY_DIR/lib-agent.sh"
+if bash -c 'AGENT_BOT_GITHUB_LOGIN=lelouvincx-bot; source "$1"; agent_bot_repository_allowlist' _ "$MISSING_POLICY_DIR/lib-agent.sh" >/dev/null 2>&1; then
+	echo "ERROR: Shared agent library accepted a missing identity policy" >&2
+	exit 1
+fi
+if bash -c 'AGENT_BOT_GITHUB_LOGIN=lelouvincx-bot; AGENT_BOT_GITHUB_REPOSITORY_ALLOWLIST=(fallback/repository); source "$1"; agent_gh() { return 0; }; agent_validate_bot_token test fallback/repository' _ "$MISSING_POLICY_DIR/lib-agent.sh" >/dev/null 2>&1; then
+	echo "ERROR: Bot token validation fell back to a caller repository allowlist" >&2
+	exit 1
+fi
+
+INVALID_POLICY_DIR="$TMP_DIR/invalid-policy"
+mkdir "$INVALID_POLICY_DIR"
+cp "$LIB" "$INVALID_POLICY_DIR/lib-agent.sh"
+printf '%s\n' '{"version":1,"identities":{"lelouvincx-bot":{"repositoryAllowlist":["lelouvincx/nvim","lelouvincx/nvim"]}}}' >"$INVALID_POLICY_DIR/github-identities.json"
+if bash -c 'AGENT_BOT_GITHUB_LOGIN=lelouvincx-bot; source "$1"; agent_bot_repository_allowlist' _ "$INVALID_POLICY_DIR/lib-agent.sh" >/dev/null 2>&1; then
+	echo "ERROR: Shared agent library accepted an invalid identity policy" >&2
+	exit 1
+fi
+
+if grep -Eq 'pages/Weekly|reviewers\[\]=lelouvincx' "$LIB"; then
+	echo "ERROR: Shared agent library contains Logseq publishing policy" >&2
 	exit 1
 fi
 

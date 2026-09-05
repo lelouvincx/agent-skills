@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "identities": {
+    "lelouvincx-bot": {
+      "repositoryAllowlist": [
+        "lelouvincx/agent-skills",
+        "lelouvincx/dotfiles",
+        "lelouvincx/lms-leitner-material",
+        "lelouvincx/nvim",
+        "lelouvincx/second-brain-logseq",
+        "lelouvincx/smartclass"
+      ]
+    }
+  }
+}

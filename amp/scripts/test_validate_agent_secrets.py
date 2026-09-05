@@ -6,7 +6,6 @@ import tempfile
 import unittest
 from pathlib import Path
 
-
 SCRIPT = Path(__file__).with_name("validate-agent-secrets.py")
 SPEC = importlib.util.spec_from_file_location("validate_agent_secrets", SCRIPT)
 validator = importlib.util.module_from_spec(SPEC)
@@ -30,8 +29,72 @@ class AgentSecretPolicyValidationTests(unittest.TestCase):
     def write_manifest(self, manifest):
         (self.root / "bundles.json").write_text(json.dumps(manifest, indent=2) + "\n")
 
+    def read_identity_policy(self):
+        return json.loads((self.root / "github-identities.json").read_text())
+
+    def write_identity_policy(self, policy):
+        (self.root / "github-identities.json").write_text(
+            json.dumps(policy, indent=2) + "\n"
+        )
+
     def test_checked_in_policy_is_valid(self):
         self.assertEqual([], validator.validate_tree(SOURCE))
+
+    def test_bot_repository_inventory_is_shared_policy(self):
+        policy = self.read_identity_policy()
+        self.assertEqual(
+            [
+                "lelouvincx/agent-skills",
+                "lelouvincx/dotfiles",
+                "lelouvincx/lms-leitner-material",
+                "lelouvincx/nvim",
+                "lelouvincx/second-brain-logseq",
+                "lelouvincx/smartclass",
+            ],
+            policy["identities"]["lelouvincx-bot"]["repositoryAllowlist"],
+        )
+
+    def test_identity_policy_rejects_unknown_fields_and_duplicate_repositories(self):
+        policy = self.read_identity_policy()
+        identity = policy["identities"]["lelouvincx-bot"]
+        identity["unexpected"] = True
+        identity["repositoryAllowlist"].append("lelouvincx/agent-skills")
+        self.write_identity_policy(policy)
+        errors = validator.validate_tree(self.root)
+        self.assertTrue(any("Additional properties" in error for error in errors))
+        self.assertTrue(any("non-unique" in error for error in errors))
+
+    def test_identity_repository_allowlist_must_be_sorted(self):
+        policy = self.read_identity_policy()
+        repositories = policy["identities"]["lelouvincx-bot"]["repositoryAllowlist"]
+        repositories[0], repositories[1] = repositories[1], repositories[0]
+        self.write_identity_policy(policy)
+        self.assertTrue(
+            any(
+                "repositoryAllowlist must be sorted" in error
+                for error in validator.validate_tree(self.root)
+            )
+        )
+
+    def test_identity_repository_allowlist_rejects_non_string_without_crashing(self):
+        policy = self.read_identity_policy()
+        policy["identities"]["lelouvincx-bot"]["repositoryAllowlist"] = [1]
+        self.write_identity_policy(policy)
+        self.assertTrue(
+            any(
+                "is not of type 'string'" in error
+                for error in validator.validate_tree(self.root)
+            )
+        )
+
+    def test_missing_identity_policy_fails_closed(self):
+        (self.root / "github-identities.json").unlink()
+        self.assertTrue(
+            any(
+                "github-identities.json" in error
+                for error in validator.validate_tree(self.root)
+            )
+        )
 
     def test_smartclass_deepseek_is_limited_to_the_local_wrangler_wrapper(self):
         manifest = self.read_manifest()
@@ -55,7 +118,10 @@ class AgentSecretPolicyValidationTests(unittest.TestCase):
         manifest["unexpected"] = True
         self.write_manifest(manifest)
         self.assertTrue(
-            any("Additional properties" in error for error in validator.validate_tree(self.root))
+            any(
+                "Additional properties" in error
+                for error in validator.validate_tree(self.root)
+            )
         )
 
     def test_duplicate_json_keys_fail_closed(self):
@@ -68,7 +134,10 @@ class AgentSecretPolicyValidationTests(unittest.TestCase):
             )
         )
         self.assertTrue(
-            any("duplicate JSON key: version" in error for error in validator.validate_tree(self.root))
+            any(
+                "duplicate JSON key: version" in error
+                for error in validator.validate_tree(self.root)
+            )
         )
 
     def test_invalid_schema_fails_closed(self):
@@ -95,7 +164,9 @@ class AgentSecretPolicyValidationTests(unittest.TestCase):
         manifest["bundles"]["lelouvincx-bot"]["compatibleBundles"] = []
         self.write_manifest(manifest)
         errors = validator.validate_tree(self.root)
-        self.assertTrue(any("compatibility must be symmetric" in error for error in errors))
+        self.assertTrue(
+            any("compatibility must be symmetric" in error for error in errors)
+        )
         self.assertTrue(any("must have one audience" in error for error in errors))
 
     def test_duplicate_or_unnormalized_executable_paths_fail(self):
@@ -118,7 +189,9 @@ class AgentSecretPolicyValidationTests(unittest.TestCase):
         manifest["bundles"]["work"]["variables"].append("GIT_CONFIG_KEY_0")
         self.write_manifest(manifest)
         errors = validator.validate_tree(self.root)
-        self.assertTrue(any("1Password references are forbidden" in error for error in errors))
+        self.assertTrue(
+            any("1Password references are forbidden" in error for error in errors)
+        )
         self.assertTrue(any("process-control variable" in error for error in errors))
 
     def test_bundle_owner_is_required_and_rejects_secret_references(self):
@@ -127,8 +200,12 @@ class AgentSecretPolicyValidationTests(unittest.TestCase):
         manifest["bundles"]["amp-runtime"]["owner"] = "op://Agent Secrets/item/field"
         self.write_manifest(manifest)
         errors = validator.validate_tree(self.root)
-        self.assertTrue(any("owner" in error and "required" in error for error in errors))
-        self.assertTrue(any("1Password references are forbidden" in error for error in errors))
+        self.assertTrue(
+            any("owner" in error and "required" in error for error in errors)
+        )
+        self.assertTrue(
+            any("1Password references are forbidden" in error for error in errors)
+        )
 
     def test_invalid_names_and_duplicate_array_members_fail_schema(self):
         manifest = self.read_manifest()
@@ -136,7 +213,9 @@ class AgentSecretPolicyValidationTests(unittest.TestCase):
         manifest["bundles"]["work"]["variables"].append("GH_TOKEN")
         self.write_manifest(manifest)
         errors = validator.validate_tree(self.root)
-        self.assertTrue(any("Bad Name" in error and "does not match" in error for error in errors))
+        self.assertTrue(
+            any("Bad Name" in error and "does not match" in error for error in errors)
+        )
         self.assertTrue(any("non-unique" in error for error in errors))
 
 
