@@ -42,7 +42,16 @@ cat > "$tmp_dir/bin/plutil" <<'EOF'
 grep -Fq '<plist version="1.0">' "${2:?plist path required}"
 grep -Fq '</plist>' "$2"
 EOF
-chmod +x "$tmp_dir/bin/amp" "$tmp_dir/bin/caffeinate" "$tmp_dir/bin/launchctl" "$tmp_dir/bin/plutil"
+cat > "$tmp_dir/bin/ps" <<'EOF'
+#!/usr/bin/env bash
+cat <<'ROWS'
+12347 12346 1.2 1024
+12345 1 0.5 1024
+99999 1 80.0 999999
+12346 12345 12.3 20480
+ROWS
+EOF
+chmod +x "$tmp_dir/bin/amp" "$tmp_dir/bin/caffeinate" "$tmp_dir/bin/launchctl" "$tmp_dir/bin/plutil" "$tmp_dir/bin/ps"
 
 file_mode() {
 	local mode
@@ -60,6 +69,7 @@ run_launcher() {
 	AMP_RUNNER_LAUNCHCTL="$tmp_dir/bin/launchctl" \
 	AMP_RUNNER_LAUNCH_AGENTS_DIR="$tmp_dir/launch-agents" \
 	AMP_RUNNER_PLUTIL="$tmp_dir/bin/plutil" \
+	AMP_RUNNER_PS="$tmp_dir/bin/ps" \
 	AMP_RUNNER_TEST_CAPTURE="$tmp_dir/capture" \
 	AMP_RUNNER_TEST_LAUNCHCTL_CAPTURE="$tmp_dir/launchctl-capture" \
 	AMP_RUNNER_TEST_LAUNCHCTL_LOG="$tmp_dir/launchctl-log" \
@@ -103,9 +113,9 @@ touch "$tmp_dir/launch-agents/com.ampcode.runner.macbook.stopped.plist"
 touch "$tmp_dir/loaded"
 list_output="$(run_launcher list)"
 expected_list_output="$(cat <<'EOF'
-RUNNER_ID             STATE       PID
-macbook.agent-skills  running     12345
-macbook.stopped       not-loaded  -
+RUNNER_ID             STATE       PID        CPU    MEMORY
+macbook.agent-skills  running     12345    14.0%  22.0 MiB
+macbook.stopped       not-loaded  -            -         -
 EOF
 )"
 [ "$list_output" = "$expected_list_output" ] || {

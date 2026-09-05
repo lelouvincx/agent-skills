@@ -100,7 +100,7 @@ The launcher wraps Amp with `caffeinate -s`. AC power keeps the Mac awake while 
 Use these commands:
 
 - `install` writes the LaunchAgent and starts it
-- `list` shows every installed runner with its LaunchAgent state and process ID
+- `list` shows every installed runner with its LaunchAgent state, process ID, CPU usage, and resident memory usage
 - `start`, `stop`, and `restart` control an installed runner
 - `restart all` restarts every installed runner
 - `status` prints the LaunchAgent state
@@ -126,6 +126,8 @@ Use `--debug` or `--log-level debug` during an incident. Reinstall without that 
 `install` creates `com.ampcode.runner.<runner-id>.plist` under `~/Library/LaunchAgents/`. It records the working directory, current `PATH`, current `HOME`, Amp executable, log settings, and approved extra Amp arguments.
 
 The LaunchAgent runs Amp with `--no-tui` and the supplied runner ID. `KeepAlive` restarts the process after failure. A 10-second throttle limits restart loops.
+
+`list` sums CPU and resident memory across the LaunchAgent process and all of its descendants, including `caffeinate`, Amp, and child processes. Resource values are unavailable for runners that are not loaded or have no live process.
 
 Amp writes structured records to `<runner-id>.log`. The LaunchAgent writes startup and supervisor output to `<runner-id>.supervisor.log`.
 
