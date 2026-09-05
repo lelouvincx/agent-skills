@@ -120,12 +120,14 @@ projects:
       - demo ai
     description: Holistics AI demo project.
 
-  holistics-embed-demo:
-    github: holistics/holistics-embed-demo
+  embed-presales-demo:
+    github: holistics/embed-presales-demo
     owner: holistics
-    dir: holistics/presales/holistics-embed-demo
+    dir: holistics/presales/embed-presales-demo
     aliases:
       - embed demo
+      - embed presales demo
+      - holistics-embed-demo
       - holistics embed demo
     description: Holistics embedded analytics demo project.
 

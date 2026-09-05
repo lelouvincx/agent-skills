@@ -54,7 +54,7 @@ AGENTS_REGISTRY_ENV=vps project-resolve prefect --path
 | `presales` | `holistics` | `~/Developer/holistics/presales` | `null` |
 | `presales-calls` | `holistics` | `~/Developer/holistics/presales/presales-calls` | `null` |
 | `demo-ai` | `holistics` | `~/Developer/holistics/presales/demo-ai` | `holistics/demo-ai` |
-| `holistics-embed-demo` | `holistics` | `~/Developer/holistics/presales/holistics-embed-demo` | `holistics/holistics-embed-demo` |
+| `embed-presales-demo` | `holistics` | `~/Developer/holistics/presales/embed-presales-demo` | `holistics/embed-presales-demo` |
 | `demo-amql-sl-benchmark` | `holistics` | `~/Developer/holistics/presales/demo-amql-sl-benchmark` | `holistics/demo-amql-sl-benchmark` |
 | `demo-open-semantic-layer-sheets` | `holistics` | `~/Developer/holistics/presales/demo-open-semantic-layer-sheets` | `holistics/demo-open-semantic-layer-sheets` |
 | `data-internal` | `holistics` | `~/Developer/holistics/data/data-internal` | `holistics/data-internal` |
