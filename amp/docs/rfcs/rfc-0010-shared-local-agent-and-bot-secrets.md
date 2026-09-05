@@ -7,8 +7,9 @@ file: "rfc-0010-shared-local-agent-and-bot-secrets.md"
 status: "Accepted"
 summary: "Provide named 1Password-backed capability bundles to approved local agents and deterministic bot commands without giving child processes the service-account token."
 created: "2026-08-22"
-updated: "2026-08-26"
+updated: "2026-09-05"
 amp_thread_id:
+  T-01a070c8-6420-741e-933d-be92c58c5d73: "allowed the exact 1Password OTP attribute query needed to resolve current one-time passwords"
   T-01a027f3-f748-745c-99e0-42be89c4e177: "moved the shared successor design from Logseq into agent-skills and generalized access for local agents and bots"
   T-01a02845-76ae-715f-9569-84bba5c6e1d6: "reviewed command-class enforcement, Logseq cutover safety and child-environment construction"
   T-01a02856-b1f8-771e-8cd8-240316b81f1c: "accepted the contract and implementation plan, including asymmetric authentication fallback and deterministic Logseq preflight and publishing"
@@ -459,6 +460,7 @@ Each bundle file must:
 - not be a symbolic link
 - define only variables allowed by its manifest bundle
 - contain only references under `op://Agent Secrets/`
+- use no query string, except the exact `?attribute=otp` suffix for a one-time password
 - contain no resolved value
 - contain no duplicate variable
 
