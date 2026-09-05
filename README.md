@@ -63,6 +63,7 @@ It does not print, export, evaluate or copy resolved values to the clipboard.
 amp-runner install macbook.agent-skills
 amp-runner list
 amp-runner status macbook.agent-skills
+amp-runner restart all
 amp-runner logs macbook.agent-skills
 ```
 
