@@ -381,7 +381,7 @@ process_tree_usage() {
 			} else {
 				memory = sprintf("%d KiB", total_rss)
 			}
-			printf "%.1f%%\t%s\n", total_cpu, memory
+			printf "%.1f%%\t%s\t%d\n", total_cpu, memory, total_rss
 		}
 	'
 }
@@ -399,6 +399,7 @@ list_runners() {
 	local usage
 	local cpu
 	local memory
+	local memory_kib
 	local runner_width=9
 	local state_width=5
 	local cpu_width=3
@@ -406,12 +407,15 @@ list_runners() {
 	local index
 	local row_count=0
 	local nullglob_was_set=false
+	local -a order=()
+	local -a sort_lines=()
 	local -a plists=()
 	local -a runner_ids=()
 	local -a states=()
 	local -a pids=()
 	local -a cpus=()
 	local -a memories=()
+	local -a memory_kibs=()
 	launch_agents_dir="${AMP_RUNNER_LAUNCH_AGENTS_DIR:-$HOME/Library/LaunchAgents}"
 
 	if [ -d "$launch_agents_dir" ]; then
@@ -429,13 +433,15 @@ list_runners() {
 		pid=-
 		cpu=-
 		memory=-
+		memory_kib=-1
 		if details="$(launchctl_command print "$(service_target "$runner_id")" 2>/dev/null)"; then
 			state="$(printf '%s\n' "$details" | awk -F'= ' '/^[[:space:]]*state =/{print $2; exit}')"
 			pid="$(printf '%s\n' "$details" | awk -F'= ' '/^[[:space:]]*pid =/{print $2; exit}')"
 			state="${state:-loaded}"
 			pid="${pid:--}"
 			if [[ "$pid" =~ ^[0-9]+$ ]] && usage="$(process_tree_usage "$pid" 2>/dev/null)"; then
-				IFS=$'\t' read -r cpu memory <<< "$usage"
+				IFS=$'\t' read -r cpu memory memory_kib <<< "$usage"
+				[[ "$memory_kib" =~ ^[0-9]+$ ]] || memory_kib=-1
 			fi
 		fi
 		runner_ids+=("$runner_id")
@@ -443,6 +449,7 @@ list_runners() {
 		pids+=("$pid")
 		cpus+=("$cpu")
 		memories+=("$memory")
+		memory_kibs+=("$memory_kib")
 		row_count=$((row_count + 1))
 		if [ "${#runner_id}" -gt "$runner_width" ]; then
 			runner_width=${#runner_id}
@@ -458,8 +465,15 @@ list_runners() {
 		fi
 	done
 
-	printf '%-*s  %-*s  %-7s  %*s  %*s\n' "$runner_width" RUNNER_ID "$state_width" STATE PID "$cpu_width" CPU "$memory_width" MEMORY
 	for ((index = 0; index < row_count; index++)); do
+		sort_lines+=("${memory_kibs[$index]}"$'\t'"$index")
+	done
+	while IFS=$'\t' read -r _ index; do
+		order+=("$index")
+	done < <(printf '%s\n' "${sort_lines[@]}" | LC_ALL=C sort -t $'\t' -k1,1nr -k2,2n)
+
+	printf '%-*s  %-*s  %-7s  %*s  %*s\n' "$runner_width" RUNNER_ID "$state_width" STATE PID "$cpu_width" CPU "$memory_width" MEMORY
+	for index in "${order[@]}"; do
 		printf '%-*s  %-*s  %-7s  %*s  %*s\n' \
 			"$runner_width" "${runner_ids[$index]}" \
 			"$state_width" "${states[$index]}" \

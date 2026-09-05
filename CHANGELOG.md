@@ -67,6 +67,7 @@ and this project does not currently use versioned releases.
 
 ### Changed
 
+- Sort `amp-runner list` by resident memory usage, descending.
 - Allow `agent-secrets` to resolve current one-time passwords through narrowly permitted 1Password OTP references, and register Demo4 credentials in the `work` bundle. [#214](https://github.com/lelouvincx/agent-skills/pull/214)
 - Move the `lelouvincx-bot` account-wide repository access policy from Logseq into shared, schema-validated `agent-secrets` policy while keeping publishing authorization repository-local. [#213](https://github.com/lelouvincx/agent-skills/pull/213)
 - Make the Agent Browser convention the single source of truth for browser-session setup in Claude Design and diagram workflows. [#210](https://github.com/lelouvincx/agent-skills/pull/210)
