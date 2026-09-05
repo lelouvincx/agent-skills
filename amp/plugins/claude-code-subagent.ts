@@ -7,9 +7,9 @@
 
 import { spawn } from 'node:child_process'
 import { createHash, randomUUID } from 'node:crypto'
-import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { appendFileSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { dirname, isAbsolute, join, resolve } from 'node:path'
+import { dirname, isAbsolute, join, posix, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { PluginAPI } from '@ampcode/plugin'
 
@@ -39,7 +39,19 @@ interface DesignToolInput {
 	model: Model
 	timeoutMinutes: number
 	workingDirectory: string
+	approvedDesignSyncUpload?: DesignSyncUploadApproval
 	includeRawTranscript: boolean
+}
+
+interface DesignSyncUploadApproval {
+	projectId: string
+	localDir: string
+	files: Array<{
+		path: string
+		localPath: string
+		bytes: number
+		sha256: string
+	}>
 }
 
 interface DesignSkill {
@@ -87,6 +99,9 @@ const GIT_FILE_AT_REF_MCP_TOOL = 'mcp__amp_git__git_file_at_ref'
 const GIT_MCP_TOOLS = [GIT_DIFF_MCP_TOOL, GIT_DIFF_REFS_MCP_TOOL, GIT_CHANGED_FILES_MCP_TOOL, GIT_FILE_AT_REF_MCP_TOOL]
 const SEM_DIFF_MCP_TOOL = 'mcp__sem__sem_diff'
 const GIT_DIFF_MCP_SERVER_PATH = fileURLToPath(new URL('../mcp-servers/git-diff-server.mjs', import.meta.url))
+const DESIGN_SDK_RUNNER_PATH = fileURLToPath(new URL('./claude-design-sdk-runner.mjs', import.meta.url))
+const MAX_DESIGN_SYNC_FILES = 256
+const MAX_DESIGN_SYNC_FILE_BYTES = 256 * 1024
 const DEFAULT_MCP_CONFIG_PATH = join(homedir(), '.config', 'amp', 'claude-code-readonly-mcp.json')
 const DEFAULT_GITHUB_PROFILE_CONFIG_PATH = join(homedir(), '.config', 'amp', 'github-profiles.json')
 const AUDIT_DIR = process.env.AMP_CLAUDE_CODE_SUBAGENT_AUDIT_DIR ?? join(homedir(), '.config', 'amp', 'logs', 'claude-code-subagent')
@@ -99,7 +114,6 @@ const BUILTIN_ALLOWED_TOOLS = ['Read', 'Grep', 'Glob']
 const BUILTIN_DENIED_TOOLS = ['Bash', 'Edit', 'Write', 'NotebookEdit']
 const DESIGN_ALLOWED_TOOLS = ['Read', 'Grep', 'Glob', 'ToolSearch', 'DesignSync']
 const DESIGN_DENIED_TOOLS = ['Bash', 'Edit', 'Write', 'NotebookEdit']
-const DESIGN_MCP_TOOLS = 'mcp__claude-design__*'
 const SAFE_ENV_KEYS = ['HOME', 'PATH', 'SHELL', 'USER', 'TMPDIR', 'LANG', 'LC_ALL', 'TERM', 'XDG_CONFIG_HOME', 'XDG_CACHE_HOME']
 const SAFE_ENV_PREFIXES = ['AMP_', 'HERDR_']
 const SECRET_ENV_NAME_RE = /(TOKEN|KEY|SECRET|PASSWORD|CREDENTIAL|AUTH|COOKIE|BEARER)/i
@@ -355,6 +369,30 @@ export default function (amp: PluginAPI) {
 					type: 'string',
 					description: 'Repository whose local design-system files Claude may read. Defaults to the plugin process cwd.',
 				},
+				approvedDesignSyncUpload: {
+					type: 'object',
+					description: 'Exact DesignSync upload plan the user approved. Pass only after approval of this project, local directory, and local-to-remote file mapping.',
+					properties: {
+						projectId: { type: 'string', description: 'Claude Design project UUID.' },
+						localDir: { type: 'string', description: 'Approved local source directory inside workingDirectory.' },
+						files: {
+							type: 'array',
+							minItems: 1,
+							maxItems: MAX_DESIGN_SYNC_FILES,
+							items: {
+								type: 'object',
+								properties: {
+									path: { type: 'string', description: 'Exact Claude Design project-relative destination path.' },
+									localPath: { type: 'string', description: 'Exact localDir-relative source path.' },
+								},
+								required: ['path', 'localPath'],
+								additionalProperties: false,
+							},
+						},
+					},
+					required: ['projectId', 'localDir', 'files'],
+					additionalProperties: false,
+				},
 				includeRawTranscript: {
 					type: 'boolean',
 					description: 'If true, store raw Claude CLI stdout/stderr in addition to the redacted audit log.',
@@ -385,7 +423,7 @@ export default function (amp: PluginAPI) {
 				claudePromptIncludedSkill: prompt.includes(skill.content),
 			}
 			const startedAt = new Date()
-			const result = await runClaude(args, prompt, resolve(input.workingDirectory), input.timeoutMinutes * 60_000, undefined, false)
+			const result = await runClaudeDesign(input, prompt, expectedSessionId, input.timeoutMinutes * 60_000)
 			const finishedAt = new Date()
 			const parsed = parseJson(result.stdout)
 			const output = parsed.ok ? extractResultCandidate(parsed.value) : undefined
@@ -481,6 +519,8 @@ function normalizeDesignInput(raw: Record<string, unknown>): DesignToolInput | {
 		? expandHome(raw.workingDirectory.trim())
 		: process.cwd()
 	if (!existsSync(workingDirectory)) return { error: `workingDirectory does not exist: ${workingDirectory}` }
+	const approvedDesignSyncUpload = normalizeDesignSyncUploadApproval(raw.approvedDesignSyncUpload, workingDirectory)
+	if ('error' in approvedDesignSyncUpload) return approvedDesignSyncUpload
 
 	const sessionId = typeof raw.sessionId === 'string' && raw.sessionId.trim() ? raw.sessionId.trim() : undefined
 	if (sessionId && !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(sessionId)) {
@@ -494,24 +534,120 @@ function normalizeDesignInput(raw: Record<string, unknown>): DesignToolInput | {
 		model: raw.model === 'fable' || raw.model === 'sonnet' ? raw.model : DEFAULT_MODEL,
 		timeoutMinutes: clampTimeout(raw.timeoutMinutes),
 		workingDirectory,
+		approvedDesignSyncUpload: approvedDesignSyncUpload.value,
 		includeRawTranscript: raw.includeRawTranscript === true || process.env.AMP_CLAUDE_CODE_SUBAGENT_DEBUG === '1',
 	}
 }
 
 function buildDesignCommand(input: DesignToolInput, sessionId: string): string[] {
+	const autoAllowedTools = DESIGN_ALLOWED_TOOLS.filter((tool) => tool !== 'DesignSync')
 	const args = [
-		'-p',
+		'agent-sdk',
 		'--model', input.model,
-		'--output-format', 'json',
-		'--permission-mode', 'dontAsk',
+		'--permission-mode', 'default',
 		'--setting-sources', 'user',
 		'--tools', DESIGN_ALLOWED_TOOLS.join(','),
-		'--allowedTools', [...DESIGN_ALLOWED_TOOLS, DESIGN_MCP_TOOLS].join(','),
+		'--allowedTools', autoAllowedTools.join(','),
 		'--disallowedTools', DESIGN_DENIED_TOOLS.join(','),
+		'--can-use-tool', input.approvedDesignSyncUpload
+			? 'claude-design-project-access+exact-design-sync-upload'
+			: 'claude-design-project-access',
 	]
 	if (input.sessionId) args.push('--resume', sessionId)
 	else args.push('--session-id', sessionId)
 	return args
+}
+
+function normalizeDesignSyncUploadApproval(raw: unknown, workingDirectory: string): { value?: DesignSyncUploadApproval } | { error: string } {
+	if (raw === undefined) return { value: undefined }
+	if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+		return { error: 'approvedDesignSyncUpload must be an object.' }
+	}
+	const input = raw as Record<string, unknown>
+	const unexpectedKeys = Object.keys(input).filter((key) => !['projectId', 'localDir', 'files'].includes(key))
+	if (unexpectedKeys.length > 0) return { error: `approvedDesignSyncUpload has an unexpected field: ${unexpectedKeys[0]}` }
+
+	const projectId = typeof input.projectId === 'string' ? input.projectId.trim() : ''
+	if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(projectId)) {
+		return { error: 'approvedDesignSyncUpload.projectId must be a Claude Design project UUID.' }
+	}
+	if (typeof input.localDir !== 'string' || !input.localDir.trim()) {
+		return { error: 'approvedDesignSyncUpload.localDir must be a non-empty path.' }
+	}
+	const localDir = resolve(expandHome(input.localDir.trim()))
+	const workingRoot = resolve(workingDirectory)
+	if (!pathIsInside(workingRoot, localDir)) {
+		return { error: 'approvedDesignSyncUpload.localDir must be inside workingDirectory.' }
+	}
+	try {
+		if (!statSync(localDir).isDirectory()) return { error: 'approvedDesignSyncUpload.localDir must be a directory.' }
+	} catch {
+		return { error: `approvedDesignSyncUpload.localDir does not exist: ${localDir}` }
+	}
+
+	if (!Array.isArray(input.files) || input.files.length === 0 || input.files.length > MAX_DESIGN_SYNC_FILES) {
+		return { error: `approvedDesignSyncUpload.files must contain 1 to ${MAX_DESIGN_SYNC_FILES} mappings.` }
+	}
+	const files: DesignSyncUploadApproval['files'] = []
+	const remotePaths = new Set<string>()
+	const localPaths = new Set<string>()
+	for (const [index, rawFile] of input.files.entries()) {
+		if (!rawFile || typeof rawFile !== 'object' || Array.isArray(rawFile)) {
+			return { error: `approvedDesignSyncUpload.files[${index}] must be an object.` }
+		}
+		const file = rawFile as Record<string, unknown>
+		const fileUnexpectedKeys = Object.keys(file).filter((key) => !['path', 'localPath'].includes(key))
+		if (fileUnexpectedKeys.length > 0) {
+			return { error: `approvedDesignSyncUpload.files[${index}] has an unexpected field: ${fileUnexpectedKeys[0]}` }
+		}
+		const remotePath = normalizeDesignSyncPath(file.path, `approvedDesignSyncUpload.files[${index}].path`)
+		if ('error' in remotePath) return remotePath
+		const localPath = normalizeDesignSyncPath(file.localPath, `approvedDesignSyncUpload.files[${index}].localPath`)
+		if ('error' in localPath) return localPath
+		if (remotePaths.has(remotePath.value)) return { error: `approvedDesignSyncUpload contains duplicate remote path: ${remotePath.value}` }
+		if (localPaths.has(localPath.value)) return { error: `approvedDesignSyncUpload contains duplicate local path: ${localPath.value}` }
+
+		const sourcePath = resolve(localDir, localPath.value)
+		if (!pathIsInside(localDir, sourcePath)) return { error: `Approved local path escapes localDir: ${localPath.value}` }
+		try {
+			const source = statSync(sourcePath)
+			if (!source.isFile()) return { error: `Approved local path is not a regular file: ${localPath.value}` }
+			if (source.size > MAX_DESIGN_SYNC_FILE_BYTES) return { error: `Approved local file exceeds 256 KiB: ${localPath.value}` }
+			const bytes = readFileSync(sourcePath)
+			files.push({
+				path: remotePath.value,
+				localPath: localPath.value,
+				bytes: source.size,
+				sha256: createHash('sha256').update(bytes).digest('hex'),
+			})
+		} catch {
+			return { error: `Approved local file does not exist: ${localPath.value}` }
+		}
+
+		remotePaths.add(remotePath.value)
+		localPaths.add(localPath.value)
+	}
+
+	return { value: { projectId: projectId.toLowerCase(), localDir, files } }
+}
+
+function normalizeDesignSyncPath(value: unknown, label: string): { value: string } | { error: string } {
+	if (typeof value !== 'string' || !value || value !== value.trim() || value.length > 4096) {
+		return { error: `${label} must be a non-empty relative path of at most 4096 characters.` }
+	}
+	if (value.includes('\\') || /[\0\r\n*?\[\]{}]/.test(value) || posix.isAbsolute(value)) {
+		return { error: `${label} must be an exact relative path without globs.` }
+	}
+	const normalized = posix.normalize(value)
+	if (normalized !== value || normalized === '.' || normalized === '..' || normalized.startsWith('../')) {
+		return { error: `${label} must be a normalized relative path without traversal.` }
+	}
+	return { value }
+}
+
+function pathIsInside(parent: string, child: string): boolean {
+	const path = relative(resolve(parent), resolve(child))
+	return path === '' || (path !== '..' && !path.startsWith(`..${sep}`) && !isAbsolute(path))
 }
 
 function loadDesignSkill(): DesignSkill | { error: string } {
@@ -531,6 +667,17 @@ function loadDesignSkill(): DesignSkill | { error: string } {
 }
 
 function buildDesignPrompt(input: DesignToolInput, skill: DesignSkill): string {
+	const designSyncApproval = input.approvedDesignSyncUpload
+		? [
+			'Amp has recorded explicit user approval for this exact DesignSync upload:',
+			JSON.stringify({
+				projectId: input.approvedDesignSyncUpload.projectId,
+				localDir: input.approvedDesignSyncUpload.localDir,
+				files: input.approvedDesignSyncUpload.files.map(({ path, localPath, bytes, sha256 }) => ({ path, localPath, bytes, sha256 })),
+			}, null, 2),
+			'Call DesignSync.finalize_plan once with exactly that projectId, localDir, the listed remote paths as writes, and an empty deletes list. Then call DesignSync.write_files once with that planId and the complete ordered files array containing only each exact path/localPath mapping. Do not use inline data, upload, overwrite or delete any other file.',
+		]
+		: []
 	return [
 		'You are Claude Code acting as a narrow proxy between Amp and Claude Design.',
 		'Use ToolSearch and Claude Design tools to complete the requested design task.',
@@ -539,6 +686,7 @@ function buildDesignPrompt(input: DesignToolInput, skill: DesignSkill): string {
 		'Amp has already loaded and hashed the skill and invoked this tool. Execute only the bounded Claude Design cloud operation in "Design task from Amp".',
 		'Amp owns briefing, browser review, iteration control, and handoff. Do not attempt Amp-owned steps or claim the full collaboration is complete.',
 		'Return a concise summary of what changed, plus every relevant Claude Design project URL and ID.',
+		...designSyncApproval,
 		'',
 		`<skill_content name="${DESIGN_SKILL_NAME}" sha256="${skill.sha256}">`,
 		skill.content,
@@ -762,6 +910,66 @@ function schemaForMode(mode: Mode): Record<string, unknown> {
 		},
 		required: ['summary', 'answer', 'confidence', 'citations', 'risks'],
 	}
+}
+
+function runClaudeDesign(input: DesignToolInput, prompt: string, sessionId: string, timeoutMs: number): Promise<ClaudeRunResult> {
+	return new Promise((resolveRun) => {
+		const env = sanitizedSubagentEnv()
+		const configuredRunner = process.env.AMP_CLAUDE_DESIGN_SDK_RUNNER
+		const command = configuredRunner
+			? { bin: configuredRunner, args: [] }
+			: { bin: 'bun', args: [DESIGN_SDK_RUNNER_PATH] }
+		const child = spawn(command.bin, command.args, {
+			cwd: resolve(input.workingDirectory),
+			env,
+			stdio: ['pipe', 'pipe', 'pipe'],
+		})
+
+		let stdout = ''
+		let stderr = ''
+		let timedOut = false
+		let outputLimitExceeded = false
+		let outputBytes = 0
+		const terminate = () => {
+			child.kill('SIGTERM')
+			setTimeout(() => child.kill('SIGKILL'), 5_000).unref()
+		}
+		const appendOutput = (current: string, chunk: string) => {
+			if (outputLimitExceeded) return current
+			outputBytes += Buffer.byteLength(chunk)
+			if (outputBytes > MAX_CLAUDE_OUTPUT_BYTES) {
+				outputLimitExceeded = true
+				terminate()
+				return current
+			}
+			return current + chunk
+		}
+
+		const timer = setTimeout(() => {
+			timedOut = true
+			terminate()
+		}, timeoutMs)
+		child.stdout.setEncoding('utf8')
+		child.stderr.setEncoding('utf8')
+		child.stdout.on('data', (chunk) => { stdout = appendOutput(stdout, chunk) })
+		child.stderr.on('data', (chunk) => { stderr = appendOutput(stderr, chunk) })
+		child.on('error', (error) => {
+			clearTimeout(timer)
+			resolveRun({ exitCode: null, stdout, stderr: `${stderr}\n${error.message}`.trim(), timedOut, outputLimitExceeded })
+		})
+		child.on('close', (code) => {
+			clearTimeout(timer)
+			resolveRun({ exitCode: code, stdout, stderr, timedOut, outputLimitExceeded })
+		})
+		child.stdin.end(JSON.stringify({
+			prompt,
+			cwd: resolve(input.workingDirectory),
+			model: input.model,
+			sessionId,
+			resume: Boolean(input.sessionId),
+			approval: input.approvedDesignSyncUpload,
+		}))
+	})
 }
 
 function runClaude(args: string[], prompt: string, cwd: string, timeoutMs: number, githubProfile?: string, useConfiguredEnvFile = true): Promise<ClaudeRunResult> {
