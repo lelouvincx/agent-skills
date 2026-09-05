@@ -16,6 +16,7 @@ and this project does not currently use versioned releases.
 - Add a 5-minute background selector that prioritises one Amp ChatGPT subscription until either Codex quota window reaches the configured remaining threshold, then activates a fallback subscription. [#190](https://github.com/lelouvincx/agent-skills/pull/190)
 - Add `amp-runner list` to show installed runners with their LaunchAgent state and process ID.
 - Add size-only Amp runner log rotation, verified private rclone backup, retention checks, and restore support. [#185](https://github.com/lelouvincx/agent-skills/pull/185)
+- Add a current-state discovery of `dotfiles` and `agent-skills`, an environment-setup product definition and glossary, and a living design-grill decision record.
 - Add an `amp-runner` user LaunchAgent manager with AC-only sleep prevention, crash recovery, isolated private logs, lifecycle controls, and temporary debug logging. [#184](https://github.com/lelouvincx/agent-skills/pull/184)
 - Add an agent-browser lifecycle registry and CLI with current state, append-only audit history, fresh-profile sessions, and parent/child thread adoption. [#182](https://github.com/lelouvincx/agent-skills/pull/182)
 - Add accepted RFC-0010, its staged implementation plan, and the validated local resolver and projection contract for shared local agent and bot secrets using capability bundles backed by one dedicated 1Password automation boundary. [#180](https://github.com/lelouvincx/agent-skills/pull/180)
