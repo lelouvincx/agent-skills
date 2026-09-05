@@ -48,6 +48,19 @@ agent-secrets doctor
 The source-controlled policy and shared automation library are in [`amp/agent-secrets/`](amp/agent-secrets/).
 `./sync-skills.sh` validates and projects them, then links the resolver into `~/.local/bin`.
 
+SmartClass local API development uses a dedicated wrapper rather than granting the DeepSeek key to
+generic `npx` or Wrangler commands:
+
+```bash
+agent-secrets run --bundle smartclass-deepseek -- \
+  /Users/lelouvincx/.local/bin/smartclass-wrangler-dev dev
+```
+
+The wrapper accepts only `dev` and `probe`. `dev` starts the repository-local Wrangler with an
+explicit `--local`, loads SmartClass's existing local development variables and adds the DeepSeek
+key from the sanitized process environment. It cannot forward deployment, remote-development or
+arbitrary Wrangler arguments.
+
 Local bundle files belong in `~/.credentials/agent-secrets/` with directory mode `0700` and file mode `0600`.
 They may contain only simple assignments to `op://Agent Secrets/...` references.
 The service-account bootstrap file is separate and is never projected from this repository.

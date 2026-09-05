@@ -21,6 +21,11 @@
         "/opt/homebrew/bin/rclone"
       ]
     },
+    "smartclass-wrangler-dev": {
+      "executablePaths": [
+        "/Users/lelouvincx/Developer/agent-skills/bin/smartclass-wrangler-dev"
+      ]
+    },
     "logseq-agent-preflight": {
       "executablePaths": [
         "/Users/lelouvincx/Developer/second-brain-logseq/automation/validate-agent-credentials"
@@ -85,6 +90,17 @@
       "compatibleBundles": [],
       "allowedCommandClasses": [
         "amp-runner-rclone"
+      ]
+    },
+    "smartclass-deepseek": {
+      "audience": "agent",
+      "owner": "lelouvincx/smartclass",
+      "variables": [
+        "DEEPSEEK_API_KEY"
+      ],
+      "compatibleBundles": [],
+      "allowedCommandClasses": [
+        "smartclass-wrangler-dev"
       ]
     }
   }

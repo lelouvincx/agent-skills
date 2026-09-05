@@ -55,7 +55,7 @@ repos:
         language: python
         additional_dependencies: [jsonschema==4.25.1]
         pass_filenames: false
-        files: ^(?:amp/agent-secrets/|amp/scripts/test-agent-secrets-lib\.sh$|amp/scripts/(?:test_agent_secrets|test_validate_agent_secrets|validate-agent-secrets)\.py$|bin/agent-secrets$|sync-skills\.sh$|scripts/check-projection$|\.github/workflows/ci\.yml$|\.pre-commit-config\.yaml$)
+        files: ^(?:amp/agent-secrets/|amp/scripts/test-agent-secrets-lib\.sh$|amp/scripts/(?:test_agent_secrets|test_validate_agent_secrets|validate-agent-secrets)\.py$|bin/(?:agent-secrets|smartclass-wrangler-dev)$|sync-skills\.sh$|scripts/check-projection$|\.github/workflows/ci\.yml$|\.pre-commit-config\.yaml$)
 
       - id: test-agent-secrets
         name: Test agent secret capability resolver
@@ -63,7 +63,7 @@ repos:
         language: python
         additional_dependencies: [jsonschema==4.25.1]
         pass_filenames: false
-        files: ^(?:amp/agent-secrets/|amp/scripts/test-agent-secrets-lib\.sh$|amp/scripts/(?:test_agent_secrets|test_validate_agent_secrets|validate-agent-secrets)\.py$|bin/agent-secrets$|sync-skills\.sh$|scripts/check-projection$|\.github/workflows/ci\.yml$|\.pre-commit-config\.yaml$)
+        files: ^(?:amp/agent-secrets/|amp/scripts/test-agent-secrets-lib\.sh$|amp/scripts/(?:test_agent_secrets|test_validate_agent_secrets|validate-agent-secrets)\.py$|bin/(?:agent-secrets|smartclass-wrangler-dev)$|sync-skills\.sh$|scripts/check-projection$|\.github/workflows/ci\.yml$|\.pre-commit-config\.yaml$)
 
       - id: validate-github-thread-events
         name: Validate GitHub thread event configuration

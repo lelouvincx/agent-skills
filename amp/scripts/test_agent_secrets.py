@@ -6,11 +6,14 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / "bin" / "agent-secrets"
+SMARTCLASS_WRAPPER = ROOT / "bin" / "smartclass-wrangler-dev"
 RUNTIME = runpy.run_path(str(SCRIPT))
+SMARTCLASS_RUNTIME = runpy.run_path(str(SMARTCLASS_WRAPPER))
 
 
 FAKE_OP = r'''#!/usr/bin/env python3
@@ -525,6 +528,82 @@ class AgentSecretsTests(unittest.TestCase):
         result = self.run_cli("doctor")
         self.assertEqual(0, result.returncode, result.stderr)
         self.assertFalse(clipboard_log.exists())
+
+
+class SmartClassWranglerWrapperTests(unittest.TestCase):
+    def run_wrapper(self, mode, environment=None):
+        return subprocess.run(
+            [sys.executable, str(SMARTCLASS_WRAPPER), mode],
+            check=False,
+            capture_output=True,
+            text=True,
+            env={} if environment is None else environment,
+        )
+
+    def test_probe_reports_presence_without_printing_the_value(self):
+        secret_name = "DEEPSEEK" + "_API_KEY"
+        result = self.run_wrapper("probe", {secret_name: "placeholder-value"})
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual("DEEPSEEK_API_KEY is present\n", result.stdout)
+        self.assertNotIn("placeholder-value", result.stdout + result.stderr)
+
+    def test_wrapper_rejects_missing_secret_and_unapproved_modes(self):
+        missing = self.run_wrapper("probe")
+        self.assertNotEqual(0, missing.returncode)
+        self.assertIn("DEEPSEEK_API_KEY is unavailable", missing.stderr)
+
+        secret_name = "DEEPSEEK" + "_API_KEY"
+        unapproved = self.run_wrapper("deploy", {secret_name: "placeholder-value"})
+        self.assertEqual(2, unapproved.returncode)
+        self.assertIn("{dev|probe}", unapproved.stderr)
+        self.assertNotIn("placeholder-value", unapproved.stdout + unapproved.stderr)
+
+    def test_dev_executes_only_local_wrangler_with_a_minimal_environment(self):
+        secret_name = "DEEPSEEK" + "_API_KEY"
+        inherited = {
+            "HOME": "/tmp/untrusted-home",
+            "PATH": "/tmp/untrusted-bin",
+            "UNRELATED": "drop-me",
+            "GH_TOKEN": "drop-me-too",
+            secret_name: "placeholder-value",
+        }
+        with (
+            mock.patch.object(sys, "argv", [str(SMARTCLASS_WRAPPER), "dev"]),
+            mock.patch.dict(os.environ, inherited, clear=True),
+            mock.patch.object(os.path, "isfile", return_value=True),
+            mock.patch.object(os, "access", return_value=True),
+            mock.patch.object(os, "chdir") as chdir,
+            mock.patch.object(os, "execve", side_effect=RuntimeError("exec called")) as execve,
+            self.assertRaisesRegex(RuntimeError, "exec called"),
+        ):
+            SMARTCLASS_RUNTIME["main"]()
+
+        chdir.assert_called_once_with(SMARTCLASS_RUNTIME["PROJECT"])
+        executable, arguments, environment = execve.call_args.args
+        self.assertEqual(SMARTCLASS_RUNTIME["NODE"], executable)
+        self.assertEqual(
+            [
+                SMARTCLASS_RUNTIME["NODE"],
+                SMARTCLASS_RUNTIME["WRANGLER"],
+                "dev",
+                "--local",
+                "--env-file",
+                SMARTCLASS_RUNTIME["DEV_VARS"],
+            ],
+            arguments,
+        )
+        self.assertEqual(
+            {
+                "HOME": SMARTCLASS_RUNTIME["HOME"],
+                "PATH": (
+                    f"{SMARTCLASS_RUNTIME['NODE_DIRECTORY']}:"
+                    "/opt/homebrew/bin:/usr/bin:/bin"
+                ),
+                secret_name: "placeholder-value",
+                "CLOUDFLARE_INCLUDE_PROCESS_ENV": "true",
+            },
+            environment,
+        )
 
 
 if __name__ == "__main__":
