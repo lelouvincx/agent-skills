@@ -7,6 +7,7 @@ Usage:
   amp-runner install [OPTIONS] RUNNER_ID [-- AMP_ARGS...]
   amp-runner list
   amp-runner start|stop|restart|status|logs|uninstall RUNNER_ID
+  amp-runner restart all
   amp-runner run [OPTIONS] RUNNER_ID [-- AMP_ARGS...]
 
 Manage a user LaunchAgent for an Amp background runner. The runner starts at
@@ -26,6 +27,7 @@ Examples:
   amp-runner install --debug macbook.agent-skills
   amp-runner list
   amp-runner restart macbook.agent-skills
+  amp-runner restart all
   amp-runner logs macbook.agent-skills
 EOF
 }
@@ -292,6 +294,14 @@ stop_runner() {
 }
 
 restart_runner() {
+	if [ "$#" -eq 1 ] && [ "$1" = all ]; then
+		restart_all_runners
+		return
+	fi
+	restart_one_runner "$@"
+}
+
+restart_one_runner() {
 	require_runner_id "$@"
 	local plist
 	plist="$(launch_agent_path "$1")"
@@ -301,6 +311,30 @@ restart_runner() {
 	else
 		launchctl_command bootstrap "gui/$(id -u)" "$plist"
 	fi
+}
+
+restart_all_runners() {
+	local launch_agents_dir
+	local plist
+	local filename
+	local runner_id
+	local nullglob_was_set=false
+	local -a plists=()
+	launch_agents_dir="${AMP_RUNNER_LAUNCH_AGENTS_DIR:-$HOME/Library/LaunchAgents}"
+
+	if [ -d "$launch_agents_dir" ]; then
+		shopt -q nullglob && nullglob_was_set=true
+		shopt -s nullglob
+		plists=("$launch_agents_dir"/com.ampcode.runner.*.plist)
+		[ "$nullglob_was_set" = true ] || shopt -u nullglob
+	fi
+
+	for plist in "${plists[@]+"${plists[@]}"}"; do
+		filename="${plist##*/}"
+		runner_id="${filename#com.ampcode.runner.}"
+		runner_id="${runner_id%.plist}"
+		restart_one_runner "$runner_id"
+	done
 }
 
 status_runner() {

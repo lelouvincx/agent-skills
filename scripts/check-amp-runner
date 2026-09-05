@@ -25,6 +25,10 @@ EOF
 cat > "$tmp_dir/bin/launchctl" <<'EOF'
 #!/usr/bin/env bash
 printf '<%s>' "$@" > "$AMP_RUNNER_TEST_LAUNCHCTL_CAPTURE"
+{
+	printf '<%s>' "$@"
+	printf '\n'
+} >> "$AMP_RUNNER_TEST_LAUNCHCTL_LOG"
 if [ "${1:-}" = print ]; then
 	if [ -f "$AMP_RUNNER_TEST_LOADED_FILE" ] && [[ "${2:-}" = *macbook.agent-skills ]]; then
 		printf '\tstate = running\n\tpid = 12345\n'
@@ -58,6 +62,7 @@ run_launcher() {
 	AMP_RUNNER_PLUTIL="$tmp_dir/bin/plutil" \
 	AMP_RUNNER_TEST_CAPTURE="$tmp_dir/capture" \
 	AMP_RUNNER_TEST_LAUNCHCTL_CAPTURE="$tmp_dir/launchctl-capture" \
+	AMP_RUNNER_TEST_LAUNCHCTL_LOG="$tmp_dir/launchctl-log" \
 	AMP_RUNNER_TEST_LOADED_FILE="$tmp_dir/loaded" \
 		"$launcher" "$@"
 }
@@ -107,6 +112,13 @@ EOF
 	printf 'Expected aligned list output:\n%s\nActual output:\n%s\n' "$expected_list_output" "$list_output" >&2
 	exit 1
 }
+
+: > "$tmp_dir/launchctl-log"
+run_launcher restart all
+grep -Fq '<kickstart><-k><gui/' "$tmp_dir/launchctl-log"
+grep -Fq 'com.ampcode.runner.macbook.agent-skills>' "$tmp_dir/launchctl-log"
+grep -Fq '<bootstrap><gui/' "$tmp_dir/launchctl-log"
+grep -Fq 'com.ampcode.runner.macbook.stopped.plist>' "$tmp_dir/launchctl-log"
 
 if run_launcher run 'bad/runner' >"$tmp_dir/stdout" 2>"$tmp_dir/stderr"; then
 	printf '%s\n' 'Expected an unsafe runner ID to fail.' >&2
