@@ -7,7 +7,6 @@ from pathlib import Path
 
 from jsonschema import Draft202012Validator, SchemaError
 
-
 ROOT = Path(__file__).resolve().parents[1] / "agent-secrets"
 FORBIDDEN_VARIABLES = {
     "AGENT_SECRET_AUTH",
@@ -158,7 +157,30 @@ def semantic_errors(path, data):
 
     for location, value in _strings(data):
         if "op://" in value.lower():
-            errors.append(f"{path}: {location}: 1Password references are forbidden in policy")
+            errors.append(
+                f"{path}: {location}: 1Password references are forbidden in policy"
+            )
+    return errors
+
+
+def github_identity_semantic_errors(path, data):
+    errors = []
+    if not isinstance(data, dict):
+        return errors
+
+    identities = data.get("identities", {})
+    if not isinstance(identities, dict):
+        return errors
+    for identity_name, identity in identities.items():
+        if not isinstance(identity, dict):
+            continue
+        repositories = identity.get("repositoryAllowlist", [])
+        if (
+            isinstance(repositories, list)
+            and all(isinstance(repository, str) for repository in repositories)
+            and repositories != sorted(repositories)
+        ):
+            errors.append(f"{path}: {identity_name} repositoryAllowlist must be sorted")
     return errors
 
 
@@ -172,9 +194,26 @@ def validate_tree(root=ROOT):
         data = read_json(manifest_path)
         errors.extend(
             f"{manifest_path}: {error.json_path}: {error.message}"
-            for error in sorted(validator.iter_errors(data), key=lambda item: list(item.path))
+            for error in sorted(
+                validator.iter_errors(data), key=lambda item: list(item.path)
+            )
         )
         errors.extend(semantic_errors(manifest_path, data))
+    except (PolicyConfigurationError, ValueError) as error:
+        errors.append(str(error))
+
+    identity_schema_path = root / "github-identities.schema.json"
+    identity_policy_path = root / "github-identities.json"
+    try:
+        validator = schema_validator(identity_schema_path)
+        data = read_json(identity_policy_path)
+        errors.extend(
+            f"{identity_policy_path}: {error.json_path}: {error.message}"
+            for error in sorted(
+                validator.iter_errors(data), key=lambda item: list(item.path)
+            )
+        )
+        errors.extend(github_identity_semantic_errors(identity_policy_path, data))
     except (PolicyConfigurationError, ValueError) as error:
         errors.append(str(error))
     return errors
@@ -185,7 +224,7 @@ def main():
     if errors:
         print("\n".join(errors), file=sys.stderr)
         return 1
-    print("Agent secret capability policy is valid")
+    print("Agent secret policies are valid")
     return 0
 
 

@@ -67,6 +67,7 @@ and this project does not currently use versioned releases.
 
 ### Changed
 
+- Move the `lelouvincx-bot` account-wide repository access policy from Logseq into shared, schema-validated `agent-secrets` policy while keeping publishing authorization repository-local.
 - Make the Agent Browser convention the single source of truth for browser-session setup in Claude Design and diagram workflows. [#210](https://github.com/lelouvincx/agent-skills/pull/210)
 - Run the Amp ChatGPT subscription selector when its macOS LaunchAgent loads, as well as every five minutes. [#209](https://github.com/lelouvincx/agent-skills/pull/209)
 - Rename the canonical embedded analytics demo project to `embed-presales-demo` while preserving its legacy aliases. [#208](https://github.com/lelouvincx/agent-skills/pull/208)

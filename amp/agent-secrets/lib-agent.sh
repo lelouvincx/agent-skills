@@ -1,5 +1,5 @@
 # shellcheck shell=bash
-# Shared agent abstraction layer for Logseq automation.
+# Shared agent abstraction layer for local automation.
 # Supports: amp, claude
 #
 # Globals (read by callers after agent_run):
@@ -449,6 +449,62 @@ agent_github_token_expiration() {
 		}'
 }
 
+agent_bot_repository_allowlist() {
+	local library_dir policy_file
+	library_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P) || return 1
+	policy_file="$library_dir/github-identities.json"
+	python3 - "$policy_file" "$AGENT_BOT_GITHUB_LOGIN" <<'PY'
+import json
+import re
+import sys
+
+
+def reject_duplicate_keys(pairs):
+    value = {}
+    for key, child in pairs:
+        if key in value:
+            raise ValueError(f"duplicate key: {key}")
+        value[key] = child
+    return value
+
+
+path, login = sys.argv[1:]
+try:
+    with open(path, encoding="utf-8") as policy_file:
+        policy = json.load(policy_file, object_pairs_hook=reject_duplicate_keys)
+    if set(policy) != {"version", "identities"} or policy["version"] != 1:
+        raise ValueError("unsupported policy shape or version")
+    identities = policy["identities"]
+    if not isinstance(identities, dict) or not identities:
+        raise ValueError("identities must be a non-empty object")
+    if login not in identities:
+        raise ValueError(f"identity is not registered: {login}")
+    login_pattern = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,37}[a-z0-9])?$")
+    repository_pattern = re.compile(
+        r"^[a-z0-9](?:[a-z0-9-]{0,37}[a-z0-9])?/[a-z0-9._-]+$"
+    )
+    for identity_name, identity in identities.items():
+        if not login_pattern.fullmatch(identity_name):
+            raise ValueError(f"invalid identity name: {identity_name}")
+        if not isinstance(identity, dict) or set(identity) != {"repositoryAllowlist"}:
+            raise ValueError(f"invalid identity policy: {identity_name}")
+        repositories = identity["repositoryAllowlist"]
+        if (
+            not isinstance(repositories, list)
+            or not repositories
+            or any(not isinstance(repo, str) or not repository_pattern.fullmatch(repo) for repo in repositories)
+            or len(repositories) != len(set(repositories))
+            or repositories != sorted(repositories)
+        ):
+            raise ValueError(f"invalid repository allowlist: {identity_name}")
+except (OSError, TypeError, ValueError, json.JSONDecodeError) as error:
+    print(f"ERROR: Shared GitHub identity policy is invalid: {error}", file=sys.stderr)
+    raise SystemExit(1)
+
+print("\n".join(identities[login]["repositoryAllowlist"]))
+PY
+}
+
 agent_validate_work_token() {
 	local token="$1" login scopes
 	if ! login=$(agent_gh "$token" api user --jq .login 2>/dev/null); then
@@ -468,7 +524,12 @@ agent_validate_work_token() {
 
 agent_validate_bot_token() {
 	local token="$1" repository="$2" login scopes expiration push admin repositories organizations
-	local accessible_repository allowed_repository repository_allowed repository_found=false
+	local accessible_repository allowed_repository repository_allowed repository_found=false policy_output
+	local allowed_repositories=()
+	policy_output=$(agent_bot_repository_allowlist) || return 1
+	while IFS= read -r allowed_repository; do
+		[[ -n "$allowed_repository" ]] && allowed_repositories+=("$allowed_repository")
+	done <<<"$policy_output"
 	if ! login=$(agent_gh "$token" api user --jq .login 2>/dev/null); then
 		echo "ERROR: Bot GitHub authentication failed" >&2
 		return 1
@@ -509,7 +570,7 @@ PY
 	while IFS= read -r accessible_repository; do
 		[[ -n "$accessible_repository" ]] || continue
 		repository_allowed=false
-		for allowed_repository in "${AGENT_BOT_GITHUB_REPOSITORY_ALLOWLIST[@]}"; do
+		for allowed_repository in "${allowed_repositories[@]}"; do
 			if [[ "$accessible_repository" == "$allowed_repository" ]]; then
 				repository_allowed=true
 				break

@@ -12,7 +12,7 @@ Add one local `agent-secrets` command owned by `lelouvincx/agent-skills`.
 
 The command will resolve approved 1Password references and start one registered child process.
 
-Logseq will use the command without changing its output validation, repository allowlist or publishing policy.
+Logseq will use the command without changing its output validation or publishing policy.
 
 The retired weekly-report schedule must remain uninstalled and unloaded.
 
@@ -42,6 +42,7 @@ The migration will keep the legacy Logseq secret path available until replacemen
 Agent-skills owns:
 
 - capability bundle policy and schema
+- shared GitHub bot identity access policy and schema
 - manifest and semantic validation
 - authentication and fallback
 - local reference-file parsing
@@ -56,6 +57,8 @@ Source files:
 
 - `amp/agent-secrets/bundles.json`
 - `amp/agent-secrets/bundles.schema.json`
+- `amp/agent-secrets/github-identities.json`
+- `amp/agent-secrets/github-identities.schema.json`
 - `amp/agent-secrets/lib-agent.sh`
 - `amp/scripts/validate-agent-secrets.py`
 - `amp/scripts/test_validate_agent_secrets.py`
@@ -75,7 +78,7 @@ Logseq retains:
 - agent output snapshots and allowlists
 - commit-file allowlists
 - bot SSH transport and signing
-- bot account, repository, permission and ruleset checks
+- publishing target, operation and ruleset checks
 - pull request titles, bodies, comments, reviewer and assignee policy
 - success-stamp ordering
 - its local adapter configuration for the shared shell library
@@ -248,7 +251,7 @@ It will not print credential values.
 - `publish`, for approved commit, push, pull request and comment operations
 - `commit-and-push`, for an approved follow-up commit after pull request creation
 
-Each operation will accept only the 2 existing repository allowlist entries.
+Each operation will accept only the 2 existing publishing targets.
 
 The wrapper will validate the repository origin, default branch, approved files and existing SSH contract.
 

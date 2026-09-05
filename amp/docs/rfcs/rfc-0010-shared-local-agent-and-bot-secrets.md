@@ -23,6 +23,8 @@ dependency:
 implementation:
   - path: "../../agent-secrets/bundles.json"
   - path: "../../agent-secrets/bundles.schema.json"
+  - path: "../../agent-secrets/github-identities.json"
+  - path: "../../agent-secrets/github-identities.schema.json"
   - path: "../../agent-secrets/lib-agent.sh"
   - path: "../../scripts/validate-agent-secrets.py"
   - path: "../../scripts/test_validate_agent_secrets.py"
@@ -194,7 +196,9 @@ Then revoke the superseded credentials so that the legacy copies stop working, r
 
 This sequence avoids breaking existing `op://Logseq Reports/` references during verification and avoids leaving 2 live copies indefinitely.
 
-Logseq retains its scheduling, output validation, repository allowlist, configuration and publishing policy.
+Logseq retains its scheduling, output validation, configuration and publishing authorization.
+
+Agent-skills owns the account-wide repository access policy for shared GitHub bot identities.
 
 ### Capability bundles
 
@@ -297,13 +301,15 @@ Use another vault and service account when a future automation script needs a se
 
 ### Policy ownership
 
-`agent-skills` owns authentication, bundle validation, process-scoped injection and the shared shell implementation.
+`agent-skills` owns authentication, bundle validation, process-scoped injection, shared GitHub identity access policy and the shared shell implementation.
 
 Each automation repository owns the adapter configuration and permission to request a bundle or use the resulting external identity.
 
 Credential availability does not grant resource authorization.
 
-Logseq continues to own its schedule checks, output allowlists and bot repository allowlist.
+Logseq continues to own its schedule checks, output allowlists, publishing targets and permitted operations.
+
+The shared identity policy records every repository that `lelouvincx-bot` may access. It does not authorize a consuming automation script to publish to those repositories.
 
 ## Contract
 
@@ -428,7 +434,7 @@ That wrapper, not a general shell or agent runtime, is the only initial command 
 
 The wrapper accepts strict high-level operations for `lelouvincx/second-brain-logseq` and `lelouvincx/agent-skills` only.
 
-It enforces Logseq's existing repository allowlist and rejects arbitrary `git`, `gh` or shell forwarding.
+It enforces Logseq's publishing targets and rejects arbitrary `git`, `gh` or shell forwarding.
 
 A missing, non-executable or unmatched path fails before 1Password access.
 
@@ -653,7 +659,9 @@ Before generation, `automation/validate-agent-credentials` receives the same bun
 
 Its deterministic publishing phase receives `lelouvincx-bot` only after output validation.
 
-The publishing phase retains explicit bot SSH transport and repository allowlist checks.
+The publishing phase retains explicit bot SSH transport and publishing authorization checks.
+
+The shared library checks the bot's complete GitHub repository access against `github-identities.json` before publishing.
 
 The 2 phases never share one child process or environment.
 
@@ -712,7 +720,7 @@ It must belong to a deterministic command class registered by the bundle manifes
 
 The automation script validates output and resource scope before invoking it.
 
-For `lelouvincx-bot`, the automation script retains exact GitHub repository and permission checks.
+For `lelouvincx-bot`, shared policy defines expected account access and permissions. The automation script separately authorizes each publishing target and operation.
 
 Another credential may enter `lelouvincx-bot` only when every registered bot command may receive it safely.
 
@@ -800,7 +808,7 @@ This RFC owns the shared design.
 
 The implementation plan is `amp/docs/plans/implementation-plan-rfc-0010-shared-local-agent-and-bot-secrets.md`.
 
-`amp/agent-secrets/lib-agent.sh`, `amp/agent-secrets/bundles.json`, its schema, its validator and `bin/agent-secrets` own the executable shared contract.
+`amp/agent-secrets/lib-agent.sh`, the bundle and GitHub identity policies, their schemas, the validator and `bin/agent-secrets` own the executable shared contract.
 
 Automation scripts and their owning repositories own task authorization and publisher policy.
 
@@ -844,6 +852,7 @@ The implementation must prove:
 - resolved values do not enter the caller shell, arguments, files, logs or clipboard
 - Logseq credential preflight runs through its registered deterministic command class
 - bot publishing uses strict high-level operations for only the 2 repositories permitted by Logseq's deterministic publisher
+- missing, malformed or incomplete shared GitHub identity policy blocks bot publishing without a caller-provided fallback
 - conflicting `AGENT_SECRET_AUTH` and `LOGSEQ_REPORT_AUTH` values fail during Logseq migration
 - legacy Logseq credentials remain usable until their replacements pass, and legacy copies stop working after revocation
 - automation-script policy remains outside the shared resolver
