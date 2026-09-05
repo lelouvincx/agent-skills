@@ -54,12 +54,7 @@ Complete this step when the returned project and deliverable identities match th
 
 ### 3. Run the render gate
 
-Load `agent-browser`, then follow this convention:
-
-- start a new, separate instance of the installed system Google Chrome in headed mode with the persistent local profile at `~/.local/state/agent-browser/profiles/local`
-- assign an unused CDP port to the current Amp thread, connect `agent-browser` only to that port, and never attach to or reuse another thread's Chrome or CDP endpoint
-- bring Chrome to the foreground and verify the current URL and page title before continuing
-- treat the profile as sensitive authentication state; when sign-in is required, ask the user to sign in and tell you when they have finished, then continue in the same browser session
+Load `agent-browser` and follow the Agent Browser convention.
 
 Open the deliverable URL at the intended viewport.
 

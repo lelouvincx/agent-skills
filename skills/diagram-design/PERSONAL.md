@@ -24,7 +24,7 @@ A **project branding source** is an existing project-owned `DESIGN.md`, `design.
 
 ### Browser inspection and PNG export
 
-For website branding, rendered-output inspection, and PNG export, load `agent-browser` before the first browser action and follow the Agent Browser convention. Use its dedicated headed Chrome instance and persistent local profile. This workflow replaces the Playwright detection, Playwright rasterization, separate Chromium installation, and stale fetch commands in the generated references.
+For website branding, rendered-output inspection, and PNG export, load `agent-browser` before the first browser action and follow the Agent Browser convention.
 
 For PNG export:
 
