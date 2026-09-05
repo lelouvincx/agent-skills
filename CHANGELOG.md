@@ -66,6 +66,7 @@ and this project does not currently use versioned releases.
 
 ### Changed
 
+- Rename the canonical embedded analytics demo project to `embed-presales-demo` while preserving its legacy aliases.
 - Show CPU and resident memory usage for each process tree in `amp-runner list`. [#205](https://github.com/lelouvincx/agent-skills/pull/205)
 - Require a corresponding Amp project whenever a project is added to or updated in the canonical registry, including projects without a GitHub repository. [#202](https://github.com/lelouvincx/agent-skills/pull/202)
 - Replace the local `showing-code` skill with HumanLayer's remote `show-me` skill while preserving exact-source, plain-diagram, and artifact-path guidance. [#201](https://github.com/lelouvincx/agent-skills/pull/201)
