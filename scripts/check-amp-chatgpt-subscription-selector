@@ -91,6 +91,8 @@ printf '%s\n' "$primary" > "$tmp/active"
 
 run_tool install --preferred "$primary" --fallback "$fallback"
 plist="$tmp/agents/com.ampcode.chatgpt-subscription-selector.plist"
+grep -Fq '<key>RunAtLoad</key>' "$plist"
+grep -Fq '<true/>' "$plist"
 grep -Fq '<integer>300</integer>' "$plist"
 grep -Fq '<key>HOME</key>' "$plist"
 grep -Fq '<key>PATH</key>' "$plist"

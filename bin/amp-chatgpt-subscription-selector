@@ -241,6 +241,7 @@ install_agent() {
 		printf '\t\t<key>HOME</key>\n'; xml_string "$HOME"
 		printf '\t\t<key>PATH</key>\n'; xml_string "$PATH"
 		printf '\t</dict>\n'
+		printf '\t<key>RunAtLoad</key>\n\t<true/>\n'
 		printf '\t<key>StartInterval</key>\n\t<integer>300</integer>\n'
 		printf '\t<key>StandardOutPath</key>\n'; xml_string '/dev/null'
 		printf '\t<key>StandardErrorPath</key>\n'; xml_string '/dev/null'
