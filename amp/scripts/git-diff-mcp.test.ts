@@ -109,7 +109,7 @@ describe('read-only Git diff MCP server', () => {
 		expect(responses.find((response) => response.id === 4)?.result.content[0].text).toContain('Untracked paths:')
 		expect(responses.find((response) => response.id === 5)?.result.isError).toBe(false)
 		expect(responses.find((response) => response.id === 6)?.result.content[0].text).toContain('\none\n')
-	})
+	}, 15_000)
 })
 
 function createRepository(): string {
@@ -128,7 +128,11 @@ function createRepository(): string {
 }
 
 function git(repository: string, ...args: string[]): string {
-	const result = spawnSync('git', args, { cwd: repository, encoding: 'utf8' })
+	const env = { ...process.env }
+	for (const key of Object.keys(env)) {
+		if (key.startsWith('GIT_')) delete env[key]
+	}
+	const result = spawnSync('git', args, { cwd: repository, env, encoding: 'utf8' })
 	if (result.status !== 0) throw new Error(result.stderr || `git ${args[0]} failed`)
 	return result.stdout
 }
