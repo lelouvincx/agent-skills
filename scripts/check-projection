@@ -133,6 +133,12 @@ if [ ! -L "$agent_secrets" ] || [ "$(readlink "$agent_secrets")" != "$REPO_DIR/b
 	exit 1
 fi
 
+smartclass_wrangler_dev="$tmp_home/.local/bin/smartclass-wrangler-dev"
+if [ ! -L "$smartclass_wrangler_dev" ] || [ "$(readlink "$smartclass_wrangler_dev")" != "$REPO_DIR/bin/smartclass-wrangler-dev" ] || [ ! -x "$smartclass_wrangler_dev" ]; then
+	echo "error: projection did not create an executable smartclass-wrangler-dev link" >&2
+	exit 1
+fi
+
 amp_runner="$tmp_home/.local/bin/amp-runner"
 if [ ! -L "$amp_runner" ] || [ "$(readlink "$amp_runner")" != "$REPO_DIR/bin/amp-runner" ] || [ ! -x "$amp_runner" ]; then
 	echo "error: projection did not create an executable amp-runner link" >&2

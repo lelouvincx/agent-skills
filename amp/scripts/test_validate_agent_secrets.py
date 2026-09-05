@@ -33,6 +33,23 @@ class AgentSecretPolicyValidationTests(unittest.TestCase):
     def test_checked_in_policy_is_valid(self):
         self.assertEqual([], validator.validate_tree(SOURCE))
 
+    def test_smartclass_deepseek_is_limited_to_the_local_wrangler_wrapper(self):
+        manifest = self.read_manifest()
+        self.assertEqual(
+            {
+                "audience": "agent",
+                "owner": "lelouvincx/smartclass",
+                "variables": ["DEEPSEEK_API_KEY"],
+                "compatibleBundles": [],
+                "allowedCommandClasses": ["smartclass-wrangler-dev"],
+            },
+            manifest["bundles"]["smartclass-deepseek"],
+        )
+        self.assertEqual(
+            ["/Users/lelouvincx/Developer/agent-skills/bin/smartclass-wrangler-dev"],
+            manifest["command_classes"]["smartclass-wrangler-dev"]["executablePaths"],
+        )
+
     def test_schema_is_closed(self):
         manifest = self.read_manifest()
         manifest["unexpected"] = True

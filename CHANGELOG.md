@@ -9,6 +9,7 @@ and this project does not currently use versioned releases.
 
 ### Added
 
+- Add a local-only SmartClass Wrangler wrapper and narrowly scoped DeepSeek secret bundle. [#204](https://github.com/lelouvincx/agent-skills/pull/204)
 - Add `amp-runner restart all` to restart every installed runner. [#203](https://github.com/lelouvincx/agent-skills/pull/203)
 - Add a Grok 4.6 agent mode with max reasoning effort and the Fable 5 prompt and tools. [#199](https://github.com/lelouvincx/agent-skills/pull/199)
 - Add a 5-minute background selector that prioritises one Amp ChatGPT subscription until either Codex quota window reaches the configured remaining threshold, then activates a fallback subscription. [#190](https://github.com/lelouvincx/agent-skills/pull/190)
