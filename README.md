@@ -115,6 +115,7 @@ Local skills are maintained in this repository. Remote skills are fetched and pr
 | [search-docs](skills/search-docs/SKILL.md) | Remote | search Holistics documentation |
 | [show-me](skills/show-me/SKILL.md) | Remote | explain technical topics with concise diagrams, code-shape sketches, and focused HTML artifacts |
 | [slackcli](skills/slackcli/SKILL.md) | Local | read, send, and manage Slack messages from the CLI |
+| [syncing-holistics-external-git](skills/syncing-holistics-external-git/SKILL.md) | Local | bootstrap local sync for a new, empty external Git repository connected to Holistics |
 | [tdd](skills/tdd/SKILL.md) | Remote | work test-first |
 | [teach](skills/teach/SKILL.md) | Remote | teach a skill or concept in a workspace |
 | [to-questionnaire](skills/to-questionnaire/SKILL.md) | Remote | turn missing stakeholder knowledge into a reusable questionnaire |

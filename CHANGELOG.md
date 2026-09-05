@@ -9,6 +9,7 @@ and this project does not currently use versioned releases.
 
 ### Added
 
+- Add `syncing-holistics-external-git` to bootstrap local sync for a new, empty external Git repository connected to a Holistics project. [#211](https://github.com/lelouvincx/agent-skills/pull/211)
 - Add explicit, exact-file approval for Claude DesignSync uploads through the Claude Agent SDK. [#206](https://github.com/lelouvincx/agent-skills/pull/206)
 - Add a local-only SmartClass Wrangler wrapper and narrowly scoped DeepSeek secret bundle. [#204](https://github.com/lelouvincx/agent-skills/pull/204)
 - Add `amp-runner restart all` to restart every installed runner. [#203](https://github.com/lelouvincx/agent-skills/pull/203)
