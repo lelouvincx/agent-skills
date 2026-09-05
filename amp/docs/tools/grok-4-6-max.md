@@ -107,4 +107,4 @@ Select `Grok 4.6 Max` when starting a thread, then enter a normal coding request
 
 ## Maintenance notes
 
-Keep the `@amp-agent-mode` metadata in sync with the registered key and label. Keep the imported Fable 5 prompt and tool list aligned with `plugins/gpt-5-5-modes.ts`.
+Keep the `@amp-agent-mode` metadata in sync with the registered key and label. Keep the Fable 5 prompt and tool list in `plugins/grok-4-6-max-mode.ts`.
