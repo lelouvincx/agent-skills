@@ -342,6 +342,50 @@ status_runner() {
 	launchctl_command print "$(service_target "$1")"
 }
 
+process_tree_usage() {
+	local root_pid="$1"
+	LC_ALL=C "${AMP_RUNNER_PS:-/bin/ps}" -axo pid=,ppid=,%cpu=,rss= | awk -v root_pid="$root_pid" '
+		{
+			pids[NR] = $1
+			parents[NR] = $2
+			cpus[NR] = $3
+			rss[NR] = $4
+		}
+		END {
+			included[root_pid] = 1
+			do {
+				changed = 0
+				for (row = 1; row <= NR; row++) {
+					if (!included[pids[row]] && included[parents[row]]) {
+						included[pids[row]] = 1
+						changed = 1
+					}
+				}
+			} while (changed)
+
+			for (row = 1; row <= NR; row++) {
+				if (included[pids[row]]) {
+					found = 1
+					total_cpu += cpus[row]
+					total_rss += rss[row]
+				}
+			}
+			if (!found) {
+				exit 1
+			}
+
+			if (total_rss >= 1048576) {
+				memory = sprintf("%.1f GiB", total_rss / 1048576)
+			} else if (total_rss >= 1024) {
+				memory = sprintf("%.1f MiB", total_rss / 1024)
+			} else {
+				memory = sprintf("%d KiB", total_rss)
+			}
+			printf "%.1f%%\t%s\n", total_cpu, memory
+		}
+	'
+}
+
 list_runners() {
 	[ "$#" -eq 0 ] || fail 'list does not accept arguments'
 
@@ -352,8 +396,13 @@ list_runners() {
 	local details
 	local state
 	local pid
+	local usage
+	local cpu
+	local memory
 	local runner_width=9
 	local state_width=5
+	local cpu_width=3
+	local memory_width=6
 	local index
 	local row_count=0
 	local nullglob_was_set=false
@@ -361,6 +410,8 @@ list_runners() {
 	local -a runner_ids=()
 	local -a states=()
 	local -a pids=()
+	local -a cpus=()
+	local -a memories=()
 	launch_agents_dir="${AMP_RUNNER_LAUNCH_AGENTS_DIR:-$HOME/Library/LaunchAgents}"
 
 	if [ -d "$launch_agents_dir" ]; then
@@ -376,15 +427,22 @@ list_runners() {
 		runner_id="${runner_id%.plist}"
 		state=not-loaded
 		pid=-
+		cpu=-
+		memory=-
 		if details="$(launchctl_command print "$(service_target "$runner_id")" 2>/dev/null)"; then
 			state="$(printf '%s\n' "$details" | awk -F'= ' '/^[[:space:]]*state =/{print $2; exit}')"
 			pid="$(printf '%s\n' "$details" | awk -F'= ' '/^[[:space:]]*pid =/{print $2; exit}')"
 			state="${state:-loaded}"
 			pid="${pid:--}"
+			if [[ "$pid" =~ ^[0-9]+$ ]] && usage="$(process_tree_usage "$pid" 2>/dev/null)"; then
+				IFS=$'\t' read -r cpu memory <<< "$usage"
+			fi
 		fi
 		runner_ids+=("$runner_id")
 		states+=("$state")
 		pids+=("$pid")
+		cpus+=("$cpu")
+		memories+=("$memory")
 		row_count=$((row_count + 1))
 		if [ "${#runner_id}" -gt "$runner_width" ]; then
 			runner_width=${#runner_id}
@@ -392,14 +450,22 @@ list_runners() {
 		if [ "${#state}" -gt "$state_width" ]; then
 			state_width=${#state}
 		fi
+		if [ "${#cpu}" -gt "$cpu_width" ]; then
+			cpu_width=${#cpu}
+		fi
+		if [ "${#memory}" -gt "$memory_width" ]; then
+			memory_width=${#memory}
+		fi
 	done
 
-	printf '%-*s  %-*s  %s\n' "$runner_width" RUNNER_ID "$state_width" STATE PID
+	printf '%-*s  %-*s  %-7s  %*s  %*s\n' "$runner_width" RUNNER_ID "$state_width" STATE PID "$cpu_width" CPU "$memory_width" MEMORY
 	for ((index = 0; index < row_count; index++)); do
-		printf '%-*s  %-*s  %s\n' \
+		printf '%-*s  %-*s  %-7s  %*s  %*s\n' \
 			"$runner_width" "${runner_ids[$index]}" \
 			"$state_width" "${states[$index]}" \
-			"${pids[$index]}"
+			"${pids[$index]}" \
+			"$cpu_width" "${cpus[$index]}" \
+			"$memory_width" "${memories[$index]}"
 	done
 }
 
