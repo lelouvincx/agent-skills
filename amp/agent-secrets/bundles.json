@@ -57,7 +57,10 @@
       "owner": "lelouvincx/agent-skills",
       "variables": [
         "GH_TOKEN",
-        "GITHUB_TOKEN"
+        "GITHUB_TOKEN",
+        "HOLISTICS_DEMO4_USERNAME",
+        "HOLISTICS_DEMO4_PASSWORD",
+        "HOLISTICS_DEMO4_OTP"
       ],
       "compatibleBundles": [
         "amp-runtime"

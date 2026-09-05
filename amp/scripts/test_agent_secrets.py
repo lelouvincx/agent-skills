@@ -314,6 +314,11 @@ class AgentSecretsTests(unittest.TestCase):
             ("export ALPHA_TOKEN=op://Agent Secrets/alpha/value\n", 0o600, "malformed"),
             ("ALPHA_TOKEN=op://Other Vault/alpha/value\n", 0o600, "not in Agent Secrets"),
             ("ALPHA_TOKEN=op://Agent Secrets/alpha/$value\n", 0o600, "unsafe syntax"),
+            (
+                "ALPHA_TOKEN=op://Agent Secrets/alpha/value?attribute=title\n",
+                0o600,
+                "unsafe syntax",
+            ),
             ("ALPHA_TOKEN=op://Agent Secrets/alpha/value\n", 0o644, "permissions"),
             ("ALPHA_TOKEN=op://Agent Secrets/alpha/value\n", 0o400, "permissions"),
         ]
@@ -341,6 +346,21 @@ class AgentSecretsTests(unittest.TestCase):
         self.assertNotEqual(0, result.returncode)
         self.assertIn("symbolic link", result.stderr)
         self.assertEqual([], self.op_events())
+
+    def test_local_bundle_allows_the_otp_attribute_query(self):
+        path = self.write_bundle(
+            "alpha", "ALPHA_TOKEN", "one-time password?attribute=otp"
+        )
+        self.assertEqual(
+            {
+                "ALPHA_TOKEN": (
+                    "op://Agent Secrets/alpha/one-time password?attribute=otp"
+                )
+            },
+            RUNTIME["parse_bundle_file"](
+                path, "alpha", self.manifest["bundles"]["alpha"]["variables"]
+            ),
+        )
 
     def test_service_account_runs_first_and_does_not_reach_the_child_environment(self):
         output = self.home / "service.json"
