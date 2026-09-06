@@ -21,7 +21,7 @@ amp:
   docs_sources:
     api_docs: null
     agent_options: null
-  last_verified: "2026-09-03"
+  last_verified: "2026-09-06"
 contract:
   input_kind: "command_line_arguments"
   output_kind: "active_amp_model_provider_and_local_status"
@@ -36,6 +36,7 @@ contract:
     - "preferred connection ID"
     - "fallback connection ID"
     - "remaining quota threshold"
+    - "check interval in seconds"
 runtime:
   uses:
     - "amp config model-providers test"
@@ -69,6 +70,7 @@ safety:
     - "Uses complete quota headers from a usage-limit response even when Amp exits with an error."
     - "Preserves the active subscription when the response omits either window header pair or provides no supported active window."
     - "Activates a subscription only when the selected connection is not already active."
+    - "Writes the installed check interval into the LaunchAgent StartInterval."
   risks:
     - "Each check sends a small test inference request through the preferred subscription."
     - "Activation changes the ChatGPT subscription used by new Amp inference requests for the user."
@@ -92,18 +94,20 @@ tags:
 
 Use `install`, `uninstall`, `run` or `status`. Run `amp config model-providers list` to find the primary and secondary connection IDs before installation.
 
+`install` requires `--preferred`, `--fallback` and `--interval`. `--interval` is the LaunchAgent check period in seconds.
+
 As of 27 August 2026, Amp supports at most 2 linked ChatGPT subscriptions. The install command therefore accepts exactly one primary and one secondary subscription.
 
 ## Contract
 
-The LaunchAgent checks when you log in to macOS and every 5 minutes after that. Each check tests the preferred connection and reads these Codex response headers:
+The LaunchAgent checks when you log in to macOS and then at the interval you set during installation. Each check tests the preferred connection and reads these Codex response headers:
 
 - `x-codex-primary-window-minutes` and `x-codex-primary-used-percent`
 - `x-codex-secondary-window-minutes` and `x-codex-secondary-used-percent`
 
 The selector identifies the 5-hour window as 300 minutes and the weekly window as 10,080 minutes. Header order does not affect the result. Some plans explicitly disable one window by reporting a duration of 0 minutes; the selector ignores that window and evaluates the remaining supported window.
 
-The selector activates the fallback when any available preferred window is at or below the configured remaining threshold. It switches back when every available window is above that threshold. You set the threshold during installation.
+The selector activates the fallback when any available preferred window is at or below the configured remaining threshold. It switches back when every available window is above that threshold. You set the remaining quota threshold and the check interval during installation.
 
 The selector does not read local Codex CLI authentication and does not require a Codex CLI sign-in. `amp config model-providers test CONNECTION_ID` tests the ChatGPT subscription already linked to Amp and returns its Codex quota headers.
 
@@ -119,17 +123,18 @@ A kernel-managed file lock prevents checks, installation and removal from overla
 
 The command makes authenticated Amp requests. It can change the active user-level ChatGPT model-provider connection. New Amp inference requests use the active subscription. Existing requests continue unchanged.
 
-The LaunchAgent and local state use mode 0600 or 0700. Stored configuration contains connection IDs, command paths and the threshold. It contains no credentials.
+The LaunchAgent and local state use mode 0600 or 0700. Stored configuration contains connection IDs, command paths, the remaining quota threshold and the check interval in seconds. It contains no credentials.
 
 ## Examples
 
-Install and start the 5-minute check:
+Install and start the background check:
 
 ```bash
 amp-chatgpt-subscription-selector install \
   --preferred 00000000-0000-4000-8000-000000000001 \
   --fallback 00000000-0000-4000-8000-000000000002 \
-  --threshold PERCENT
+  --threshold PERCENT \
+  --interval SECONDS
 ```
 
 Run a check or inspect the latest result:
