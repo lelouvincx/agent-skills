@@ -21,10 +21,27 @@ mkdir -p "$tmp_home/.config/amp/conventions"
 touch "$tmp_home/.config/amp/conventions/stale.md"
 mkdir -p "$tmp_home/.config/amp/state"
 printf '%s\n' 'pre-existing runtime state' > "$tmp_home/.config/amp/state/github-thread-events.sqlite"
+mkdir -p "$tmp_home/.agent-browser"
+cat > "$tmp_home/.agent-browser/config.json" <<'JSON'
+{
+  "headed": false,
+  "plugins": [
+    {
+      "name": "unrelated",
+      "command": "/usr/bin/true",
+      "capabilities": ["command.run"]
+    }
+  ]
+}
+JSON
 
 HOME="$tmp_home" \
 	AMP_CONFIG_DIR="$tmp_home/.config/amp" \
 	"$REPO_DIR/sync-skills.sh"
+
+HOME="$tmp_home" \
+	AMP_CONFIG_DIR="$tmp_home/.config/amp" \
+	"$REPO_DIR/sync-skills.sh" >/dev/null
 
 for path in \
 	".config/amp/AGENTS.md" \
@@ -134,6 +151,111 @@ if [ ! -L "$agent_secrets" ] || [ "$(readlink "$agent_secrets")" != "$REPO_DIR/b
 	echo "error: projection did not create an executable agent-secrets link" >&2
 	exit 1
 fi
+
+agent_browser="$tmp_home/.local/bin/agent-browser"
+if [ ! -L "$agent_browser" ] || [ "$(readlink "$agent_browser")" != "$REPO_DIR/bin/agent-browser" ] || [ ! -x "$agent_browser" ]; then
+	echo "error: projection did not create the agent-browser wrapper link" >&2
+	exit 1
+fi
+
+custom_install="$tmp_home/.local/libexec/agent-browser-rfc0011"
+mkdir -p "$custom_install"
+cat > "$custom_install/agent-browser" <<'SH'
+#!/usr/bin/env sh
+printf '%s\n' "agent-browser projection test $*"
+SH
+chmod +x "$custom_install/agent-browser"
+shasum -a 256 "$REPO_DIR/amp/agent-browser-custom/rfc0011.patch" | awk '{print $1}' > "$custom_install/patch.sha256"
+if [ "$(HOME="$tmp_home" "$agent_browser" --version)" != "agent-browser projection test --version" ]; then
+	echo "error: projected agent-browser wrapper could not locate its source patch" >&2
+	exit 1
+fi
+
+onepassword_plugin="$tmp_home/.local/bin/agent-browser-plugin-onepassword"
+if [ ! -L "$onepassword_plugin" ] || [ "$(readlink "$onepassword_plugin")" != "$REPO_DIR/bin/agent-browser-plugin-onepassword" ] || [ ! -x "$onepassword_plugin" ]; then
+	echo "error: projection did not create the onepassword plugin link" >&2
+	exit 1
+fi
+
+credential_handler="$tmp_home/.local/bin/agent-browser-credential-response"
+if [ ! -L "$credential_handler" ] || [ "$(readlink "$credential_handler")" != "$REPO_DIR/bin/agent-browser-credential-response" ] || [ ! -x "$credential_handler" ]; then
+	echo "error: projection did not create the browser credential handler link" >&2
+	exit 1
+fi
+
+python3 - "$tmp_home/.agent-browser/config.json" "$onepassword_plugin" <<'PY'
+import json
+import sys
+
+config = json.load(open(sys.argv[1]))
+assert config["headed"] is False
+assert [plugin["name"] for plugin in config["plugins"]] == ["unrelated", "onepassword"]
+assert config["plugins"][1] == {
+    "name": "onepassword",
+    "command": sys.argv[2],
+    "capabilities": ["credential.read"],
+}
+PY
+
+conflict_home="$(mktemp -d)"
+mkdir -p "$conflict_home/.agent-browser"
+printf '%s\n' '{"plugins":[{"name":"onepassword","command":"/tmp/not-owned","capabilities":["credential.read"]}]}' > "$conflict_home/.agent-browser/config.json"
+if HOME="$conflict_home" AMP_CONFIG_DIR="$conflict_home/.config/amp" "$REPO_DIR/sync-skills.sh" >/dev/null 2>&1; then
+	echo "error: projection accepted a conflicting onepassword plugin" >&2
+	rm -rf "$conflict_home"
+	exit 1
+fi
+if ! grep -q '"command":"/tmp/not-owned"' "$conflict_home/.agent-browser/config.json"; then
+	echo "error: projection changed a conflicting onepassword plugin" >&2
+	rm -rf "$conflict_home"
+	exit 1
+fi
+rm -rf "$conflict_home"
+
+invalid_home="$(mktemp -d)"
+mkdir -p "$invalid_home/.agent-browser"
+printf '%s\n' '{ invalid' > "$invalid_home/.agent-browser/config.json"
+if HOME="$invalid_home" AMP_CONFIG_DIR="$invalid_home/.config/amp" "$REPO_DIR/sync-skills.sh" >/dev/null 2>&1; then
+	echo "error: projection accepted invalid agent-browser configuration" >&2
+	rm -rf "$invalid_home"
+	exit 1
+fi
+if [ "$(cat "$invalid_home/.agent-browser/config.json")" != "{ invalid" ]; then
+	echo "error: projection changed invalid agent-browser configuration" >&2
+	rm -rf "$invalid_home"
+	exit 1
+fi
+rm -rf "$invalid_home"
+
+duplicate_home="$(mktemp -d)"
+mkdir -p "$duplicate_home/.agent-browser"
+printf '%s\n' '{"plugins":[],"plugins":[]}' > "$duplicate_home/.agent-browser/config.json"
+if HOME="$duplicate_home" AMP_CONFIG_DIR="$duplicate_home/.config/amp" "$REPO_DIR/sync-skills.sh" >/dev/null 2>&1; then
+	echo "error: projection accepted duplicate agent-browser configuration keys" >&2
+	rm -rf "$duplicate_home"
+	exit 1
+fi
+if [ "$(cat "$duplicate_home/.agent-browser/config.json")" != '{"plugins":[],"plugins":[]}' ]; then
+	echo "error: projection changed duplicate-key agent-browser configuration" >&2
+	rm -rf "$duplicate_home"
+	exit 1
+fi
+rm -rf "$duplicate_home"
+
+symlink_home="$(mktemp -d)"
+mkdir -p "$symlink_home/.agent-browser"
+ln -s "$symlink_home/missing-config" "$symlink_home/.agent-browser/config.json"
+if HOME="$symlink_home" AMP_CONFIG_DIR="$symlink_home/.config/amp" "$REPO_DIR/sync-skills.sh" >/dev/null 2>&1; then
+	echo "error: projection accepted a symbolic-link agent-browser configuration" >&2
+	rm -rf "$symlink_home"
+	exit 1
+fi
+if [ ! -L "$symlink_home/.agent-browser/config.json" ]; then
+	echo "error: projection replaced a symbolic-link agent-browser configuration" >&2
+	rm -rf "$symlink_home"
+	exit 1
+fi
+rm -rf "$symlink_home"
 
 smartclass_wrangler_dev="$tmp_home/.local/bin/smartclass-wrangler-dev"
 if [ ! -L "$smartclass_wrangler_dev" ] || [ "$(readlink "$smartclass_wrangler_dev")" != "$REPO_DIR/bin/smartclass-wrangler-dev" ] || [ ! -x "$smartclass_wrangler_dev" ]; then

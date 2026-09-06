@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+source_dir="${AGENT_BROWSER_SOURCE_DIR:-$repo_root/.amp/vendor/agent-browser}"
+build_root="$repo_root/.amp/build"
+target_dir="${AGENT_BROWSER_TARGET_DIR:-$build_root/agent-browser-target}"
+install_dir="${AGENT_BROWSER_CUSTOM_INSTALL_DIR:-$HOME/.local/libexec/agent-browser-rfc0011}"
+commit="$(tr -d '[:space:]' <"$repo_root/amp/agent-browser-custom/upstream-commit")"
+patch="$repo_root/amp/agent-browser-custom/rfc0011.patch"
+patch_sha="$(shasum -a 256 "$patch" | awk '{print $1}')"
+lock_dir="$repo_root/.amp/build/agent-browser-rfc0011.lock"
+tmp_binary="$install_dir/.agent-browser.$$"
+tmp_receipt="$install_dir/.patch.sha256.$$"
+
+mkdir -p "$build_root"
+if ! mkdir "$lock_dir" 2>/dev/null; then
+  echo "agent-browser build already running: $lock_dir" >&2
+  exit 1
+fi
+build_dir="$(mktemp -d "$build_root/agent-browser-rfc0011.XXXXXX")"
+trap 'rm -rf "$lock_dir" "$build_dir"; rm -f "$tmp_binary" "$tmp_receipt"' EXIT
+
+if [ ! -d "$source_dir/.git" ]; then
+  mkdir -p "$(dirname "$source_dir")"
+  git clone https://github.com/vercel-labs/agent-browser.git "$source_dir"
+fi
+git -C "$source_dir" cat-file -e "$commit^{commit}"
+
+git -C "$source_dir" archive "$commit" | tar -x -C "$build_dir"
+git -C "$build_dir" init -q
+git -C "$build_dir" apply "$patch"
+
+CARGO_PROFILE_RELEASE_LTO=false \
+  CARGO_PROFILE_RELEASE_CODEGEN_UNITS=16 \
+  CARGO_TARGET_DIR="$target_dir" \
+  cargo +nightly build --release --manifest-path "$build_dir/cli/Cargo.toml"
+if [ "$(shasum -a 256 "$patch" | awk '{print $1}')" != "$patch_sha" ]; then
+  echo "agent-browser patch changed during build; retry" >&2
+  exit 1
+fi
+mkdir -p "$install_dir"
+install -m 0755 "$target_dir/release/agent-browser" "$tmp_binary"
+printf '%s\n' "$patch_sha" >"$tmp_receipt"
+mv "$tmp_binary" "$install_dir/agent-browser"
+mv "$tmp_receipt" "$install_dir/patch.sha256"
+chmod 0644 "$install_dir/patch.sha256"
+
+echo "installed: $install_dir/agent-browser"

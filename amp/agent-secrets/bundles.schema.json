@@ -99,7 +99,85 @@
             "type": "string",
             "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
           }
+        },
+        "browserLogin": {
+          "$ref": "#/$defs/browserLogin"
         }
+      }
+    },
+    "browserLogin": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "usernameVariable",
+        "passwordVariable",
+        "loginUrl",
+        "credentialOrigin",
+        "usernameSelector",
+        "passwordSelector",
+        "submitSelector",
+        "expectedPostLoginUrl",
+        "accountMarkerSelector",
+        "accountMarkerVariable"
+      ],
+      "properties": {
+        "usernameVariable": {
+          "type": "string",
+          "pattern": "^[A-Z][A-Z0-9_]*$"
+        },
+        "passwordVariable": {
+          "type": "string",
+          "pattern": "^[A-Z][A-Z0-9_]*$"
+        },
+        "loginUrl": {
+          "type": "string",
+          "pattern": "^https://\\S+$"
+        },
+        "credentialOrigin": {
+          "type": "string",
+          "pattern": "^https://\\S+$"
+        },
+        "usernameSelector": {
+          "type": "string",
+          "minLength": 1
+        },
+        "passwordSelector": {
+          "type": "string",
+          "minLength": 1
+        },
+        "submitSelector": {
+          "type": "string",
+          "minLength": 1
+        },
+        "otpVariable": {
+          "type": "string",
+          "pattern": "^[A-Z][A-Z0-9_]*$"
+        },
+        "otpSelector": {
+          "type": "string",
+          "minLength": 1
+        },
+        "otpSubmitSelector": {
+          "type": "string",
+          "minLength": 1
+        },
+        "expectedPostLoginUrl": {
+          "type": "string",
+          "pattern": "^https://\\S+$"
+        },
+        "accountMarkerSelector": {
+          "type": "string",
+          "minLength": 1
+        },
+        "accountMarkerVariable": {
+          "type": "string",
+          "pattern": "^[A-Z][A-Z0-9_]*$"
+        }
+      },
+      "dependentRequired": {
+        "otpVariable": ["otpSelector", "otpSubmitSelector"],
+        "otpSelector": ["otpVariable", "otpSubmitSelector"],
+        "otpSubmitSelector": ["otpVariable", "otpSelector"]
       }
     }
   }

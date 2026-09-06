@@ -4,6 +4,7 @@ import json
 import posixpath
 import sys
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from jsonschema import Draft202012Validator, SchemaError
 
@@ -35,6 +36,7 @@ FORBIDDEN_VARIABLE_PREFIXES = (
     "GIT_CONFIG_VALUE_",
     "LD_",
 )
+BROWSER_LOGIN_COMMAND_CLASS = "agent-browser-credential-handler"
 
 
 class PolicyConfigurationError(ValueError):
@@ -81,6 +83,26 @@ def _strings(value, location="$"):
 
 def _is_forbidden_variable(name):
     return name in FORBIDDEN_VARIABLES or name.startswith(FORBIDDEN_VARIABLE_PREFIXES)
+
+
+def _https_origin(value):
+    if not isinstance(value, str) or not value or any(character.isspace() for character in value):
+        return None
+    try:
+        parsed = urlsplit(value)
+        port = parsed.port
+    except ValueError:
+        return None
+    if (
+        parsed.scheme != "https"
+        or not parsed.hostname
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.fragment
+    ):
+        return None
+    host = parsed.hostname.lower()
+    return f"https://{host}" if port is None or port == 443 else f"https://{host}:{port}"
 
 
 def semantic_errors(path, data):
@@ -154,6 +176,64 @@ def semantic_errors(path, data):
                 errors.append(
                     f"{path}: {bundle_name} contains process-control variable: {variable}"
                 )
+        browser_login = bundle.get("browserLogin")
+        if not isinstance(browser_login, dict):
+            continue
+        if bundle.get("audience") != "agent":
+            errors.append(f"{path}: {bundle_name} browserLogin requires agent audience")
+        if BROWSER_LOGIN_COMMAND_CLASS not in class_names:
+            errors.append(f"{path}: browser login credential handler is not registered")
+        if BROWSER_LOGIN_COMMAND_CLASS not in bundle.get("allowedCommandClasses", []):
+            errors.append(
+                f"{path}: {bundle_name} browserLogin must allow "
+                f"{BROWSER_LOGIN_COMMAND_CLASS}"
+            )
+        variables = set(bundle.get("variables", []))
+        username_variable = browser_login.get("usernameVariable")
+        password_variable = browser_login.get("passwordVariable")
+        if username_variable == password_variable:
+            errors.append(f"{path}: {bundle_name} browserLogin variables must be different")
+        for field, variable in (
+            ("usernameVariable", username_variable),
+            ("passwordVariable", password_variable),
+            ("otpVariable", browser_login.get("otpVariable")),
+            ("accountMarkerVariable", browser_login.get("accountMarkerVariable")),
+        ):
+            if field == "otpVariable" and variable is None:
+                continue
+            if variable not in variables:
+                errors.append(
+                    f"{path}: {bundle_name} browserLogin {field} must name a declared variable"
+                )
+        login_origin = _https_origin(browser_login.get("loginUrl"))
+        credential_origin = _https_origin(browser_login.get("credentialOrigin"))
+        if login_origin is None:
+            errors.append(
+                f"{path}: {bundle_name} browserLogin loginUrl must be a valid HTTPS URL"
+            )
+        if credential_origin is None:
+            errors.append(
+                f"{path}: {bundle_name} browserLogin credentialOrigin must be a valid HTTPS URL"
+            )
+        if login_origin is not None and credential_origin is not None:
+            if login_origin != credential_origin:
+                errors.append(
+                    f"{path}: {bundle_name} browserLogin loginUrl must use credentialOrigin"
+                )
+            parsed_origin = urlsplit(browser_login["credentialOrigin"])
+            if parsed_origin.path not in {"", "/"} or parsed_origin.query:
+                errors.append(
+                    f"{path}: {bundle_name} browserLogin credentialOrigin must contain only an origin"
+                )
+        expected_origin = _https_origin(browser_login.get("expectedPostLoginUrl"))
+        if expected_origin is None:
+            errors.append(
+                f"{path}: {bundle_name} browserLogin expectedPostLoginUrl must be a valid HTTPS URL"
+            )
+        elif credential_origin is not None and expected_origin != credential_origin:
+            errors.append(
+                f"{path}: {bundle_name} browserLogin expectedPostLoginUrl must use credentialOrigin"
+            )
 
     for location, value in _strings(data):
         if "op://" in value.lower():

@@ -11,6 +11,7 @@ from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / "bin" / "agent-secrets"
+BROWSER_HANDLER = ROOT / "bin" / "agent-browser-credential-response"
 SMARTCLASS_WRAPPER = ROOT / "bin" / "smartclass-wrangler-dev"
 RUNTIME = runpy.run_path(str(SCRIPT))
 SMARTCLASS_RUNTIME = runpy.run_path(str(SMARTCLASS_WRAPPER))
@@ -131,6 +132,9 @@ class AgentSecretsTests(unittest.TestCase):
             "command_classes": {
                 "agent": {"executablePaths": [str(self.agent)]},
                 "publisher": {"executablePaths": [str(self.publisher)]},
+                "agent-browser-credential-handler": {
+                    "executablePaths": [str(BROWSER_HANDLER)]
+                },
             },
             "bundles": {
                 "alpha": {
@@ -154,12 +158,41 @@ class AgentSecretsTests(unittest.TestCase):
                     "compatibleBundles": [],
                     "allowedCommandClasses": ["publisher"],
                 },
+                "browser": {
+                    "audience": "agent",
+                    "owner": "lelouvincx/agent-skills",
+                    "variables": ["BROWSER_USERNAME", "BROWSER_PASSWORD", "BROWSER_OTP"],
+                    "compatibleBundles": [],
+                    "allowedCommandClasses": ["agent-browser-credential-handler"],
+                    "browserLogin": {
+                        "usernameVariable": "BROWSER_USERNAME",
+                        "passwordVariable": "BROWSER_PASSWORD",
+                        "loginUrl": "https://example.invalid/login",
+                        "credentialOrigin": "https://example.invalid",
+                        "usernameSelector": "#username",
+                        "passwordSelector": "#password",
+                        "submitSelector": "button[type=submit]",
+                        "otpVariable": "BROWSER_OTP",
+                        "otpSelector": "#otp",
+                        "otpSubmitSelector": "button[type=submit]",
+                        "expectedPostLoginUrl": "https://example.invalid/account",
+                        "accountMarkerSelector": "[data-account]",
+                        "accountMarkerVariable": "BROWSER_USERNAME",
+                    },
+                },
             },
         }
         self.write_manifest()
         self.write_bundle("alpha", "ALPHA_TOKEN", "alpha-value")
         self.write_bundle("beta", "BETA_KEY", "beta-value")
         self.write_bundle("publisher", "ALPHA_TOKEN", "publisher-value")
+        browser_file = self.bundle_root / "browser.env"
+        browser_file.write_text(
+            "BROWSER_USERNAME=op://Agent Secrets/browser/username\n"
+            "BROWSER_PASSWORD=op://Agent Secrets/browser/password\n"
+            "BROWSER_OTP=op://Agent Secrets/browser/otp?attribute=otp\n"
+        )
+        browser_file.chmod(0o600)
 
     def tearDown(self):
         self.temporary_directory.cleanup()
@@ -409,6 +442,115 @@ class AgentSecretsTests(unittest.TestCase):
         self.assertNotIn("op://", result.stderr)
         self.assertNotIn("test-bootstrap-value", result.stderr)
         self.assertNotIn("resolved-", result.stderr)
+
+    def test_strict_service_account_failure_never_falls_back_interactively(self):
+        result = self.run_cli(
+            "run",
+            "--bundle",
+            "alpha",
+            "--strict-service-account",
+            "--",
+            self.agent,
+            self.home / "strict.json",
+            auth="interactive",
+            FAKE_OP_FAIL_SERVICE="vault",
+        )
+        self.assertNotEqual(0, result.returncode)
+        self.assertEqual(["service:vault"], self.op_events())
+        self.assertNotIn("retrying", result.stderr)
+
+    def test_browser_login_supplies_only_validated_values_and_metadata_to_handler(self):
+        observer = self.home / "browser-observer"
+        write_executable(
+            observer,
+            "#!/bin/sh\n"
+            "[ \"${BROWSER_UNRELATED+x}\" != x ] || exit 9\n"
+            f"exec {BROWSER_HANDLER}\n",
+        )
+        browser = self.manifest["bundles"]["browser"]
+        browser["variables"].append("BROWSER_UNRELATED")
+        self.manifest["command_classes"]["agent-browser-credential-handler"] = {
+            "executablePaths": [str(observer)]
+        }
+        self.write_manifest()
+        with (self.bundle_root / "browser.env").open("a") as bundle_file:
+            bundle_file.write("BROWSER_UNRELATED=op://Agent Secrets/browser/unrelated\n")
+        result = self.run_cli(
+            "run",
+            "--bundle",
+            "browser",
+            "--strict-service-account",
+            "--browser-login",
+            "--requested-item",
+            "browser",
+            "--requested-url",
+            "https://example.invalid/login",
+            "--",
+            observer,
+            auth="interactive",
+            OP_SERVICE_ACCOUNT_TOKEN="inherited-value",
+        )
+        self.assertEqual(0, result.returncode, result.stderr)
+        credential = json.loads(result.stdout)
+        self.assertEqual("resolved-username", credential["username"])
+        self.assertEqual("resolved-password", credential["password"])
+        self.assertEqual("https://example.invalid/login", credential["url"])
+        self.assertEqual("https://example.invalid", credential["credentialOrigin"])
+        self.assertEqual("https://example.invalid/account", credential["expectedPostLoginUrl"])
+        self.assertEqual("resolved-username", credential["accountMarkerValue"])
+        self.assertEqual("resolved-otp?attribute=otp", credential["otp"])
+        self.assertEqual(
+            [
+                "service:vault",
+                "service:read",
+                "service:read",
+                "service:read",
+            ],
+            self.op_events(),
+        )
+
+    def test_browser_login_constraints_fail_before_1password_access(self):
+        cases = [
+            ("--requested-item", "other", "item does not match"),
+            ("--requested-url", "https://wrong.invalid/login", "URL does not match"),
+        ]
+        for flag, value, message in cases:
+            with self.subTest(flag=flag):
+                self.op_log.unlink(missing_ok=True)
+                result = self.run_cli(
+                    "run",
+                    "--bundle",
+                    "browser",
+                    "--strict-service-account",
+                    "--browser-login",
+                    flag,
+                    value,
+                    "--",
+                    BROWSER_HANDLER,
+                    auth="service-account",
+                )
+                self.assertNotEqual(0, result.returncode)
+                self.assertIn(message, result.stderr)
+                self.assertEqual([], self.op_events())
+
+    def test_bundle_without_browser_policy_cannot_use_browser_resolution(self):
+        self.manifest["bundles"]["alpha"]["allowedCommandClasses"].append(
+            "agent-browser-credential-handler"
+        )
+        self.write_manifest()
+        result = self.run_cli(
+            "run",
+            "--bundle",
+            "alpha",
+            "--strict-service-account",
+            "--browser-login",
+            "--",
+            BROWSER_HANDLER,
+            auth="service-account",
+        )
+        self.assertNotEqual(0, result.returncode)
+        self.assertIn("not enabled for browser login", result.stderr)
+        self.assertEqual([], self.op_events())
 
     def test_interactive_failure_never_falls_back_to_service_account(self):
         result = self.run_cli(

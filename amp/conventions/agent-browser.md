@@ -2,40 +2,45 @@
 
 ## Session invariants
 
-- Start a fresh, separate instance of installed system Google Chrome in headed mode for every owner thread. Use the new user-data directory returned by `agent-browser-lifecycle claim`; never reuse another session's profile, directory, or authentication state.
-- Bind CDP to `127.0.0.1` on a port reserved by the current owner thread. The helper serializes reservations among cooperative agents; it does not hold an operating-system port lock after `claim` returns.
-- Treat the user-data directory as sensitive. Ask the user to sign in for every new Chrome session. Authentication persists only while that process remains alive, including authorized child-thread work.
-- Use `agent-browser-lifecycle` for every lifecycle write. `lifecycle.jsonl` is authoritative; `current.json` is a derived active-session view that `show` rebuilds before returning. Edit neither file directly.
-- Ownership and handoff are cooperative same-user policy, not access control. Threads attach only after the owner explicitly gives them the session details.
+- Give every owner session a fresh Chrome instance, an exclusive profile and a claimed `127.0.0.1` CDP port. Keep authentication in that profile.
+- Run routine work headless. Headed launches and mode switches are pre-approved.
+- Keep profiles private and CDP and stream listeners on loopback. Lifecycle claims coordinate same-user agents; verify live listeners because claims do not reserve operating-system ports.
+
+## Explicit agent-browser identity
+
+Every browser-control command uses the user config, a dedicated namespace, a short namespace-unique daemon name mapped to the lifecycle session, and the claimed CDP port:
+
+```bash
+"$HOME/.local/bin/agent-browser" \
+  --config "$HOME/.agent-browser/config.json" \
+  --namespace "$namespace" \
+  --session "$daemon" \
+  --cdp "http://127.0.0.1:$port" \
+  <command>
+```
 
 ## Owner launch
 
-1. Run `agent-browser-lifecycle show`, inspect live Chrome processes, and choose an unused CDP port. Continue when the port is absent from both the current view and live listeners.
-2. Run `agent-browser-lifecycle claim --owner-thread-id <current-thread-id> --cdp-port <port>`. Preserve the returned `session_id`, `cdp_port`, and `user_data_dir`. Continue when `show` lists that session as `claimed`.
-3. Launch Chrome with `--remote-debugging-address=127.0.0.1`, the claimed `--remote-debugging-port`, and returned `--user-data-dir`. Bring it to the foreground. Verify that the launched PID owns the loopback listener, its command uses the returned directory, and `agent-browser` reports the expected URL and title.
-4. Run `agent-browser-lifecycle record ready --session-id <session-id> --actor-thread-id <current-thread-id> --browser-pid <pid>`. Continue when `show` lists the same PID and session as `ready`.
-5. When authentication is required, ask the user to sign in and tell you when finished. Continue only after rechecking the URL and title in that same session.
+1. Inspect `agent-browser-lifecycle show`, live Chrome processes and loopback listeners. Claim an absent port; retain the claimed session, port and profile, and verify `claimed`.
+2. Choose a dedicated namespace and an unused short daemon name within it; record its mapping to the lifecycle session.
+3. Launch Chrome with loopback debugging, the claimed port and profile. Include `--headless=new` for routine work.
+4. Continue only when the launched PID is alive, uses the claimed profile and owns the claimed listener. Through the explicit identity, verify the expected URL, title and claimed endpoint in `session info --json`. On a listener conflict, complete failed-start cleanup and claim a new port.
+5. Whenever the daemon starts, disable streaming and verify that its listener is absent.
+6. Record `ready` with the owner, session and PID. Continue when `show` matches the session, PID, profile and port.
 
-If launch fails before `ready`, end any partial Chrome process, verify that the PID and listener are absent, remove the session directory, then run `agent-browser-lifecycle record start_failed --session-id <session-id> --actor-thread-id <current-thread-id>`. Recovery is complete when `show` no longer lists the session.
+If launch fails, end the owned partial Chrome process tree, verify its PID and listener are absent, remove only its claimed profile, record `start_failed`, and continue when `show` no longer lists the session.
 
-## Child handoff
+## Authentication
 
-The owner includes the `session_id`, owner thread ID, CDP host and port, user-data directory, and active Chrome PID in the delegation brief. The child:
+Use the pinned RFC-0011 build and an approved browser-enabled bundle. Through the explicit identity, run `auth login <bundle> --credential-provider onepassword`. Continue when the destination and account match the bundle.
 
-1. Runs `agent-browser-lifecycle show` and verifies the handed-off session is `ready`, the PID owns the listener, and the owner ID matches.
-2. Runs `agent-browser-lifecycle record attached --session-id <session-id> --actor-thread-id <child-thread-id>`. Continue when `show` includes the child in `attached_thread_ids`.
-3. Uses a dedicated tab without disturbing unrelated tabs.
-4. Runs the same command with event `detached` when finished. Handoff is complete when `show` no longer lists the child as attached.
-
-A child does not stop the owner's Chrome process. Threads outside the explicit handoff do not attach.
+If automatic authentication cannot complete, switch to headed Chrome. Pause automated input until attached browser workers detach; resume when the destination and account match.
 
 ## Owner shutdown and recovery
 
-1. Run `show` and wait until `attached_thread_ids` is empty.
-2. Run `agent-browser-lifecycle record stopping --session-id <session-id> --actor-thread-id <owner-thread-id>`. Continue when `show` reports `stopping`; new attachments are now rejected.
-3. End Chrome, verify that both its PID and CDP listener are absent, then remove the session directory.
-4. Run the same command with event `stopped`. Shutdown is complete when `show` no longer lists the session.
+1. Wait until `show` reports no attached threads; record `stopping` and verify the state.
+2. Ensure streaming is disabled and its listener is absent, then disconnect the daemon.
+3. End the owned Chrome process tree; verify its processes and CDP and stream listeners are absent.
+4. Remove only the claimed profile, record `stopped` and verify the session is absent from `show`.
 
-Only the owner resolves an abandoned `claimed` session with `start_failed`. For a `ready` or `stopping` session whose PID and listener are both absent, any observing thread removes the abandoned session directory and records `observed_dead`; recovery is complete when `show` no longer lists it.
-
-For lifecycle schema interpretation, auditing, or manual recovery, read [the lifecycle schema reference](agent-browser-lifecycle.md).
+For failed starts and dead sessions, follow the [lifecycle contract](agent-browser-lifecycle.md). Recover a confirmed dead session before claiming its replacement; leave an uncertain session intact.

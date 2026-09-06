@@ -37,6 +37,24 @@ class AgentSecretPolicyValidationTests(unittest.TestCase):
             json.dumps(policy, indent=2) + "\n"
         )
 
+    def add_browser_login(self, manifest, bundle_name="work"):
+        bundle = manifest["bundles"][bundle_name]
+        if "agent-browser-credential-handler" not in bundle["allowedCommandClasses"]:
+            bundle["allowedCommandClasses"].append("agent-browser-credential-handler")
+        bundle["browserLogin"] = {
+            "usernameVariable": bundle["variables"][0],
+            "passwordVariable": bundle["variables"][1],
+            "loginUrl": "https://example.invalid/login",
+            "credentialOrigin": "https://example.invalid",
+            "usernameSelector": "#username",
+            "passwordSelector": "#password",
+            "submitSelector": "button[type=submit]",
+            "expectedPostLoginUrl": "https://example.invalid/account",
+            "accountMarkerSelector": "[data-account]",
+            "accountMarkerVariable": bundle["variables"][0],
+        }
+        return bundle["browserLogin"]
+
     def test_checked_in_policy_is_valid(self):
         self.assertEqual([], validator.validate_tree(SOURCE))
 
@@ -96,21 +114,84 @@ class AgentSecretPolicyValidationTests(unittest.TestCase):
             )
         )
 
-    def test_smartclass_deepseek_is_limited_to_the_local_wrangler_wrapper(self):
+    def test_existing_bundle_inventory_enables_only_demo4_browser_login(self):
         manifest = self.read_manifest()
         self.assertEqual(
             {
-                "audience": "agent",
-                "owner": "lelouvincx/smartclass",
-                "variables": ["DEEPSEEK_API_KEY"],
-                "compatibleBundles": [],
-                "allowedCommandClasses": ["smartclass-wrangler-dev"],
+                "amp-runtime",
+                "work",
+                "lelouvincx-bot",
+                "amp-runner-r2",
+                "smartclass-deepseek",
             },
-            manifest["bundles"]["smartclass-deepseek"],
+            set(manifest["bundles"]),
         )
         self.assertEqual(
-            ["/Users/lelouvincx/Developer/agent-skills/bin/smartclass-wrangler-dev"],
-            manifest["command_classes"]["smartclass-wrangler-dev"]["executablePaths"],
+            [
+                "GH_TOKEN",
+                "GITHUB_TOKEN",
+                "HOLISTICS_DEMO4_USERNAME",
+                "HOLISTICS_DEMO4_PASSWORD",
+                "HOLISTICS_DEMO4_OTP",
+            ],
+            manifest["bundles"]["work"]["variables"],
+        )
+        self.assertIn("browserLogin", manifest["bundles"]["work"])
+        self.assertTrue(
+            all(
+                "browserLogin" not in bundle
+                for name, bundle in manifest["bundles"].items()
+                if name != "work"
+            )
+        )
+
+    def test_valid_browser_login_policy_is_accepted(self):
+        manifest = self.read_manifest()
+        self.add_browser_login(manifest)
+        self.write_manifest(manifest)
+        self.assertEqual([], validator.validate_tree(self.root))
+
+    def test_browser_login_requires_complete_otp_metadata(self):
+        manifest = self.read_manifest()
+        browser_login = self.add_browser_login(manifest)
+        browser_login["otpVariable"] = manifest["bundles"]["work"]["variables"][2]
+        self.write_manifest(manifest)
+        errors = validator.validate_tree(self.root)
+        self.assertTrue(any("otpSelector" in error for error in errors))
+
+    def test_browser_login_requires_declared_distinct_variables_and_registered_handler(self):
+        manifest = self.read_manifest()
+        browser_login = self.add_browser_login(manifest)
+        browser_login["passwordVariable"] = browser_login["usernameVariable"]
+        manifest["bundles"]["work"]["allowedCommandClasses"].remove(
+            "agent-browser-credential-handler"
+        )
+        self.write_manifest(manifest)
+        errors = validator.validate_tree(self.root)
+        self.assertTrue(any("variables must be different" in error for error in errors))
+        self.assertTrue(any("must allow agent-browser-credential-handler" in error for error in errors))
+
+    def test_browser_login_rejects_publisher_audience_and_wrong_origin(self):
+        manifest = self.read_manifest()
+        publisher = manifest["bundles"]["amp-runner-r2"]
+        publisher["variables"] = ["PUBLISH_USERNAME", "PUBLISH_PASSWORD"]
+        browser_login = self.add_browser_login(manifest, "amp-runner-r2")
+        browser_login["loginUrl"] = "https://wrong.invalid/login"
+        self.write_manifest(manifest)
+        errors = validator.validate_tree(self.root)
+        self.assertTrue(any("requires agent audience" in error for error in errors))
+        self.assertTrue(any("loginUrl must use credentialOrigin" in error for error in errors))
+
+    def test_browser_login_rejects_malformed_https_urls_semantically(self):
+        manifest = self.read_manifest()
+        browser_login = self.add_browser_login(manifest)
+        browser_login["loginUrl"] = "https://example.invalid:invalid/login"
+        browser_login["credentialOrigin"] = "not-an-origin"
+        self.write_manifest(manifest)
+        errors = validator.validate_tree(self.root)
+        self.assertTrue(any("loginUrl must be a valid HTTPS URL" in error for error in errors))
+        self.assertTrue(
+            any("credentialOrigin must be a valid HTTPS URL" in error for error in errors)
         )
 
     def test_schema_is_closed(self):
