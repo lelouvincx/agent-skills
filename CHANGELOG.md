@@ -67,7 +67,7 @@ and this project does not currently use versioned releases.
 
 ### Changed
 
-- Make the Amp ChatGPT subscription selector check interval an install-time setting instead of a baked-in duration.
+- Make the Amp ChatGPT subscription selector check interval an install-time setting instead of a baked-in duration. [#217](https://github.com/lelouvincx/agent-skills/pull/217)
 - Sort `amp-runner list` by resident memory usage, descending. [#215](https://github.com/lelouvincx/agent-skills/pull/215)
 - Harden the read-only Git diff MCP test harness against `GIT_DIR` and other Git environment pollution when pre-push hooks spawn it. [#215](https://github.com/lelouvincx/agent-skills/pull/215)
 - Allow `agent-secrets` to resolve current one-time passwords through narrowly permitted 1Password OTP references, and register Demo4 credentials in the `work` bundle. [#214](https://github.com/lelouvincx/agent-skills/pull/214)
