@@ -119,6 +119,8 @@ The command calculates remaining quota as `100 - used_percent`. It checks the se
 
 A kernel-managed file lock prevents checks, installation and removal from overlapping. A response with a missing window header pair, no supported active window, invalid percentage or invalid provider state leaves the current subscription active and records a failed result.
 
+`status` prints a short labelled report. The report names both subscriptions, the remaining quota threshold, and the check interval. It also shows the last check time, the last result, the selected subscription, remaining 5-hour and weekly quota, why that subscription was chosen, and whether the background check is scheduled. It uses Amp connection names when `amp config model-providers show` can resolve them. Otherwise it uses the stored connection IDs.
+
 ## Permissions and side effects
 
 The command makes authenticated Amp requests. It can change the active user-level ChatGPT model-provider connection. New Amp inference requests use the active subscription. Existing requests continue unchanged.
@@ -144,6 +146,21 @@ amp-chatgpt-subscription-selector run
 amp-chatgpt-subscription-selector status
 ```
 
+`status` prints a report like this:
+
+```text
+Preferred: primary-account (00000000-0000-4000-8000-000000000001)
+Fallback: fallback-account (00000000-0000-4000-8000-000000000002)
+Threshold: 20% remaining
+Interval: 1 hour
+Background check: scheduled
+Last check: 2026-09-06 11:57:43 UTC
+Result: ok
+Selected: fallback-account (00000000-0000-4000-8000-000000000002)
+Preferred remaining: 5-hour unavailable, weekly 0%
+Reason: preferred subscription is at or below the remaining quota threshold
+```
+
 Remove the background task without changing the active subscription:
 
 ```bash
@@ -155,7 +172,7 @@ amp-chatgpt-subscription-selector uninstall
 - if `run` reports a provider test failure, run `amp config model-providers test CONNECTION_ID`
 - if no usable quota window is found, inspect the test response headers for a missing header pair or changed window duration or name
 - if activation fails, confirm both subscriptions still appear in `amp config model-providers list`
-- if the background task does not run, inspect `status` and the private selector log
+- if the background task does not run, inspect `status` for a scheduled background check and the private selector log
 
 ## Maintenance notes
 
