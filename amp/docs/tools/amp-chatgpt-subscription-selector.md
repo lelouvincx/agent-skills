@@ -71,6 +71,7 @@ safety:
     - "Preserves the active subscription when the response omits either window header pair or provides no supported active window."
     - "Activates a subscription only when the selected connection is not already active."
     - "Writes the installed check interval into the LaunchAgent StartInterval."
+    - "Pauses and resumes the background check without changing the active subscription."
   risks:
     - "Each check sends a small test inference request through the preferred subscription."
     - "Activation changes the ChatGPT subscription used by new Amp inference requests for the user."
@@ -92,7 +93,7 @@ tags:
 
 `sync-skills.sh` projects the command from `bin/amp-chatgpt-subscription-selector` to `~/.local/bin`.
 
-Use `install`, `uninstall`, `run` or `status`. Run `amp config model-providers list` to find the primary and secondary connection IDs before installation.
+Use `install`, `uninstall`, `pause`, `resume`, `run` or `status`. Run `amp config model-providers list` to find the primary and secondary connection IDs before installation.
 
 `install` requires `--preferred`, `--fallback` and `--interval`. `--interval` is the LaunchAgent check period in seconds.
 
@@ -109,6 +110,8 @@ The selector identifies the 5-hour window as 300 minutes and the weekly window a
 
 The selector activates the fallback when any available preferred window is at or below the configured remaining threshold. It switches back when every available window is above that threshold. You set the remaining quota threshold and the check interval during installation.
 
+Use `pause` to stop background checks without removing your configuration or altering the active subscription. It unloads the LaunchAgent and records that the selector is paused. While paused, `run` exits with an error instead of testing or switching subscriptions. Use `resume` to clear the paused state and bootstrap the LaunchAgent again.
+
 The selector does not read local Codex CLI authentication and does not require a Codex CLI sign-in. `amp config model-providers test CONNECTION_ID` tests the ChatGPT subscription already linked to Amp and returns its Codex quota headers.
 
 ## Behavior
@@ -117,7 +120,7 @@ The command runs `amp config model-providers test` for the preferred connection.
 
 The command calculates remaining quota as `100 - used_percent`. It checks the selected connection with `amp config model-providers show`. It runs `amp config model-providers activate` only when a change is needed.
 
-A kernel-managed file lock prevents checks, installation and removal from overlapping. A response with a missing window header pair, no supported active window, invalid percentage or invalid provider state leaves the current subscription active and records a failed result.
+A kernel-managed file lock prevents checks, installation, pause, resume and removal from overlapping. A response with a missing window header pair, no supported active window, invalid percentage or invalid provider state leaves the current subscription active and records a failed result.
 
 `status` prints a short labelled report. The report names both subscriptions, the remaining quota threshold, and the check interval. It also shows the last check time, the last result, the selected subscription, remaining 5-hour and weekly quota, why that subscription was chosen, and whether the background check is scheduled. It uses Amp connection names when `amp config model-providers show` can resolve them. Otherwise it uses the stored connection IDs.
 
@@ -146,6 +149,18 @@ amp-chatgpt-subscription-selector run
 amp-chatgpt-subscription-selector status
 ```
 
+Pause background checks without changing the active subscription:
+
+```bash
+amp-chatgpt-subscription-selector pause
+```
+
+Resume background checks:
+
+```bash
+amp-chatgpt-subscription-selector resume
+```
+
 `status` prints a report like this:
 
 ```text
@@ -172,6 +187,7 @@ amp-chatgpt-subscription-selector uninstall
 - if `run` reports a provider test failure, run `amp config model-providers test CONNECTION_ID`
 - if no usable quota window is found, inspect the test response headers for a missing header pair or changed window duration or name
 - if activation fails, confirm both subscriptions still appear in `amp config model-providers list`
+- if status reports `Background check: paused`, run `amp-chatgpt-subscription-selector resume`
 - if the background task does not run, inspect `status` for a scheduled background check and the private selector log
 
 ## Maintenance notes
