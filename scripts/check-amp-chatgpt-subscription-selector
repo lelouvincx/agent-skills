@@ -213,6 +213,8 @@ TEST_QUOTA="$valid_quota" run_tool run >/dev/null
 locked_config_digest="$(shasum -a 256 "$tmp/state/config" | awk '{print $1}')"
 if run_tool install --preferred replacement-id --fallback "$fallback" --interval 1800 >/dev/null 2>&1; then exit 1; fi
 [ "$(shasum -a 256 "$tmp/state/config" | awk '{print $1}')" = "$locked_config_digest" ]
+if run_tool pause >/dev/null 2>&1; then exit 1; fi
+if run_tool resume >/dev/null 2>&1; then exit 1; fi
 rm "$tmp/hold"
 wait "$held_pid"
 TEST_QUOTA="$valid_quota" run_tool run >/dev/null
@@ -241,11 +243,78 @@ grep -Fxq 'Preferred remaining: 5-hour 5%, weekly 80%' "$tmp/status.out"
 grep -Fxq 'Reason: preferred subscription is at or below the remaining quota threshold' "$tmp/status.out"
 if grep -Eq '^(timestamp|result|selected|five_hour_remaining|weekly_remaining|detail)=' "$tmp/status.out"; then exit 1; fi
 if grep -Fq 'gui/' "$tmp/status.out"; then exit 1; fi
+
+# Argument validation for pause and resume.
+if run_tool pause extra >/dev/null 2>&1; then exit 1; fi
+if run_tool resume extra >/dev/null 2>&1; then exit 1; fi
+
+# Resuming when not paused fails.
+if run_tool resume >/dev/null 2>&1; then exit 1; fi
+
+# Failed pause preserves running state.
+if TEST_BOOTOUT_FAIL=1 run_tool pause >/dev/null 2>&1; then exit 1; fi
+[ -f "$tmp/loaded" ]
+[ ! -f "$tmp/state/paused" ]
+
+# Pause unloads the LaunchAgent and preserves the active subscription.
+active_before_pause="$(cat "$tmp/active")"
+run_tool pause | grep -Fq 'active subscription was unchanged'
+[ ! -f "$tmp/loaded" ]
+[ -f "$tmp/state/paused" ]
+[ -f "$plist" ]
+[ "$(cat "$tmp/active")" = "$active_before_pause" ]
+
+# Pausing when already paused fails.
+if run_tool pause >/dev/null 2>&1; then exit 1; fi
+
+# Status reflects paused state.
+run_tool status > "$tmp/status.paused.out"
+grep -Fxq 'Background check: paused' "$tmp/status.paused.out"
+grep -Fxq 'Interval: 30 minutes' "$tmp/status.paused.out"
+
+# Run while paused fails and does not make quota or activation requests.
+calls_before="$(wc -l < "$tmp/calls" | tr -d ' ')"
+if run_tool run >/dev/null 2>&1; then exit 1; fi
+[ "$(wc -l < "$tmp/calls" | tr -d ' ')" = "$calls_before" ]
+[ "$(cat "$tmp/active")" = "$active_before_pause" ]
+
+# Failed resume keeps the selector paused.
+if TEST_BOOTSTRAP_FAIL=1 run_tool resume >/dev/null 2>&1; then exit 1; fi
+[ ! -f "$tmp/loaded" ]
+[ -f "$tmp/state/paused" ]
+
+# Resume reloads the LaunchAgent and allows runs again.
+run_tool resume | grep -Fq 'Resumed ChatGPT subscription selector'
+[ -f "$tmp/loaded" ]
+[ ! -f "$tmp/state/paused" ]
+if run_tool resume >/dev/null 2>&1; then exit 1; fi
+TEST_QUOTA="$valid_quota" run_tool run >/dev/null
+[ "$(grep -c '^test ' "$tmp/calls")" = "$((tests_before + 2))" ]
+
+# Reinstalling while paused clears the paused flag and loads the agent.
+run_tool pause >/dev/null
+[ -f "$tmp/state/paused" ]
+run_tool install --preferred "$primary" --fallback "$fallback" --interval 1800 >/dev/null
+[ ! -f "$tmp/state/paused" ]
+[ -f "$tmp/loaded" ]
+
 if TEST_BOOTOUT_FAIL=1 run_tool uninstall >/dev/null 2>&1; then exit 1; fi
 [ -e "$plist" ] && [ -f "$tmp/loaded" ]
 active_before_uninstall="$(cat "$tmp/active")"
 run_tool uninstall | grep -Fq 'active subscription was unchanged'
 [ ! -e "$plist" ]
 [ "$(cat "$tmp/active")" = "$active_before_uninstall" ]
+
+# Uninstalling while paused uninstalls cleanly and removes the paused flag.
+run_tool install --preferred "$primary" --fallback "$fallback" --interval 1800 >/dev/null
+run_tool pause >/dev/null
+[ -f "$tmp/state/paused" ]
+run_tool uninstall | grep -Fq 'active subscription was unchanged'
+[ ! -e "$plist" ]
+[ ! -f "$tmp/state/paused" ]
+
+# Pause and resume fail when not installed.
+if run_tool pause >/dev/null 2>&1; then exit 1; fi
+if run_tool resume >/dev/null 2>&1; then exit 1; fi
 
 printf '%s\n' 'Amp ChatGPT subscription selector contracts passed.'

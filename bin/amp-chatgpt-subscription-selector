@@ -6,6 +6,8 @@ usage() {
 Usage:
   amp-chatgpt-subscription-selector install --preferred ID --fallback ID --interval SECONDS [--threshold PERCENT]
   amp-chatgpt-subscription-selector uninstall
+  amp-chatgpt-subscription-selector pause
+  amp-chatgpt-subscription-selector resume
   amp-chatgpt-subscription-selector run
   amp-chatgpt-subscription-selector status
 
@@ -21,6 +23,7 @@ launch_agents_dir="${AMP_CHATGPT_SELECTOR_LAUNCH_AGENTS_DIR:-$HOME/Library/Launc
 agent_path="$launch_agents_dir/com.ampcode.chatgpt-subscription-selector.plist"
 config_file="$state_dir/config"
 last_run_file="$state_dir/last-run"
+paused_file="$state_dir/paused"
 log_file="$state_dir/selector.log"
 lock_file="$state_dir/selector.lock"
 launchctl_command="${AMP_CHATGPT_SELECTOR_LAUNCHCTL:-/bin/launchctl}"
@@ -145,6 +148,10 @@ agent_loaded() {
 }
 
 launch_agent_status() {
+	if [ -f "$paused_file" ]; then
+		printf 'paused\n'
+		return 0
+	fi
 	local output status
 	if output="$("$launchctl_command" print "gui/$(id -u)/com.ampcode.chatgpt-subscription-selector" 9>&- 2>&1)"; then
 		printf 'scheduled\n'
@@ -248,6 +255,12 @@ run_selector() {
 		return 0
 	fi
 	load_config
+	if [ -f "$paused_file" ]; then
+		if agent_loaded; then
+			"$launchctl_command" bootout "gui/$(id -u)/com.ampcode.chatgpt-subscription-selector" 9>&- >/dev/null 2>&1 || true
+		fi
+		fail 'selector is paused; run resume first'
+	fi
 	local output usage five_used weekly_used five_remaining weekly_remaining five_suffix=% weekly_suffix=% selected detail show state test_status=0
 	output="$("$amp_command" config model-providers test "$preferred" 9>&- 2>&1)" || test_status=$?
 	if ! usage="$(printf '%s\n' "$output" | quota_usage)"; then
@@ -362,11 +375,53 @@ install_agent() {
 	if [ "$loaded" = true ]; then
 		"$launchctl_command" bootout "gui/$(id -u)/com.ampcode.chatgpt-subscription-selector" 9>&- >/dev/null || fail 'could not stop the existing LaunchAgent; installation was not changed'
 	fi
+	rm -f "$paused_file"
 	mv "$config_tmp" "$config_file"
 	mv "$plist_tmp" "$agent_path"
 	"$launchctl_command" bootstrap "gui/$(id -u)" "$agent_path" 9>&-
 	trap - EXIT
 	printf 'Installed %s\n' "$agent_path"
+}
+
+pause_agent() {
+	local state_status
+	prepare_state
+	acquire_lock || fail 'another selector operation is running; retry pause'
+	load_config
+	[ -f "$agent_path" ] || fail 'selector is not installed; run install first'
+	[ ! -f "$paused_file" ] || fail 'selector is already paused'
+	if agent_loaded; then
+		"$launchctl_command" bootout "gui/$(id -u)/com.ampcode.chatgpt-subscription-selector" 9>&- >/dev/null || fail 'could not stop the LaunchAgent; selector was not paused'
+	else
+		state_status=$?
+		[ "$state_status" -eq 1 ] || fail 'could not determine whether the LaunchAgent is loaded'
+		fail 'selector is already paused'
+	fi
+	touch "$paused_file"
+	chmod 600 "$paused_file"
+	printf '%s\n' 'Paused ChatGPT subscription selector; the active subscription was unchanged.'
+}
+
+resume_agent() {
+	local state_status
+	prepare_state
+	acquire_lock || fail 'another selector operation is running; retry resume'
+	load_config
+	[ -f "$agent_path" ] || fail 'selector is not installed; run install first'
+	[ -f "$paused_file" ] || fail 'selector is not paused'
+	if agent_loaded; then
+		fail 'selector is not paused'
+	else
+		state_status=$?
+		[ "$state_status" -eq 1 ] || fail 'could not determine whether the LaunchAgent is loaded'
+	fi
+	rm -f "$paused_file"
+	if ! "$launchctl_command" bootstrap "gui/$(id -u)" "$agent_path" 9>&-; then
+		touch "$paused_file"
+		chmod 600 "$paused_file"
+		fail 'could not resume the LaunchAgent'
+	fi
+	printf '%s\n' 'Resumed ChatGPT subscription selector.'
 }
 
 uninstall_agent() {
@@ -379,7 +434,7 @@ uninstall_agent() {
 		state_status=$?
 		[ "$state_status" -eq 1 ] || fail 'could not determine whether the LaunchAgent is loaded'
 	fi
-	rm -f "$agent_path"
+	rm -f "$agent_path" "$paused_file"
 	printf '%s\n' 'Uninstalled ChatGPT subscription selector; the active subscription was unchanged.'
 }
 
@@ -426,6 +481,8 @@ shift
 case "$command_name" in
 	install) install_agent "$@" ;;
 	uninstall) [ "$#" -eq 0 ] || fail 'uninstall takes no arguments'; uninstall_agent ;;
+	pause) [ "$#" -eq 0 ] || fail 'pause takes no arguments'; pause_agent ;;
+	resume) [ "$#" -eq 0 ] || fail 'resume takes no arguments'; resume_agent ;;
 	run) [ "$#" -eq 0 ] || fail 'run takes no arguments'; run_selector ;;
 	status) [ "$#" -eq 0 ] || fail 'status takes no arguments'; status_agent ;;
 	-h|--help|help) usage ;;
