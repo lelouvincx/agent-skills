@@ -67,7 +67,7 @@ and this project does not currently use versioned releases.
 
 ### Changed
 
-- Make `amp-chatgpt-subscription-selector status` print a short labelled report instead of raw last-run keys and a `launchctl print` dump.
+- Make `amp-chatgpt-subscription-selector status` print a short labelled report instead of raw last-run keys and a `launchctl print` dump. [#219](https://github.com/lelouvincx/agent-skills/pull/219)
 - Make the Amp ChatGPT subscription selector check interval an install-time setting instead of a baked-in duration. [#217](https://github.com/lelouvincx/agent-skills/pull/217)
 - Sort `amp-runner list` by resident memory usage, descending. [#215](https://github.com/lelouvincx/agent-skills/pull/215)
 - Harden the read-only Git diff MCP test harness against `GIT_DIR` and other Git environment pollution when pre-push hooks spawn it. [#215](https://github.com/lelouvincx/agent-skills/pull/215)
