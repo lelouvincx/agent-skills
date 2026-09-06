@@ -9,6 +9,7 @@ and this project does not currently use versioned releases.
 
 ### Added
 
+- Add pause and resume controls to `amp-chatgpt-subscription-selector` to stop and restart background checks without removing configuration. [#220](https://github.com/lelouvincx/agent-skills/pull/220)
 - Implement RFC-0011 with quiet isolated browser sessions, strict `agent-secrets` browser credentials, and a pinned destination-safe `agent-browser` build. [#218](https://github.com/lelouvincx/agent-skills/pull/218)
 - Add `syncing-holistics-external-git` to bootstrap local sync for a new, empty external Git repository connected to a Holistics project. [#211](https://github.com/lelouvincx/agent-skills/pull/211)
 - Add explicit, exact-file approval for Claude DesignSync uploads through the Claude Agent SDK. [#206](https://github.com/lelouvincx/agent-skills/pull/206)
@@ -68,6 +69,7 @@ and this project does not currently use versioned releases.
 
 ### Changed
 
+- Make `amp-chatgpt-subscription-selector status` print a short labelled report instead of raw last-run keys and a `launchctl print` dump. [#219](https://github.com/lelouvincx/agent-skills/pull/219)
 - Make the Amp ChatGPT subscription selector check interval an install-time setting instead of a baked-in duration. [#217](https://github.com/lelouvincx/agent-skills/pull/217)
 - Sort `amp-runner list` by resident memory usage, descending. [#215](https://github.com/lelouvincx/agent-skills/pull/215)
 - Harden the read-only Git diff MCP test harness against `GIT_DIR` and other Git environment pollution when pre-push hooks spawn it. [#215](https://github.com/lelouvincx/agent-skills/pull/215)

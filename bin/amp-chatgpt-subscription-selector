@@ -6,6 +6,8 @@ usage() {
 Usage:
   amp-chatgpt-subscription-selector install --preferred ID --fallback ID --interval SECONDS [--threshold PERCENT]
   amp-chatgpt-subscription-selector uninstall
+  amp-chatgpt-subscription-selector pause
+  amp-chatgpt-subscription-selector resume
   amp-chatgpt-subscription-selector run
   amp-chatgpt-subscription-selector status
 
@@ -21,6 +23,7 @@ launch_agents_dir="${AMP_CHATGPT_SELECTOR_LAUNCH_AGENTS_DIR:-$HOME/Library/Launc
 agent_path="$launch_agents_dir/com.ampcode.chatgpt-subscription-selector.plist"
 config_file="$state_dir/config"
 last_run_file="$state_dir/last-run"
+paused_file="$state_dir/paused"
 log_file="$state_dir/selector.log"
 lock_file="$state_dir/selector.lock"
 launchctl_command="${AMP_CHATGPT_SELECTOR_LAUNCHCTL:-/bin/launchctl}"
@@ -144,6 +147,107 @@ agent_loaded() {
 	return "$status"
 }
 
+launch_agent_status() {
+	if [ -f "$paused_file" ]; then
+		printf 'paused\n'
+		return 0
+	fi
+	local output status
+	if output="$("$launchctl_command" print "gui/$(id -u)/com.ampcode.chatgpt-subscription-selector" 9>&- 2>&1)"; then
+		printf 'scheduled\n'
+		return 0
+	fi
+	status=$?
+	if printf '%s\n' "$output" | grep -Fq 'Could not find service'; then
+		printf 'not scheduled\n'
+		return 0
+	fi
+	printf 'amp-chatgpt-subscription-selector: could not inspect LaunchAgent state: %s\n' "$output" >&2
+	return "$status"
+}
+
+connection_label() {
+	local id="$1" show name
+	[ -n "$id" ] || { printf '%s\n' "$id"; return 0; }
+	if show="$("$amp_command" config model-providers show "$id" 9>&- 2>/dev/null)"; then
+		name="$(printf '%s\n' "$show" | awk -F'"' '/^[[:space:]]*"name":/{print $4; exit}')"
+		if [ -n "$name" ]; then
+			printf '%s (%s)\n' "$name" "$id"
+			return 0
+		fi
+	fi
+	printf '%s\n' "$id"
+}
+
+format_interval() {
+	local seconds="$1" hours minutes
+	if [ "$seconds" -ge 3600 ] && [ $((seconds % 3600)) -eq 0 ]; then
+		hours=$((seconds / 3600))
+		if [ "$hours" -eq 1 ]; then
+			printf '1 hour\n'
+		else
+			printf '%s hours\n' "$hours"
+		fi
+		return 0
+	fi
+	if [ "$seconds" -ge 60 ] && [ $((seconds % 60)) -eq 0 ]; then
+		minutes=$((seconds / 60))
+		if [ "$minutes" -eq 1 ]; then
+			printf '1 minute\n'
+		else
+			printf '%s minutes\n' "$minutes"
+		fi
+		return 0
+	fi
+	if [ "$seconds" -eq 1 ]; then
+		printf '1 second\n'
+	else
+		printf '%s seconds\n' "$seconds"
+	fi
+}
+
+format_quota() {
+	case "$1" in
+		''|unknown) printf 'unknown\n' ;;
+		unavailable) printf 'unavailable\n' ;;
+		*) printf '%s%%\n' "$1" ;;
+	esac
+}
+
+format_timestamp() {
+	case "$1" in
+		never) printf 'never\n' ;;
+		[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]Z)
+			printf '%s\n' "$1" | sed -e 's/T/ /' -e 's/Z$/ UTC/'
+			;;
+		*) printf '%s\n' "$1" ;;
+	esac
+}
+
+format_result() {
+	case "$1" in
+		never-run) printf 'never run\n' ;;
+		*) printf '%s\n' "$1" ;;
+	esac
+}
+
+format_detail() {
+	case "$1" in
+		preferred-has-capacity) printf 'preferred subscription still has remaining quota\n' ;;
+		preferred-has-capacity-activated) printf 'preferred subscription still has remaining quota; activated it\n' ;;
+		preferred-at-threshold) printf 'preferred subscription is at or below the remaining quota threshold\n' ;;
+		preferred-at-threshold-activated) printf 'preferred subscription is at or below the remaining quota threshold; activated the fallback\n' ;;
+		quota-windows-missing) printf 'preferred subscription did not report a usable 5-hour or weekly quota window\n' ;;
+		provider-test-failed) printf 'preferred subscription test failed and did not report a usable quota window\n' ;;
+		invalid-quota-percentage) printf 'preferred subscription returned an invalid quota percentage\n' ;;
+		selected-provider-unavailable) printf 'could not inspect the selected subscription\n' ;;
+		invalid-selected-provider-state) printf 'selected subscription returned an invalid active state\n' ;;
+		activation-failed) printf 'could not activate the selected subscription\n' ;;
+		never-run) printf 'selector has not run yet\n' ;;
+		*) printf '%s\n' "$1" ;;
+	esac
+}
+
 run_selector() {
 	prepare_state
 	if ! acquire_lock; then
@@ -151,6 +255,12 @@ run_selector() {
 		return 0
 	fi
 	load_config
+	if [ -f "$paused_file" ]; then
+		if agent_loaded; then
+			"$launchctl_command" bootout "gui/$(id -u)/com.ampcode.chatgpt-subscription-selector" 9>&- >/dev/null 2>&1 || true
+		fi
+		fail 'selector is paused; run resume first'
+	fi
 	local output usage five_used weekly_used five_remaining weekly_remaining five_suffix=% weekly_suffix=% selected detail show state test_status=0
 	output="$("$amp_command" config model-providers test "$preferred" 9>&- 2>&1)" || test_status=$?
 	if ! usage="$(printf '%s\n' "$output" | quota_usage)"; then
@@ -265,11 +375,53 @@ install_agent() {
 	if [ "$loaded" = true ]; then
 		"$launchctl_command" bootout "gui/$(id -u)/com.ampcode.chatgpt-subscription-selector" 9>&- >/dev/null || fail 'could not stop the existing LaunchAgent; installation was not changed'
 	fi
+	rm -f "$paused_file"
 	mv "$config_tmp" "$config_file"
 	mv "$plist_tmp" "$agent_path"
 	"$launchctl_command" bootstrap "gui/$(id -u)" "$agent_path" 9>&-
 	trap - EXIT
 	printf 'Installed %s\n' "$agent_path"
+}
+
+pause_agent() {
+	local state_status
+	prepare_state
+	acquire_lock || fail 'another selector operation is running; retry pause'
+	load_config
+	[ -f "$agent_path" ] || fail 'selector is not installed; run install first'
+	[ ! -f "$paused_file" ] || fail 'selector is already paused'
+	if agent_loaded; then
+		"$launchctl_command" bootout "gui/$(id -u)/com.ampcode.chatgpt-subscription-selector" 9>&- >/dev/null || fail 'could not stop the LaunchAgent; selector was not paused'
+	else
+		state_status=$?
+		[ "$state_status" -eq 1 ] || fail 'could not determine whether the LaunchAgent is loaded'
+		fail 'selector is already paused'
+	fi
+	touch "$paused_file"
+	chmod 600 "$paused_file"
+	printf '%s\n' 'Paused ChatGPT subscription selector; the active subscription was unchanged.'
+}
+
+resume_agent() {
+	local state_status
+	prepare_state
+	acquire_lock || fail 'another selector operation is running; retry resume'
+	load_config
+	[ -f "$agent_path" ] || fail 'selector is not installed; run install first'
+	[ -f "$paused_file" ] || fail 'selector is not paused'
+	if agent_loaded; then
+		fail 'selector is not paused'
+	else
+		state_status=$?
+		[ "$state_status" -eq 1 ] || fail 'could not determine whether the LaunchAgent is loaded'
+	fi
+	rm -f "$paused_file"
+	if ! "$launchctl_command" bootstrap "gui/$(id -u)" "$agent_path" 9>&-; then
+		touch "$paused_file"
+		chmod 600 "$paused_file"
+		fail 'could not resume the LaunchAgent'
+	fi
+	printf '%s\n' 'Resumed ChatGPT subscription selector.'
 }
 
 uninstall_agent() {
@@ -282,16 +434,45 @@ uninstall_agent() {
 		state_status=$?
 		[ "$state_status" -eq 1 ] || fail 'could not determine whether the LaunchAgent is loaded'
 	fi
-	rm -f "$agent_path"
+	rm -f "$agent_path" "$paused_file"
 	printf '%s\n' 'Uninstalled ChatGPT subscription selector; the active subscription was unchanged.'
 }
 
 status_agent() {
 	prepare_state
 	load_config
-	printf 'Preferred: %s\nFallback: %s\nThreshold: %s%% remaining\nInterval: %ss\n' "$preferred" "$fallback" "$threshold" "$interval"
-	if [ -f "$last_run_file" ]; then cat "$last_run_file"; else printf 'result=never-run\n'; fi
-	"$launchctl_command" print "gui/$(id -u)/com.ampcode.chatgpt-subscription-selector"
+	local last_timestamp=never last_result=never-run last_selected=none
+	local last_five=unknown last_weekly=unknown last_detail=never-run
+	local key value agent_state preferred_label fallback_label selected_label
+	if [ -f "$last_run_file" ]; then
+		while IFS='=' read -r key value; do
+			case "$key" in
+				timestamp) last_timestamp="$value" ;;
+				result) last_result="$value" ;;
+				selected) last_selected="$value" ;;
+				five_hour_remaining) last_five="$value" ;;
+				weekly_remaining) last_weekly="$value" ;;
+				detail) last_detail="$value" ;;
+			esac
+		done < "$last_run_file"
+	fi
+	preferred_label="$(connection_label "$preferred")"
+	fallback_label="$(connection_label "$fallback")"
+	case "$last_selected" in
+		''|none|unchanged) selected_label="${last_selected:-none}" ;;
+		*) selected_label="$(connection_label "$last_selected")" ;;
+	esac
+	agent_state="$(launch_agent_status)" || return
+	printf 'Preferred: %s\n' "$preferred_label"
+	printf 'Fallback: %s\n' "$fallback_label"
+	printf 'Threshold: %s%% remaining\n' "$threshold"
+	printf 'Interval: %s\n' "$(format_interval "$interval")"
+	printf 'Background check: %s\n' "$agent_state"
+	printf 'Last check: %s\n' "$(format_timestamp "$last_timestamp")"
+	printf 'Result: %s\n' "$(format_result "$last_result")"
+	printf 'Selected: %s\n' "$selected_label"
+	printf 'Preferred remaining: 5-hour %s, weekly %s\n' "$(format_quota "$last_five")" "$(format_quota "$last_weekly")"
+	printf 'Reason: %s\n' "$(format_detail "$last_detail")"
 }
 
 [ "$#" -gt 0 ] || { usage >&2; exit 2; }
@@ -300,6 +481,8 @@ shift
 case "$command_name" in
 	install) install_agent "$@" ;;
 	uninstall) [ "$#" -eq 0 ] || fail 'uninstall takes no arguments'; uninstall_agent ;;
+	pause) [ "$#" -eq 0 ] || fail 'pause takes no arguments'; pause_agent ;;
+	resume) [ "$#" -eq 0 ] || fail 'resume takes no arguments'; resume_agent ;;
 	run) [ "$#" -eq 0 ] || fail 'run takes no arguments'; run_selector ;;
 	status) [ "$#" -eq 0 ] || fail 'status takes no arguments'; status_agent ;;
 	-h|--help|help) usage ;;
