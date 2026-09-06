@@ -81,7 +81,11 @@ After 1Password recovered, a strict doctor check resolved every registered bundl
 
 An apparent successful retry remained on the sign-in page. Investigation showed that the shell had selected the stock npm launcher, which reused an unpatched daemon with the same semantic version. That daemon ignored the added policy and returned a false `loggedIn: true`. Daemons now record and verify a custom build identity. The plugin also requires credential contract `rfc0011-v1` before vault access.
 
-The final acceptance run used fresh owned resources and build `0.36.0+rfc0011.3`. The first plugin call failed during a transient 1Password operation. `agent-secrets doctor` and a direct contract-bound plugin check then passed without printing values. The retry reached `https://demo4.holistics.io/home`. Its CLI client could not read the delayed response, but the target remained open. The native path closes that target on any post-submit destination or account failure, so the surviving exact URL confirms both checks passed. Streaming stayed disabled. Cleanup disconnected the daemon, sent CDP `Browser.close`, verified process and listener absence, removed the profile and recorded `stopped`. No RFC-owned browser session remained.
+The first acceptance run used fresh owned resources and build `0.36.0+rfc0011.3`. It reached `https://demo4.holistics.io/home`, but its CLI client did not receive the delayed response. The original target cleanup was best effort, so the surviving target did not prove that account verification passed. A later screenshot run confirmed functional login on that build, but not the stronger cleanup and interception contract added after Oracle review.
+
+The hardened acceptance runs used new headless sessions, profiles, loopback ports, namespaces and short daemon names. They exposed and fixed three issues before filling: slow 1Password resolution exceeded both plugin and client timeouts, wrapper and worker targets received unsupported Fetch commands, and TOTP resolution order was nondeterministic. The tests resolved TOTP last and cleaned every failed session completely.
+
+The final diagnostic reached `https://demo4.holistics.io/2fa/verify`. The required guard blocked `Other`, `Script` and `Stylesheet` requests to `https://assets.holistics.io`. The page rendered no OTP control, so the native path returned no `verified: true`, closed and confirmed the tainted target, and completed lifecycle cleanup. Package F remains blocked; the earlier functional login does not satisfy the hardened contract.
 
 ## Final validation
 
@@ -96,11 +100,11 @@ The final acceptance run used fresh owned resources and build `0.36.0+rfc0011.3`
 | Pre-push hooks | Passed, including isolated projection, rollback-safe remote archive syncing, project resolver checks, Amp plugin builds and SDK dependencies. |
 | Required local sync | Passed. The custom wrapper, plugin and credential handler were linked, and plugin registration was merged. |
 | Native plugin inspection | `agent-browser plugin show onepassword` reported only `credential.read`. |
-| Custom native build | Passed. The pinned patch built successfully, and the daemon reported build `0.36.0+rfc0011.3`. A stock daemon with the same semantic version was replaced without ending external Chrome. |
-| Native destination tests | 3 focused end-to-end tests passed. They cover form and form-less OTP, destination and identity rejection, blocked cross-origin 307 POST replay and blocked cross-origin fetch or XHR exfiltration. |
+| Custom native build | Passed. Fingerprint `fb5322a36a10ff35fd40593187a3a0f2cef412279e0aaed468e15abef1e5ab81` matched the installed receipt. The receipt covers the pinned commit and patch. Daemon identity covers native source, Cargo inputs, target, profile and Rust flags. |
+| Native destination tests | Passed: 1,215 unit tests, 6 CLI tests and all 3 ignored provider-login tests. Coverage includes tainted-target closure, guarded descendants and off-origin request blocking. |
 | Live registry inspection | All 5 bundles were present. Only `work` contained `browserLogin`. |
 | Live reference validation | The replacement service account has read-only access to the `Agent Secrets` vault. The strict doctor check resolved every declared reference without printing values. |
-| Live Demo4 acceptance | Passed with build `0.36.0+rfc0011.3`. The custom daemon reached the exact `/home` URL and verified the configured account marker. |
+| Live Demo4 acceptance | Blocked. The hardened path reached same-origin `/2fa/verify`, then blocked required scripts and styles from `assets.holistics.io`. It returned no `verified: true` and closed the tainted target. |
 | RFC projection comparison | The projected main RFC and this supporting record matched their source files. |
 
 ## Deferred viewer alternative

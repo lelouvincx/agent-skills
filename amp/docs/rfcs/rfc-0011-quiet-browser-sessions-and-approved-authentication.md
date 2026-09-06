@@ -4,7 +4,7 @@ code: "RFC-0011"
 title: "Quiet browser sessions and approved authentication"
 slug: "quiet-browser-sessions-and-approved-authentication"
 file: "rfc-0011-quiet-browser-sessions-and-approved-authentication.md"
-status: "Implemented"
+status: "Accepted"
 summary: "Use isolated headless sessions and a destination-checked agent-browser credential plugin backed by agent-secrets."
 created: "2026-09-05"
 updated: "2026-09-06"
@@ -13,7 +13,7 @@ amp_thread_id:
   T-01a06f94-14b9-71dd-9d12-c9f538a4a257: "compared local browser automation with TinyFish and examined profile persistence and headed operation"
   T-01a070f6-00d8-72d3-87fe-64a24e0e731e: "tested the actual dashboard with synthetic login data and found input failures"
   T-01a070f6-6bff-7019-ad5a-f7f1c7dea454: "tested live stream control, session isolation, cross-thread handoff and cleanup"
-  T-01a0713a-85db-740b-bff2-c7c1ac705307: "implemented packages A to F; adopted a pinned native patch; verified the approved Demo4 login"
+  T-01a0713a-85db-740b-bff2-c7c1ac705307: "implemented packages A to E; hardened the pinned native patch; identified the remaining Demo4 2FA asset blocker"
 dependency:
   - type: "rfc"
     code: "RFC-0010"
@@ -67,7 +67,7 @@ Local browser automation interrupts Chinh's desktop and lacks an automatic path 
 
 Each session retains a dedicated profile and CDP port, coordinated through `agent-browser-lifecycle`. Routine work uses headless Chrome. Human sign-in uses headed Chrome while browser workers are paused. Dashboard authentication remains deferred because synthetic automation and human typing failed on version 0.36.0.
 
-Packages A to F are implemented. A pinned 0.36.0 native patch enforces destination and identity policy. The `onepassword` plugin resolves the approved `work` bundle through strict `agent-secrets`; other bundles remain unchanged and browser-disabled. Synthetic adversarial tests pass. The approved Demo4 login reached its exact final URL and verified the configured account marker.
+Packages A to E are implemented. A pinned 0.36.0 native patch enforces destination and identity policy. The `onepassword` plugin resolves the approved `work` bundle through strict `agent-secrets`; other bundles remain unchanged and browser-disabled. Synthetic adversarial tests pass. Package F remains blocked because Demo4's 2FA page needs off-origin assets that the required credential guard blocks.
 
 ## Context
 
@@ -88,13 +88,13 @@ The desired outcome is quiet automation with deliberate requests for help, not u
 | [Lifecycle helper](../../../bin/agent-browser-lifecycle) and [contract](../../conventions/agent-browser-lifecycle.md) | Coordinate claims and events. They do not launch Chrome or support process replacement within a session. |
 | Lifecycle recovery procedure | Removes the profile before recording `observed_dead`. The event lock does not protect the preceding deletion. |
 | [Secret resolver](../../../bin/agent-secrets) and [bundle policy](../../agent-secrets/bundles.json) | Give `work` approved browser policy and strict non-interactive resolution. Other bundles remain browser-disabled. |
-| Current local installation | The repository wrapper selects build `0.36.0+rfc0011.3`. Daemons record and verify this build identity before reuse. Plugin inspection reports `onepassword` with `credential.read`. |
+| Current local installation | The wrapper checks a receipt derived from the pinned commit and patch. The native build derives a separate identity from its source and Cargo inputs. Daemons verify that identity before reuse. Plugin inspection reports `onepassword` with `credential.read`. |
 | Version 0.36.0 [plugin execution](https://github.com/vercel-labs/agent-browser/blob/v0.36.0/cli/src/plugins.rs#L201-L235) and [daemon reuse](https://github.com/vercel-labs/agent-browser/blob/v0.36.0/cli/src/connection.rs#L792-L824) | Plugins inherit the background browser service's environment. Setting a secret variable on a later CLI command does not update that already-running service. |
 | Unpatched upstream 0.36.0 [login handler](https://github.com/vercel-labs/agent-browser/blob/v0.36.0/cli/src/native/actions.rs#L11195-L11446) | Resolves credentials before navigation and does not verify the receiving page's origin before filling. Returns `loggedIn: true` when the scripted sequence finishes, without checking the account or successful authentication. |
 | [Agent-browser plugin documentation](https://agent-browser.dev/plugins) | Defines `credential.read` for external vaults. A local executable exchanges one JSON request and response; browser automation stays in agent-browser. |
 | Version 0.36.0 [streaming](https://github.com/vercel-labs/agent-browser/blob/v0.36.0/docs/src/app/streaming/page.mdx) and [dashboard](https://github.com/vercel-labs/agent-browser/blob/v0.36.0/docs/src/app/dashboard/page.mdx) documentation | The dashboard displays a live viewport and sends mouse, keyboard and touch input to an existing headless browser. Each stream has its own port; one local dashboard can proxy several streams. |
 
-The CLI and version 0.36.0 source were rechecked after Chinh's review comments. These findings replace the earlier 0.32.3 assessment. Strict non-interactive vault resolution and the approved Demo4 login now pass.
+The CLI and version 0.36.0 source were rechecked after Chinh's review comments. These findings replace the earlier 0.32.3 assessment. Strict non-interactive vault resolution passes. Hardened Demo4 authentication does not yet pass.
 
 The [5 September live experiments](./rfc-0011/2026-09-05-dashboard-and-isolation-tests.md) confirmed session isolation and control without restarting Chrome, but failed dashboard sign-in. Dashboard credential input remains blocked.
 
@@ -115,13 +115,13 @@ Giving B port `9223` but pointing it at A's directory does not work: 2 Chrome in
 
 Chrome must restart to change between headed and headless operation. But human sign-in does not always require a visible Chrome window. Agent-browser's built-in [local dashboard](https://agent-browser.dev/dashboard) can display A's page and send Chinh's input to A while Chrome stays headless. A keeps the same process, directory and CDP port.
 
-The [initial RFC-0011 proposal in this design thread](https://ampcode.com/threads/T-01a06fe4-8468-755a-911b-48950a722cb9) would restart Chrome headed for sign-in, then restart it headless using the same profile and CDP port. That would create a cleanup race: another thread could mistake the intentional process gap for a dead session and delete its profile. Dashboard sign-in avoids that gap, so this RFC no longer needs restart states, revision checks or a process supervisor.
+The [initial RFC-0011 proposal in this design thread](https://ampcode.com/threads/T-01a06fe4-8468-755a-911b-48950a722cb9) would restart Chrome headed for sign-in, then restart it headless using the same profile and CDP port. That would create a cleanup race: another thread could mistake the intentional process gap for a dead session and delete its profile. A fresh headed session avoids that gap, so this RFC does not need restart states, revision checks or a process supervisor.
 
 The dashboard cannot promise access to native macOS dialogs, Touch ID or every passkey flow. Some sites may also reject headless browsers. Those cases use headed Chrome. Dashboard repair and process-replacement automation remain outside this RFC.
 
 ## Decision
 
-Routine sessions are headless; headed launches and mode switches are pre-approved. Each session keeps one exclusive ephemeral profile and one claimed loopback CDP port under the existing lifecycle ownership, handoff and cleanup workflow.
+Routine sessions are headless. Headed launches are pre-approved, but each session stays in its launch mode. A headed fallback uses a fresh claim and profile. Each session keeps one exclusive ephemeral profile and one claimed loopback CDP port under the existing lifecycle ownership, handoff and cleanup workflow.
 
 Automatic authentication uses the pinned RFC-0011 build, `onepassword` and an approved browser-enabled bundle. Continue only after destination and account checks pass; otherwise use headed human authentication.
 
@@ -198,7 +198,7 @@ The `credential` response contains `username`, `password`, `url`, `usernameSelec
 
 Add an opt-in, service-account-only mode to `agent-secrets` that never falls back interactively. Preserve RFC-0010's existing behaviour for other callers. The short-lived plugin selects strict mode explicitly when starting `agent-secrets run` with the alias bundle and registered handler. Do not inject passwords or the bootstrap token into the long-lived daemon's environment.
 
-Give resolution a deadline of at most 10 seconds. Version 0.36.0 [waits up to 15 seconds for plugin output](https://github.com/vercel-labs/agent-browser/blob/v0.36.0/cli/src/plugins.rs#L271-L290); that timeout starts after process creation and stdin writing. Run the resolver and its secret-handling children in one process group. End that group on cancellation or deadline so no detached resolution continues. Do not return raw 1Password errors or credential payloads to Amp.
+Give strict resolution a 110-second deadline and the native credential invocation a 120-second deadline. Local service-account resolution makes several bounded 1Password calls and has exceeded the upstream 15-second plugin deadline. Include the plugin budget in the CLI read timeout so the client does not retry a live authentication command. Run the resolver and its secret-handling children in one process group. End that group on cancellation or deadline so no detached resolution continues. Do not return raw 1Password errors or credential payloads to Amp.
 
 On rejection or resolution failure, return `success: false` with a fixed secret-free error and no `credential` object. Write no logs to stdout. Native core integrations suppress plugin stderr and error text, so the workflow must treat generic login failure as a request for assistance, not promise detailed resolver diagnostics through `auth login`.
 
@@ -215,6 +215,8 @@ An enabled login path must meet these acceptance conditions:
 3. Ignore previous frame selection. Resolve both fields in the main frame and the same form; require its resolved action origin to be approved.
 4. Abort on document replacement, frame changes or execution-context loss. Before submission, revalidate the document, origin and form destination.
 5. On failure, perform no further credential writes or submission and discard the provider response. A failure before the first fill must leave all credential fields untouched.
+6. Mark the target as tainted before any page function receives credentials. Until verification or confirmed target closure, block every off-origin request from the target and its attached workers, popups and out-of-process frames.
+7. After any tainted failure, close the target and confirm closure before removing interception. If closure cannot be confirmed, keep interception active and fail closed.
 
 The wrong destination must receive no credential bytes in adversarial navigation tests. A later failure cannot undo values already filled into the approved document. Post-login identity failure therefore blocks further work; it does not imply that no fields were filled.
 
@@ -250,7 +252,7 @@ The existing lifecycle helper and [schema](../../agent-browser-lifecycle/schema.
 
 ### Delivery and validation
 
-Packages A to F are complete. The [implementation baseline and acceptance record](./rfc-0011/2026-09-05-implementation-baseline-and-acceptance.md) holds their evidence. Use the README validation table for implementation changes.
+Packages A to E are complete. Package F remains blocked. The [implementation baseline and acceptance record](./rfc-0011/2026-09-05-implementation-baseline-and-acceptance.md) holds the evidence. Use the README validation table for implementation changes.
 
 For RFC-only changes, run `python3 amp/scripts/validate-rfcs.py` and `scripts/check-projection`. Run `./sync-skills.sh` and verify the RFC projection.
 
@@ -266,8 +268,10 @@ Authentication review remains applicable. The RFC keeps strict resolver behaviou
 
 The subsequent live tests blocked dashboard sign-in on 0.36.0. Chinh then reproduced the missing dot by physically typing through the dashboard and selected headed Chrome for human sign-in. Successful session isolation and stream shutdown do not override the failed input test.
 
-A later Oracle review found that semantic version matching could reuse an unpatched daemon. The implementation now checks a custom build identity before reuse and requires an RFC-specific credential contract before the plugin reads the vault.
+A later Oracle review found unsafe cleanup, incomplete descendant interception and semantic-version daemon reuse. The implementation now closes and confirms tainted targets, blocks all guarded off-origin requests, and derives daemon identity from native build inputs. The plugin also requires an RFC-specific credential contract before it reads the vault. Hardened live testing then showed that Demo4's same-origin 2FA page depends on scripts and styles from `assets.holistics.io`; blocking those requests leaves no OTP control to fill.
 
 ## Open questions
 
-None. Dashboard repair and custom-viewer experiments remain deferred work outside this RFC.
+How should an approved multi-stage login load off-origin assets between credential stages without weakening the requirement to block every off-origin request while a target is tainted?
+
+Dashboard repair and custom-viewer experiments remain deferred work outside this RFC.

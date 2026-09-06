@@ -183,7 +183,7 @@ Run the relevant repository command directly:
 | Validate Amp RFCs | `python3 amp/scripts/validate-rfcs.py` |
 | Test the agent secret resolver and browser credential plugin | `uvx --with jsonschema==4.25.1 python -m unittest amp/scripts/test_validate_agent_secrets.py amp/scripts/test_agent_secrets.py amp/scripts/test_agent_browser_plugin_onepassword.py` |
 | Validate agent secret policy | `uvx --with jsonschema==4.25.1 python amp/scripts/validate-agent-secrets.py` |
-| Build the destination-safe agent-browser | `amp/agent-browser-custom/build` |
+| Build and test the destination-safe agent-browser | `AGENT_BROWSER_RUN_TESTS=1 amp/agent-browser-custom/build` |
 | Test the GitHub thread event validator | `python3 -m unittest amp/scripts/test_validate_github_thread_events.py` |
 | Validate GitHub thread event configuration | `python3 amp/scripts/validate-github-thread-events.py` |
 | Validate the project registry | `scripts/check-project-registry` |

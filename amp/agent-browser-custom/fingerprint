@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+commit="$(tr -d '[:space:]' <"$root/amp/agent-browser-custom/upstream-commit")"
+patch_sha="$(shasum -a 256 "$root/amp/agent-browser-custom/rfc0011.patch" | awk '{print $1}')"
+
+printf 'upstream=%s\npatch=%s\n' "$commit" "$patch_sha" | shasum -a 256 | awk '{print $1}'

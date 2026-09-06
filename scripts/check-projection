@@ -165,7 +165,7 @@ cat > "$custom_install/agent-browser" <<'SH'
 printf '%s\n' "agent-browser projection test $*"
 SH
 chmod +x "$custom_install/agent-browser"
-shasum -a 256 "$REPO_DIR/amp/agent-browser-custom/rfc0011.patch" | awk '{print $1}' > "$custom_install/patch.sha256"
+"$REPO_DIR/amp/agent-browser-custom/fingerprint" > "$custom_install/build-input.sha256"
 if [ "$(HOME="$tmp_home" "$agent_browser" --version)" != "agent-browser projection test --version" ]; then
 	echo "error: projected agent-browser wrapper could not locate its source patch" >&2
 	exit 1

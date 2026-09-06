@@ -3,7 +3,7 @@
 ## Session invariants
 
 - Give every owner session a fresh Chrome instance, an exclusive profile and a claimed `127.0.0.1` CDP port. Keep authentication in that profile.
-- Run routine work headless. Headed launches and mode switches are pre-approved.
+- Run routine work headless. Headed launches are pre-approved. Keep each session in its launch mode.
 - Keep profiles private and CDP and stream listeners on loopback. Lifecycle claims coordinate same-user agents; verify live listeners because claims do not reserve operating-system ports.
 
 ## Explicit agent-browser identity
@@ -34,7 +34,7 @@ If launch fails, end the owned partial Chrome process tree, verify its PID and l
 
 Use the pinned RFC-0011 build and an approved browser-enabled bundle. Through the explicit identity, run `auth login <bundle> --credential-provider onepassword`. Continue when the destination and account match the bundle.
 
-If automatic authentication cannot complete, switch to headed Chrome. Pause automated input until attached browser workers detach; resume when the destination and account match.
+If automatic authentication cannot complete, stop the headless session and claim a fresh headed session. Do not reuse its profile. Pause automated input until attached browser workers detach; resume when the destination and account match.
 
 ## Owner shutdown and recovery
 

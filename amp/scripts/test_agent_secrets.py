@@ -38,6 +38,10 @@ log_path = os.environ.get("FAKE_OP_LOG")
 if log_path:
     with Path(log_path).open("a") as log:
         log.write(f"{lane}:{stage}\n")
+reference_log_path = os.environ.get("FAKE_OP_REFERENCE_LOG")
+if reference_log_path and stage == "read":
+    with Path(reference_log_path).open("a") as log:
+        log.write(arguments[1] + "\n")
 
 if lane == "interactive" and os.environ.get("FAKE_OP_FAIL_INTERACTIVE") == stage:
     raise SystemExit(19)
@@ -461,6 +465,7 @@ class AgentSecretsTests(unittest.TestCase):
 
     def test_browser_login_supplies_only_validated_values_and_metadata_to_handler(self):
         observer = self.home / "browser-observer"
+        reference_log = self.home / "reference.log"
         write_executable(
             observer,
             "#!/bin/sh\n"
@@ -489,6 +494,7 @@ class AgentSecretsTests(unittest.TestCase):
             observer,
             auth="interactive",
             OP_SERVICE_ACCOUNT_TOKEN="inherited-value",
+            FAKE_OP_REFERENCE_LOG=str(reference_log),
         )
         self.assertEqual(0, result.returncode, result.stderr)
         credential = json.loads(result.stdout)
@@ -507,6 +513,14 @@ class AgentSecretsTests(unittest.TestCase):
                 "service:read",
             ],
             self.op_events(),
+        )
+        self.assertEqual(
+            [
+                "op://Agent Secrets/browser/username",
+                "op://Agent Secrets/browser/password",
+                "op://Agent Secrets/browser/otp?attribute=otp",
+            ],
+            reference_log.read_text().splitlines(),
         )
 
     def test_browser_login_constraints_fail_before_1password_access(self):
