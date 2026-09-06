@@ -32,7 +32,7 @@ If launch fails, end the owned partial Chrome process tree, verify its PID and l
 
 ## Authentication
 
-Use the pinned RFC-0011 build and an approved browser-enabled bundle. Through the explicit identity, run `auth login <bundle> --credential-provider onepassword`. Continue when the destination and account match the bundle.
+Use the pinned RFC-0011 build and an approved login alias. Through the explicit identity, run `auth login <alias> --credential-provider onepassword`. Continue when the destination and account match its policy.
 
 If automatic authentication cannot complete, stop the headless session and claim a fresh headed session. Do not reuse its profile. Pause automated input until attached browser workers detach; resume when the destination and account match.
 

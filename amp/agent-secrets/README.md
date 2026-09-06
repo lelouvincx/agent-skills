@@ -4,12 +4,12 @@
 
 ## Register a browser login profile
 
-A browser login profile is an `agent` bundle with `browserLogin` policy. Its bundle name is the profile name used by `agent-browser`. Create a separate bundle when you need another account or login policy.
+A browser login profile is one entry in an agent bundle's `browserLogins` map. For example, the `work` bundle can contain `demo4`, `bi` and `testing4` profiles. Profile aliases must be unique across all bundles.
 
-1. Add the bundle to `bundles.json`. Declare its credential variables, allow `agent-browser-credential-handler`, and add the destination and identity policy:
+1. Add the credential variables and handler permission to the bundle in `bundles.json`. Add the profile's destination and identity policy under its alias:
 
    ```json
-   "example-login": {
+   "example-team": {
      "audience": "agent",
      "owner": "example/project",
      "variables": [
@@ -21,27 +21,29 @@ A browser login profile is an `agent` bundle with `browserLogin` policy. Its bun
      "allowedCommandClasses": [
        "agent-browser-credential-handler"
      ],
-     "browserLogin": {
-       "usernameVariable": "EXAMPLE_USERNAME",
-       "passwordVariable": "EXAMPLE_PASSWORD",
-       "loginUrl": "https://example.com/login",
-       "credentialOrigin": "https://example.com",
-       "usernameSelector": "#username",
-       "passwordSelector": "#password",
-       "submitSelector": "button[type=\"submit\"]",
-       "otpVariable": "EXAMPLE_OTP",
-       "otpSelector": "#otp",
-       "otpSubmitSelector": "button[type=\"submit\"]",
-       "expectedPostLoginUrl": "https://example.com/account",
-       "accountMarkerSelector": "#account-menu",
-       "accountMarkerVariable": "EXAMPLE_USERNAME"
+     "browserLogins": {
+       "example-login": {
+         "usernameVariable": "EXAMPLE_USERNAME",
+         "passwordVariable": "EXAMPLE_PASSWORD",
+         "loginUrl": "https://example.com/login",
+         "credentialOrigin": "https://example.com",
+         "usernameSelector": "#username",
+         "passwordSelector": "#password",
+         "submitSelector": "button[type=\"submit\"]",
+         "otpVariable": "EXAMPLE_OTP",
+         "otpSelector": "#otp",
+         "otpSubmitSelector": "button[type=\"submit\"]",
+         "expectedPostLoginUrl": "https://example.com/account",
+         "accountMarkerSelector": "#account-menu",
+         "accountMarkerVariable": "EXAMPLE_USERNAME"
+       }
      }
    }
    ```
 
    Omit all 3 OTP entries when the site does not use OTP. Choose an account marker whose text contains the intended account value after login.
 
-2. Create `~/.credentials/agent-secrets/example-login.env` with mode `0600`:
+2. Add the references to `~/.credentials/agent-secrets/example-team.env` with mode `0600`:
 
    ```dotenv
    EXAMPLE_USERNAME=op://Agent Secrets/example-login/username
@@ -70,6 +72,6 @@ A browser login profile is an `agent` bundle with `browserLogin` policy. Its bun
      auth login example-login --credential-provider onepassword
    ```
 
-Registration is complete when policy validation and `agent-secrets doctor` pass, projection preserves the plugin registration, and a fresh-session login verifies the expected destination and account.
+Registration is complete when policy validation and `agent-secrets doctor` pass. A fresh-session login must then verify the expected destination and account.
 
 Runtime Chrome profiles do not need registration. `agent-browser-lifecycle claim` creates a fresh exclusive profile for each browser session.

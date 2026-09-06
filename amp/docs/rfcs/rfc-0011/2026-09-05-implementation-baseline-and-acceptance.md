@@ -71,7 +71,7 @@ The implementation added optional browser-login policy to the existing registry,
 
 Projection installs the custom wrapper, plugin and credential handler. It merges the plugin registration into user configuration, preserves unrelated settings and rejects conflicts. Projection creates no credential reference file or service-account bootstrap token.
 
-Plugin registration alone does not enable a login. The `work` bundle now enables the approved Demo4 policy. The other 4 bundles remain browser-disabled because their API and service credentials are not browser accounts.
+Plugin registration alone does not enable a login. The `work` bundle now owns the approved `demo4` profile and can own more browser-login profiles. The other 4 bundles remain browser-disabled because their API and service credentials are not browser accounts.
 
 ## Package F result
 
@@ -102,7 +102,7 @@ The final diagnostic reached `https://demo4.holistics.io/2fa/verify`. The requir
 | Native plugin inspection | `agent-browser plugin show onepassword` reported only `credential.read`. |
 | Custom native build | Passed. Fingerprint `fb5322a36a10ff35fd40593187a3a0f2cef412279e0aaed468e15abef1e5ab81` matched the installed receipt. The receipt covers the pinned commit and patch. Daemon identity covers native source, Cargo inputs, target, profile and Rust flags. |
 | Native destination tests | Passed: 1,215 unit tests, 6 CLI tests and all 3 ignored provider-login tests. Coverage includes tainted-target closure, guarded descendants and off-origin request blocking. |
-| Live registry inspection | All 5 bundles were present. Only `work` contained `browserLogin`. |
+| Live registry inspection | All 5 bundles were present. `work.browserLogins` contained the `demo4` profile. |
 | Live reference validation | The replacement service account has read-only access to the `Agent Secrets` vault. The strict doctor check resolved every declared reference without printing values. |
 | Live Demo4 acceptance | Blocked. The hardened path reached same-origin `/2fa/verify`, then blocked required scripts and styles from `assets.holistics.io`. It returned no `verified: true` and closed the tainted target. |
 | RFC projection comparison | The projected main RFC and this supporting record matched their source files. |

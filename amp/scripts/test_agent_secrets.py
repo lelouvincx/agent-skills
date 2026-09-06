@@ -168,20 +168,22 @@ class AgentSecretsTests(unittest.TestCase):
                     "variables": ["BROWSER_USERNAME", "BROWSER_PASSWORD", "BROWSER_OTP"],
                     "compatibleBundles": [],
                     "allowedCommandClasses": ["agent-browser-credential-handler"],
-                    "browserLogin": {
-                        "usernameVariable": "BROWSER_USERNAME",
-                        "passwordVariable": "BROWSER_PASSWORD",
-                        "loginUrl": "https://example.invalid/login",
-                        "credentialOrigin": "https://example.invalid",
-                        "usernameSelector": "#username",
-                        "passwordSelector": "#password",
-                        "submitSelector": "button[type=submit]",
-                        "otpVariable": "BROWSER_OTP",
-                        "otpSelector": "#otp",
-                        "otpSubmitSelector": "button[type=submit]",
-                        "expectedPostLoginUrl": "https://example.invalid/account",
-                        "accountMarkerSelector": "[data-account]",
-                        "accountMarkerVariable": "BROWSER_USERNAME",
+                    "browserLogins": {
+                        "example-login": {
+                            "usernameVariable": "BROWSER_USERNAME",
+                            "passwordVariable": "BROWSER_PASSWORD",
+                            "loginUrl": "https://example.invalid/login",
+                            "credentialOrigin": "https://example.invalid",
+                            "usernameSelector": "#username",
+                            "passwordSelector": "#password",
+                            "submitSelector": "button[type=submit]",
+                            "otpVariable": "BROWSER_OTP",
+                            "otpSelector": "#otp",
+                            "otpSubmitSelector": "button[type=submit]",
+                            "expectedPostLoginUrl": "https://example.invalid/account",
+                            "accountMarkerSelector": "[data-account]",
+                            "accountMarkerVariable": "BROWSER_USERNAME",
+                        }
                     },
                 },
             },
@@ -482,12 +484,11 @@ class AgentSecretsTests(unittest.TestCase):
             bundle_file.write("BROWSER_UNRELATED=op://Agent Secrets/browser/unrelated\n")
         result = self.run_cli(
             "run",
-            "--bundle",
-            "browser",
             "--strict-service-account",
             "--browser-login",
+            "example-login",
             "--requested-item",
-            "browser",
+            "example-login",
             "--requested-url",
             "https://example.invalid/login",
             "--",
@@ -523,6 +524,49 @@ class AgentSecretsTests(unittest.TestCase):
             reference_log.read_text().splitlines(),
         )
 
+    def test_browser_login_alias_selects_one_profile_from_shared_bundle(self):
+        bundle = self.manifest["bundles"]["browser"]
+        bundle["variables"].extend(["SECOND_USERNAME", "SECOND_PASSWORD"])
+        bundle["browserLogins"]["second-login"] = {
+            "usernameVariable": "SECOND_USERNAME",
+            "passwordVariable": "SECOND_PASSWORD",
+            "loginUrl": "https://second.invalid/login",
+            "credentialOrigin": "https://second.invalid",
+            "usernameSelector": "#second-username",
+            "passwordSelector": "#second-password",
+            "submitSelector": "#second-submit",
+            "expectedPostLoginUrl": "https://second.invalid/account",
+            "accountMarkerSelector": "[data-second-account]",
+            "accountMarkerVariable": "SECOND_USERNAME",
+        }
+        self.write_manifest()
+        with (self.bundle_root / "browser.env").open("a") as bundle_file:
+            bundle_file.write(
+                "SECOND_USERNAME=op://Agent Secrets/second/username\n"
+                "SECOND_PASSWORD=op://Agent Secrets/second/password\n"
+            )
+
+        result = self.run_cli(
+            "run",
+            "--strict-service-account",
+            "--browser-login",
+            "second-login",
+            "--",
+            BROWSER_HANDLER,
+            auth="service-account",
+        )
+
+        self.assertEqual(0, result.returncode, result.stderr)
+        credential = json.loads(result.stdout)
+        self.assertEqual("resolved-username", credential["username"])
+        self.assertEqual("resolved-password", credential["password"])
+        self.assertEqual("https://second.invalid/login", credential["url"])
+        self.assertEqual("#second-username", credential["usernameSelector"])
+        self.assertNotIn("otp", credential)
+        self.assertEqual(
+            ["service:vault", "service:read", "service:read"], self.op_events()
+        )
+
     def test_browser_login_constraints_fail_before_1password_access(self):
         cases = [
             ("--requested-item", "other", "item does not match"),
@@ -533,10 +577,9 @@ class AgentSecretsTests(unittest.TestCase):
                 self.op_log.unlink(missing_ok=True)
                 result = self.run_cli(
                     "run",
-                    "--bundle",
-                    "browser",
                     "--strict-service-account",
                     "--browser-login",
+                    "example-login",
                     flag,
                     value,
                     "--",
@@ -547,23 +590,45 @@ class AgentSecretsTests(unittest.TestCase):
                 self.assertIn(message, result.stderr)
                 self.assertEqual([], self.op_events())
 
-    def test_bundle_without_browser_policy_cannot_use_browser_resolution(self):
-        self.manifest["bundles"]["alpha"]["allowedCommandClasses"].append(
-            "agent-browser-credential-handler"
-        )
-        self.write_manifest()
+    def test_unregistered_browser_alias_cannot_use_browser_resolution(self):
         result = self.run_cli(
             "run",
-            "--bundle",
-            "alpha",
             "--strict-service-account",
             "--browser-login",
+            "unknown-login",
             "--",
             BROWSER_HANDLER,
             auth="service-account",
         )
         self.assertNotEqual(0, result.returncode)
-        self.assertIn("not enabled for browser login", result.stderr)
+        self.assertIn("browser login alias unknown-login is not registered", result.stderr)
+        self.assertEqual([], self.op_events())
+
+    def test_duplicate_browser_alias_fails_before_1password_access(self):
+        alpha = self.manifest["bundles"]["alpha"]
+        alpha["variables"] = ["BROWSER_USERNAME", "BROWSER_PASSWORD", "BROWSER_OTP"]
+        alpha["allowedCommandClasses"] = ["agent-browser-credential-handler"]
+        alpha["compatibleBundles"] = []
+        self.manifest["bundles"]["beta"]["compatibleBundles"] = []
+        alpha["browserLogins"] = {
+            "example-login": self.manifest["bundles"]["browser"]["browserLogins"][
+                "example-login"
+            ]
+        }
+        self.write_manifest()
+
+        result = self.run_cli(
+            "run",
+            "--strict-service-account",
+            "--browser-login",
+            "example-login",
+            "--",
+            BROWSER_HANDLER,
+            auth="service-account",
+        )
+
+        self.assertNotEqual(0, result.returncode)
+        self.assertIn("browser login alias example-login belongs to both", result.stderr)
         self.assertEqual([], self.op_events())
 
     def test_interactive_failure_never_falls_back_to_service_account(self):

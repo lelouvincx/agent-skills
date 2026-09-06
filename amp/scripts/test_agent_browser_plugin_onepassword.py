@@ -59,7 +59,7 @@ class OnePasswordPluginTests(unittest.TestCase):
         token = bootstrap / "op-service-account-token"
         token.write_text("synthetic-bootstrap\n")
         token.chmod(0o600)
-        browser_bundle = bundles / "synthetic.env"
+        browser_bundle = bundles / "work.env"
         browser_bundle.write_text(
             "LOGIN_USERNAME=op://Agent Secrets/synthetic/username\n"
             "LOGIN_PASSWORD=op://Agent Secrets/synthetic/password\n"
@@ -74,26 +74,28 @@ class OnePasswordPluginTests(unittest.TestCase):
                 }
             },
             "bundles": {
-                "synthetic": {
+                "work": {
                     "audience": "agent",
                     "owner": "lelouvincx/agent-skills",
                     "variables": ["LOGIN_USERNAME", "LOGIN_PASSWORD", "LOGIN_OTP"],
                     "compatibleBundles": [],
                     "allowedCommandClasses": ["agent-browser-credential-handler"],
-                    "browserLogin": {
-                        "usernameVariable": "LOGIN_USERNAME",
-                        "passwordVariable": "LOGIN_PASSWORD",
-                        "loginUrl": "https://example.invalid/login",
-                        "credentialOrigin": "https://example.invalid",
-                        "usernameSelector": "#username",
-                        "passwordSelector": "#password",
-                        "submitSelector": "button[type=submit]",
-                        "otpVariable": "LOGIN_OTP",
-                        "otpSelector": "#otp",
-                        "otpSubmitSelector": "button[type=submit]",
-                        "expectedPostLoginUrl": "https://example.invalid/account",
-                        "accountMarkerSelector": "[data-account]",
-                        "accountMarkerVariable": "LOGIN_USERNAME",
+                    "browserLogins": {
+                        "synthetic": {
+                            "usernameVariable": "LOGIN_USERNAME",
+                            "passwordVariable": "LOGIN_PASSWORD",
+                            "loginUrl": "https://example.invalid/login",
+                            "credentialOrigin": "https://example.invalid",
+                            "usernameSelector": "#username",
+                            "passwordSelector": "#password",
+                            "submitSelector": "button[type=submit]",
+                            "otpVariable": "LOGIN_OTP",
+                            "otpSelector": "#otp",
+                            "otpSubmitSelector": "button[type=submit]",
+                            "expectedPostLoginUrl": "https://example.invalid/account",
+                            "accountMarkerSelector": "[data-account]",
+                            "accountMarkerVariable": "LOGIN_USERNAME",
+                        }
                     },
                 }
             },

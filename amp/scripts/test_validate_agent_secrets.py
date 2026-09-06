@@ -37,11 +37,11 @@ class AgentSecretPolicyValidationTests(unittest.TestCase):
             json.dumps(policy, indent=2) + "\n"
         )
 
-    def add_browser_login(self, manifest, bundle_name="work"):
+    def add_browser_login(self, manifest, bundle_name="work", login_alias="example-login"):
         bundle = manifest["bundles"][bundle_name]
         if "agent-browser-credential-handler" not in bundle["allowedCommandClasses"]:
             bundle["allowedCommandClasses"].append("agent-browser-credential-handler")
-        bundle["browserLogin"] = {
+        browser_login = {
             "usernameVariable": bundle["variables"][0],
             "passwordVariable": bundle["variables"][1],
             "loginUrl": "https://example.invalid/login",
@@ -53,7 +53,8 @@ class AgentSecretPolicyValidationTests(unittest.TestCase):
             "accountMarkerSelector": "[data-account]",
             "accountMarkerVariable": bundle["variables"][0],
         }
-        return bundle["browserLogin"]
+        bundle.setdefault("browserLogins", {})[login_alias] = browser_login
+        return browser_login
 
     def test_checked_in_policy_is_valid(self):
         self.assertEqual([], validator.validate_tree(SOURCE))
@@ -136,10 +137,12 @@ class AgentSecretPolicyValidationTests(unittest.TestCase):
             ],
             manifest["bundles"]["work"]["variables"],
         )
-        self.assertIn("browserLogin", manifest["bundles"]["work"])
+        self.assertEqual(
+            ["demo4"], sorted(manifest["bundles"]["work"]["browserLogins"])
+        )
         self.assertTrue(
             all(
-                "browserLogin" not in bundle
+                "browserLogins" not in bundle
                 for name, bundle in manifest["bundles"].items()
                 if name != "work"
             )
@@ -148,8 +151,26 @@ class AgentSecretPolicyValidationTests(unittest.TestCase):
     def test_valid_browser_login_policy_is_accepted(self):
         manifest = self.read_manifest()
         self.add_browser_login(manifest)
+        second = self.add_browser_login(manifest, login_alias="second-login")
+        second["loginUrl"] = "https://second.invalid/login"
+        second["credentialOrigin"] = "https://second.invalid"
+        second["expectedPostLoginUrl"] = "https://second.invalid/account"
         self.write_manifest(manifest)
         self.assertEqual([], validator.validate_tree(self.root))
+
+    def test_browser_login_alias_must_be_unique_across_bundles(self):
+        manifest = self.read_manifest()
+        self.add_browser_login(manifest, login_alias="shared-login")
+        publisher = manifest["bundles"]["amp-runner-r2"]
+        publisher["variables"] = ["PUBLISH_USERNAME", "PUBLISH_PASSWORD"]
+        self.add_browser_login(manifest, "amp-runner-r2", "shared-login")
+        self.write_manifest(manifest)
+        self.assertTrue(
+            any(
+                "browser login alias shared-login belongs to both" in error
+                for error in validator.validate_tree(self.root)
+            )
+        )
 
     def test_browser_login_requires_complete_otp_metadata(self):
         manifest = self.read_manifest()

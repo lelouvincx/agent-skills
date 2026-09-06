@@ -157,7 +157,7 @@ The responsibilities are separate:
 | --- | --- |
 | `agent-browser-lifecycle` | Coordinate session ownership, profile and dedicated CDP port through the existing owner workflow. The credential plugin cannot launch or stop Chrome. |
 | agent-browser | Invoke the credential plugin through `auth login`, then navigate, fill and submit through the destination-checked login path. |
-| `onepassword` plugin | Validate the protocol envelope, pass the requested bundle name and constraints to `agent-secrets`, and return the native credential response. It owns no separate alias registry and does not fill fields. |
+| `onepassword` plugin | Validate the protocol envelope, pass the requested login alias and constraints to `agent-secrets`, and return the native credential response. It owns no separate alias registry and does not fill fields. |
 | `agent-secrets` | Validate browser-login policy from its registry, authorize the bundle and registered handler, authenticate to 1Password and supply approved values and metadata to that handler. |
 | Registered credential handler | Serialize approved runtime values and alias metadata into the plugin response; never inherit the vault bootstrap token. |
 
@@ -167,20 +167,20 @@ All automated credential access goes through `agent-secrets`, using approved ref
 
 #### Alias and protocol contract
 
-Use the existing [agent-secrets registry](../../agent-secrets/bundles.json) as the single source of truth. Add an optional `browserLogin` section to a bundle; its bundle name is also its login alias. Do not create a separate plugin alias list, site configuration or vault mapping.
+Use the existing [agent-secrets registry](../../agent-secrets/bundles.json) as the single source of truth. A bundle can contain an optional `browserLogins` map keyed by login alias. Aliases must be unique across the registry. Do not create a separate plugin alias list, site configuration or vault mapping.
 
-The existing bundle policy retains its audience, owner, declared variables, compatibility and permitted command classes. `browserLogin` adds:
+The existing bundle policy retains its audience, owner, declared variables, compatibility and permitted command classes. Each `browserLogins` entry adds:
 
 - mappings from username and password to declared bundle variables
 - an exact HTTPS login URL and permitted credential-receiving origin
 - explicit main-frame field and submit selectors
 - expected post-login destination and account identity marker
 
-Only an `agent`-audience bundle that permits the registered credential handler can expose browser credentials. A bundle without `browserLogin` cannot be used for browser login. Secret-read approval alone does not authorize website filling.
+Only an `agent`-audience bundle that permits the registered credential handler can expose browser credentials. A bundle without a matching `browserLogins` entry cannot resolve that alias. Secret-read approval alone does not authorize website filling.
 
-Keep actual `op://Agent Secrets/...` references in the existing private `~/.credentials/agent-secrets/<bundle-name>.env` file. Register the plugin and handler once. Adding an account then requires one reviewed browser-enabled bundle and its reference file, not another plugin configuration.
+Keep actual `op://Agent Secrets/...` references in the existing private `~/.credentials/agent-secrets/<bundle-name>.env` file. Register the plugin and handler once. Add browser accounts to the bundle that owns their credentials.
 
-Extend both the registry schema and runtime validator; they currently reject unknown fields. Preserve existing bundles without `browserLogin`. Validate variable mappings, audience, handler authorization and complete destination metadata before vault access. `agent-secrets` supplies credentials and metadata from the same validated bundle to the handler; the plugin must not maintain a second policy copy.
+Extend both the registry schema and runtime validator; they currently reject unknown fields. Preserve existing bundles without `browserLogins`. Validate alias uniqueness, variable mappings, audience, handler authorization and complete destination metadata before vault access. `agent-secrets` finds the owning bundle from the alias and supplies only that login's credentials and metadata to the handler.
 
 The executable reads exactly one JSON request from stdin and writes exactly one JSON response to stdout. Every envelope uses `protocol: "agent-browser.plugin.v1"`.
 
@@ -190,7 +190,7 @@ The executable reads exactly one JSON request from stdin and writes exactly one 
 | `type: "credential.resolve"`, `capability: "credential.read"` | Validate request shape, then let `agent-secrets` check `request.profileName`, `request.itemRef` and `request.url` against the registry before vault access. Return `success: true` and a `credential` object, not generic `data`. |
 | Any other protocol, type or capability | Reject without resolving secrets. Do not expose a generic secret-read command. |
 
-`profileName` means the bundle name used as the authentication alias, not the Chrome profile directory. Require it to identify an enabled browser-login bundle. `itemRef` may be omitted, null or equal to that name; it is not an arbitrary 1Password item name or `op://` reference. `url` may be omitted, null or equal to the configured login URL. `agent-secrets` rejects other values before resolving secrets.
+`profileName` means the registered login alias, not the bundle name or Chrome profile directory. `agent-secrets` uses the alias to find one owning bundle. `itemRef` may be omitted, null or equal to the alias; it is not a 1Password item name or `op://` reference. `url` may be omitted, null or equal to the configured login URL. `agent-secrets` rejects other values before resolving secrets.
 
 The `credential` response contains `username`, `password`, `url`, `usernameSelector`, `passwordSelector` and `submitSelector`. The handler supplies values at runtime and always uses reviewed URL and selector metadata. It must not relay caller overrides or unrelated environment variables. The daemon consumes the response in memory; the plugin and handler must not persist that response.
 
