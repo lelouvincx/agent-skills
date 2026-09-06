@@ -89,33 +89,39 @@ printf '%s\n' "$primary" > "$tmp/active"
 : > "$tmp/activations"
 : > "$tmp/calls"
 
-run_tool install --preferred "$primary" --fallback "$fallback"
+if run_tool install --preferred "$primary" --fallback "$fallback" >/dev/null 2>&1; then exit 1; fi
+if run_tool install --preferred "$primary" --fallback "$fallback" --interval 0 >/dev/null 2>&1; then exit 1; fi
+if run_tool install --preferred "$primary" --fallback "$fallback" --interval nope >/dev/null 2>&1; then exit 1; fi
+run_tool install --preferred "$primary" --fallback "$fallback" --interval 3600
 plist="$tmp/agents/com.ampcode.chatgpt-subscription-selector.plist"
 grep -Fq '<key>RunAtLoad</key>' "$plist"
 grep -Fq '<true/>' "$plist"
-grep -Fq '<integer>300</integer>' "$plist"
+grep -Fq '<integer>3600</integer>' "$plist"
 grep -Fq '<key>HOME</key>' "$plist"
 grep -Fq '<key>PATH</key>' "$plist"
+grep -Fxq 'INTERVAL=3600' "$tmp/state/config"
 
 # Failed lifecycle operations do not publish staged configuration or report success.
 config_digest="$(shasum -a 256 "$tmp/state/config" | awk '{print $1}')"
 plist_digest="$(shasum -a 256 "$plist" | awk '{print $1}')"
-if TEST_PLUTIL_FAIL=1 run_tool install --preferred replacement-id --fallback "$fallback" >/dev/null 2>&1; then exit 1; fi
+if TEST_PLUTIL_FAIL=1 run_tool install --preferred replacement-id --fallback "$fallback" --interval 3600 >/dev/null 2>&1; then exit 1; fi
 [ "$(shasum -a 256 "$tmp/state/config" | awk '{print $1}')" = "$config_digest" ]
-if TEST_BOOTOUT_FAIL=1 run_tool install --preferred replacement-id --fallback "$fallback" >/dev/null 2>&1; then exit 1; fi
+if TEST_BOOTOUT_FAIL=1 run_tool install --preferred replacement-id --fallback "$fallback" --interval 3600 >/dev/null 2>&1; then exit 1; fi
 [ "$(shasum -a 256 "$tmp/state/config" | awk '{print $1}')" = "$config_digest" ]
 [ "$(shasum -a 256 "$plist" | awk '{print $1}')" = "$plist_digest" ]
 [ -f "$tmp/loaded" ]
-if TEST_PRINT_FAIL=1 run_tool install --preferred replacement-id --fallback "$fallback" >/dev/null 2>&1; then exit 1; fi
+if TEST_PRINT_FAIL=1 run_tool install --preferred replacement-id --fallback "$fallback" --interval 3600 >/dev/null 2>&1; then exit 1; fi
 [ "$(shasum -a 256 "$tmp/state/config" | awk '{print $1}')" = "$config_digest" ]
 [ "$(shasum -a 256 "$plist" | awk '{print $1}')" = "$plist_digest" ]
 [ -f "$tmp/loaded" ]
 
 # A failed bootstrap reports failure and leaves the new job unloaded.
-if TEST_BOOTSTRAP_FAIL=1 run_tool install --preferred replacement-id --fallback "$fallback" >/dev/null 2>&1; then exit 1; fi
+if TEST_BOOTSTRAP_FAIL=1 run_tool install --preferred replacement-id --fallback "$fallback" --interval 3600 >/dev/null 2>&1; then exit 1; fi
 [ ! -f "$tmp/loaded" ]
 grep -Fxq 'PREFERRED=replacement-id' "$tmp/state/config"
-run_tool install --preferred "$primary" --fallback "$fallback" >/dev/null
+run_tool install --preferred "$primary" --fallback "$fallback" --interval 1800 >/dev/null
+grep -Fq '<integer>1800</integer>' "$plist"
+grep -Fxq 'INTERVAL=1800' "$tmp/state/config"
 
 # A plan with one explicitly disabled window uses its supported active window.
 disabled_output="$(TEST_QUOTA=$'x-codex-primary-window-minutes: 10080\nx-codex-primary-used-percent: 96\nx-codex-secondary-window-minutes: 0\nx-codex-secondary-used-percent: 0' run_tool run)"
@@ -190,7 +196,7 @@ tests_before="$(grep -c '^test ' "$tmp/calls")"
 TEST_QUOTA="$valid_quota" run_tool run >/dev/null
 [ "$(grep -c '^test ' "$tmp/calls")" = "$tests_before" ]
 locked_config_digest="$(shasum -a 256 "$tmp/state/config" | awk '{print $1}')"
-if run_tool install --preferred replacement-id --fallback "$fallback" >/dev/null 2>&1; then exit 1; fi
+if run_tool install --preferred replacement-id --fallback "$fallback" --interval 1800 >/dev/null 2>&1; then exit 1; fi
 [ "$(shasum -a 256 "$tmp/state/config" | awk '{print $1}')" = "$locked_config_digest" ]
 rm "$tmp/hold"
 wait "$held_pid"
@@ -207,7 +213,8 @@ tests_before="$(grep -c '^test ' "$tmp/calls")"
 TEST_QUOTA="$valid_quota" run_tool run >/dev/null
 [ "$(grep -c '^test ' "$tmp/calls")" = "$((tests_before + 1))" ]
 
-run_tool status >/dev/null
+run_tool status > "$tmp/status.out"
+grep -Fq 'Interval: 1800s' "$tmp/status.out"
 if TEST_BOOTOUT_FAIL=1 run_tool uninstall >/dev/null 2>&1; then exit 1; fi
 [ -e "$plist" ] && [ -f "$tmp/loaded" ]
 active_before_uninstall="$(cat "$tmp/active")"

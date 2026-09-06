@@ -4,7 +4,7 @@ set -Eeuo pipefail
 usage() {
 	cat <<'EOF'
 Usage:
-  amp-chatgpt-subscription-selector install --preferred ID --fallback ID [--threshold PERCENT]
+  amp-chatgpt-subscription-selector install --preferred ID --fallback ID --interval SECONDS [--threshold PERCENT]
   amp-chatgpt-subscription-selector uninstall
   amp-chatgpt-subscription-selector run
   amp-chatgpt-subscription-selector status
@@ -29,6 +29,7 @@ lockf_command="${AMP_CHATGPT_SELECTOR_LOCKF:-/usr/bin/lockf}"
 preferred=
 fallback=
 threshold=5
+interval=
 amp_command="${AMP_CHATGPT_SELECTOR_AMP:-}"
 
 prepare_state() {
@@ -63,10 +64,11 @@ load_config() {
 			PREFERRED) preferred="$value" ;;
 			FALLBACK) fallback="$value" ;;
 			THRESHOLD) threshold="$value" ;;
+			INTERVAL) interval="$value" ;;
 			AMP_COMMAND) [ -n "${AMP_CHATGPT_SELECTOR_AMP:-}" ] || amp_command="$value" ;;
 		esac
 	done < "$config_file"
-	[ -n "$preferred" ] && [ -n "$fallback" ] && [ -n "$amp_command" ] || fail 'configuration is incomplete; run install again'
+	[ -n "$preferred" ] && [ -n "$fallback" ] && [ -n "$interval" ] && [ -n "$amp_command" ] || fail 'configuration is incomplete; run install again'
 	[ -x "$amp_command" ] || fail "configured Amp command is not executable: $amp_command"
 }
 
@@ -205,11 +207,13 @@ install_agent() {
 	preferred=
 	fallback=
 	threshold=5
+	interval=
 	while [ "$#" -gt 0 ]; do
 		case "$1" in
 			--preferred) [ "$#" -ge 2 ] || fail '--preferred requires a value'; preferred="$2"; shift 2 ;;
 			--fallback) [ "$#" -ge 2 ] || fail '--fallback requires a value'; fallback="$2"; shift 2 ;;
 			--threshold) [ "$#" -ge 2 ] || fail '--threshold requires a value'; threshold="$2"; shift 2 ;;
+			--interval) [ "$#" -ge 2 ] || fail '--interval requires a value'; interval="$2"; shift 2 ;;
 			*) fail "unknown install option: $1" ;;
 		esac
 	done
@@ -217,6 +221,8 @@ install_agent() {
 	[ -n "$fallback" ] || fail '--fallback is required'
 	[ "$preferred" != "$fallback" ] || fail 'preferred and fallback connections must differ'
 	[[ "$threshold" =~ ^[0-9]+$ ]] && [ "$threshold" -le 100 ] || fail '--threshold must be an integer from 0 to 100'
+	[ -n "$interval" ] || fail '--interval is required'
+	[[ "$interval" =~ ^[1-9][0-9]*$ ]] || fail '--interval must be a positive integer of seconds'
 	[ -n "$amp_command" ] || amp_command="$(command -v amp || true)"
 	[ -n "$amp_command" ] && [ -x "$amp_command" ] || fail 'could not find an executable Amp CLI'
 	amp_command="$(CDPATH= cd -- "$(dirname "$amp_command")" && pwd)/$(basename "$amp_command")"
@@ -230,7 +236,7 @@ install_agent() {
 	config_tmp="$config_file.tmp.$$"
 	plist_tmp="$agent_path.tmp.$$"
 	trap 'rm -f "${config_tmp:-}" "${plist_tmp:-}"' EXIT
-	printf 'PREFERRED=%s\nFALLBACK=%s\nTHRESHOLD=%s\nAMP_COMMAND=%s\n' "$preferred" "$fallback" "$threshold" "$amp_command" > "$config_tmp"
+	printf 'PREFERRED=%s\nFALLBACK=%s\nTHRESHOLD=%s\nINTERVAL=%s\nAMP_COMMAND=%s\n' "$preferred" "$fallback" "$threshold" "$interval" "$amp_command" > "$config_tmp"
 	chmod 600 "$config_tmp"
 	script_path="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/$(basename -- "${BASH_SOURCE[0]}")"
 	{
@@ -242,7 +248,7 @@ install_agent() {
 		printf '\t\t<key>PATH</key>\n'; xml_string "$PATH"
 		printf '\t</dict>\n'
 		printf '\t<key>RunAtLoad</key>\n\t<true/>\n'
-		printf '\t<key>StartInterval</key>\n\t<integer>300</integer>\n'
+		printf '\t<key>StartInterval</key>\n\t<integer>%s</integer>\n' "$interval"
 		printf '\t<key>StandardOutPath</key>\n'; xml_string '/dev/null'
 		printf '\t<key>StandardErrorPath</key>\n'; xml_string '/dev/null'
 		printf '%s\n' '</dict>' '</plist>'
@@ -283,7 +289,7 @@ uninstall_agent() {
 status_agent() {
 	prepare_state
 	load_config
-	printf 'Preferred: %s\nFallback: %s\nThreshold: %s%% remaining\n' "$preferred" "$fallback" "$threshold"
+	printf 'Preferred: %s\nFallback: %s\nThreshold: %s%% remaining\nInterval: %ss\n' "$preferred" "$fallback" "$threshold" "$interval"
 	if [ -f "$last_run_file" ]; then cat "$last_run_file"; else printf 'result=never-run\n'; fi
 	"$launchctl_command" print "gui/$(id -u)/com.ampcode.chatgpt-subscription-selector"
 }
