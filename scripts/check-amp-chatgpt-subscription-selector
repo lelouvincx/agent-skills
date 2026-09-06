@@ -21,7 +21,8 @@ show)
 	 esac
 	active=false
 	[ -f "$TEST_ACTIVE" ] && [ "$(cat "$TEST_ACTIVE")" = "$id" ] && active=true
-	printf '{\n  "id": "%s",\n  "type": "model_provider_openai_chatgpt",\n  "active": %s\n}\n' "$id" "$active"
+	name="$id-name"
+	printf '{\n  "id": "%s",\n  "name": "%s",\n  "type": "model_provider_openai_chatgpt",\n  "active": %s\n}\n' "$id" "$name" "$active"
 	;;
 test)
 	printf 'test %s\n' "$4" >> "$TEST_CALLS"
@@ -47,6 +48,7 @@ case "$1" in
 print)
 	[ "${TEST_PRINT_FAIL:-0}" = 0 ] || { printf '%s\n' 'unexpected launchctl error' >&2; exit 7; }
 	[ -f "$TEST_LOADED" ] || { printf '%s\n' 'Could not find service' >&2; exit 113; }
+	printf '%s\n' "gui/501/com.ampcode.chatgpt-subscription-selector = {" '	state = not running' '}'
 	;;
 bootout)
 	[ "${TEST_BOOTOUT_FAIL:-0}" = 0 ] || exit 8
@@ -122,6 +124,19 @@ grep -Fxq 'PREFERRED=replacement-id' "$tmp/state/config"
 run_tool install --preferred "$primary" --fallback "$fallback" --interval 1800 >/dev/null
 grep -Fq '<integer>1800</integer>' "$plist"
 grep -Fxq 'INTERVAL=1800' "$tmp/state/config"
+
+# Status before the first check stays readable and does not dump launchctl output.
+never_run_status="$(run_tool status)"
+printf '%s\n' "$never_run_status" | grep -Fxq 'Preferred: preferred-id-name (preferred-id)'
+printf '%s\n' "$never_run_status" | grep -Fxq 'Fallback: fallback-id-name (fallback-id)'
+printf '%s\n' "$never_run_status" | grep -Fxq 'Interval: 30 minutes'
+printf '%s\n' "$never_run_status" | grep -Fxq 'Background check: scheduled'
+printf '%s\n' "$never_run_status" | grep -Fxq 'Last check: never'
+printf '%s\n' "$never_run_status" | grep -Fxq 'Result: never run'
+printf '%s\n' "$never_run_status" | grep -Fxq 'Selected: none'
+printf '%s\n' "$never_run_status" | grep -Fxq 'Preferred remaining: 5-hour unknown, weekly unknown'
+printf '%s\n' "$never_run_status" | grep -Fxq 'Reason: selector has not run yet'
+if printf '%s\n' "$never_run_status" | grep -Fq 'gui/'; then exit 1; fi
 
 # A plan with one explicitly disabled window uses its supported active window.
 disabled_output="$(TEST_QUOTA=$'x-codex-primary-window-minutes: 10080\nx-codex-primary-used-percent: 96\nx-codex-secondary-window-minutes: 0\nx-codex-secondary-used-percent: 0' run_tool run)"
@@ -214,7 +229,18 @@ TEST_QUOTA="$valid_quota" run_tool run >/dev/null
 [ "$(grep -c '^test ' "$tmp/calls")" = "$((tests_before + 1))" ]
 
 run_tool status > "$tmp/status.out"
-grep -Fq 'Interval: 1800s' "$tmp/status.out"
+grep -Fxq 'Preferred: preferred-id-name (preferred-id)' "$tmp/status.out"
+grep -Fxq 'Fallback: fallback-id-name (fallback-id)' "$tmp/status.out"
+grep -Fxq 'Threshold: 5% remaining' "$tmp/status.out"
+grep -Fxq 'Interval: 30 minutes' "$tmp/status.out"
+grep -Fxq 'Background check: scheduled' "$tmp/status.out"
+grep -Eq '^Last check: [0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2} UTC$' "$tmp/status.out"
+grep -Fxq 'Result: ok' "$tmp/status.out"
+grep -Fxq 'Selected: fallback-id-name (fallback-id)' "$tmp/status.out"
+grep -Fxq 'Preferred remaining: 5-hour 5%, weekly 80%' "$tmp/status.out"
+grep -Fxq 'Reason: preferred subscription is at or below the remaining quota threshold' "$tmp/status.out"
+if grep -Eq '^(timestamp|result|selected|five_hour_remaining|weekly_remaining|detail)=' "$tmp/status.out"; then exit 1; fi
+if grep -Fq 'gui/' "$tmp/status.out"; then exit 1; fi
 if TEST_BOOTOUT_FAIL=1 run_tool uninstall >/dev/null 2>&1; then exit 1; fi
 [ -e "$plist" ] && [ -f "$tmp/loaded" ]
 active_before_uninstall="$(cat "$tmp/active")"
