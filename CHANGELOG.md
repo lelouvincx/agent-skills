@@ -68,6 +68,7 @@ and this project does not currently use versioned releases.
 
 ### Changed
 
+- Make `amp-chatgpt-subscription-selector status` show UTC+7 check times, the next scheduled check, and weekly remaining quota for both configured subscriptions. [#221](https://github.com/lelouvincx/agent-skills/pull/221)
 - Make `amp-chatgpt-subscription-selector status` print a short labelled report instead of raw last-run keys and a `launchctl print` dump. [#219](https://github.com/lelouvincx/agent-skills/pull/219)
 - Make the Amp ChatGPT subscription selector check interval an install-time setting instead of a baked-in duration. [#217](https://github.com/lelouvincx/agent-skills/pull/217)
 - Sort `amp-runner list` by resident memory usage, descending. [#215](https://github.com/lelouvincx/agent-skills/pull/215)
