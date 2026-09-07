@@ -50,11 +50,11 @@ log() {
 }
 
 write_result() {
-	local result="$1" selected="$2" five_remaining="$3" weekly_remaining="$4" detail="$5" tmp="$last_run_file.tmp.$$"
+	local result="$1" selected="$2" five_remaining="$3" weekly_remaining="$4" fallback_weekly_remaining="$5" detail="$6" tmp="$last_run_file.tmp.$$"
 	{
 		printf 'timestamp=%s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
-		printf 'result=%s\nselected=%s\nfive_hour_remaining=%s\nweekly_remaining=%s\ndetail=%s\n' \
-			"$result" "$selected" "$five_remaining" "$weekly_remaining" "$detail"
+		printf 'result=%s\nselected=%s\nfive_hour_remaining=%s\nweekly_remaining=%s\nfallback_weekly_remaining=%s\ndetail=%s\n' \
+			"$result" "$selected" "$five_remaining" "$weekly_remaining" "$fallback_weekly_remaining" "$detail"
 	} > "$tmp"
 	chmod 600 "$tmp"
 	mv "$tmp" "$last_run_file"
@@ -122,6 +122,23 @@ format_remaining() {
 		printf unavailable
 	else
 		awk -v used="$1" 'BEGIN { printf "%g", 100 - used }'
+	fi
+}
+
+weekly_remaining_for_connection() {
+	local connection="$1" output usage five_used weekly_used
+	output="$("$amp_command" config model-providers test "$connection" 9>&- 2>&1)" || true
+	if ! usage="$(printf '%s\n' "$output" | quota_usage)"; then
+		printf 'unknown\n'
+		return 0
+	fi
+	read -r five_used weekly_used <<< "$usage"
+	if [ "$weekly_used" = unavailable ]; then
+		printf 'unavailable\n'
+	elif valid_percent "$weekly_used"; then
+		format_remaining "$weekly_used"
+	else
+		printf 'unknown\n'
 	fi
 }
 
@@ -218,10 +235,24 @@ format_timestamp() {
 	case "$1" in
 		never) printf 'never\n' ;;
 		[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]Z)
-			printf '%s\n' "$1" | sed -e 's/T/ /' -e 's/Z$/ UTC/'
+			date -j -u -v+7H -f '%Y-%m-%dT%H:%M:%SZ' "$1" '+%Y-%m-%d %H:%M:%S UTC+7'
 			;;
 		*) printf '%s\n' "$1" ;;
 	esac
+}
+
+format_next_check() {
+	local timestamp="$1" agent_state="$2" formatted
+	case "$agent_state" in
+		paused|'not scheduled') printf '%s\n' "$agent_state"; return 0 ;;
+	esac
+	if [ "$timestamp" = never ]; then
+		printf 'awaiting first check\n'
+	elif formatted="$(date -j -u -v+7H -v+"${interval}"S -f '%Y-%m-%dT%H:%M:%SZ' "$timestamp" '+%Y-%m-%d %H:%M:%S UTC+7' 2>/dev/null)"; then
+		printf '%s\n' "$formatted"
+	else
+		printf 'unknown\n'
+	fi
 }
 
 format_result() {
@@ -261,18 +292,18 @@ run_selector() {
 		fi
 		fail 'selector is paused; run resume first'
 	fi
-	local output usage five_used weekly_used five_remaining weekly_remaining five_suffix=% weekly_suffix=% selected detail show state test_status=0
+	local output usage five_used weekly_used five_remaining weekly_remaining fallback_weekly_remaining five_suffix=% weekly_suffix=% selected detail show state test_status=0
 	output="$("$amp_command" config model-providers test "$preferred" 9>&- 2>&1)" || test_status=$?
 	if ! usage="$(printf '%s\n' "$output" | quota_usage)"; then
 		if [ "$test_status" -eq 0 ]; then detail=quota-windows-missing; else detail=provider-test-failed; fi
-		write_result failed unchanged unknown unknown "$detail"
+		write_result failed unchanged unknown unknown unknown "$detail"
 		log 'preferred provider response did not provide a usable 5-hour or weekly quota window; kept the current subscription'
 		return 1
 	fi
 	read -r five_used weekly_used <<< "$usage"
 	for used in "$five_used" "$weekly_used"; do
 		if [ "$used" != unavailable ] && ! valid_percent "$used"; then
-			write_result failed unchanged unknown unknown invalid-quota-percentage
+			write_result failed unchanged unknown unknown unknown invalid-quota-percentage
 			log 'preferred provider returned an invalid quota percentage; kept the current subscription'
 			return 1
 		fi
@@ -288,24 +319,25 @@ run_selector() {
 		detail=preferred-at-threshold
 	fi
 	if ! show="$("$amp_command" config model-providers show "$selected" 9>&- 2>&1)"; then
-		write_result failed unchanged "$five_remaining" "$weekly_remaining" selected-provider-unavailable
+		write_result failed unchanged "$five_remaining" "$weekly_remaining" unknown selected-provider-unavailable
 		log 'could not inspect the selected provider; kept the current subscription'
 		return 1
 	fi
 	if ! state="$(printf '%s\n' "$show" | active_state)"; then
-		write_result failed unchanged "$five_remaining" "$weekly_remaining" invalid-selected-provider-state
+		write_result failed unchanged "$five_remaining" "$weekly_remaining" unknown invalid-selected-provider-state
 		log 'selected provider returned an invalid active state; kept the current subscription'
 		return 1
 	fi
 	if [ "$state" = false ]; then
 		if ! "$amp_command" config model-providers activate "$selected" 9>&- >/dev/null; then
-			write_result failed unchanged "$five_remaining" "$weekly_remaining" activation-failed
+			write_result failed unchanged "$five_remaining" "$weekly_remaining" unknown activation-failed
 			log 'could not activate the selected provider; kept the current subscription'
 			return 1
 		fi
 		detail="$detail-activated"
 	fi
-	write_result ok "$selected" "$five_remaining" "$weekly_remaining" "$detail"
+	fallback_weekly_remaining="$(weekly_remaining_for_connection "$fallback")"
+	write_result ok "$selected" "$five_remaining" "$weekly_remaining" "$fallback_weekly_remaining" "$detail"
 	log "selected $selected; preferred remaining: 5-hour ${five_remaining}${five_suffix}, weekly ${weekly_remaining}${weekly_suffix}"
 }
 
@@ -442,7 +474,7 @@ status_agent() {
 	prepare_state
 	load_config
 	local last_timestamp=never last_result=never-run last_selected=none
-	local last_five=unknown last_weekly=unknown last_detail=never-run
+	local last_five=unknown last_weekly=unknown last_fallback_weekly=unknown last_detail=never-run
 	local key value agent_state preferred_label fallback_label selected_label
 	if [ -f "$last_run_file" ]; then
 		while IFS='=' read -r key value; do
@@ -452,6 +484,7 @@ status_agent() {
 				selected) last_selected="$value" ;;
 				five_hour_remaining) last_five="$value" ;;
 				weekly_remaining) last_weekly="$value" ;;
+				fallback_weekly_remaining) last_fallback_weekly="$value" ;;
 				detail) last_detail="$value" ;;
 			esac
 		done < "$last_run_file"
@@ -469,9 +502,11 @@ status_agent() {
 	printf 'Interval: %s\n' "$(format_interval "$interval")"
 	printf 'Background check: %s\n' "$agent_state"
 	printf 'Last check: %s\n' "$(format_timestamp "$last_timestamp")"
+	printf 'Next check: %s\n' "$(format_next_check "$last_timestamp" "$agent_state")"
 	printf 'Result: %s\n' "$(format_result "$last_result")"
 	printf 'Selected: %s\n' "$selected_label"
 	printf 'Preferred remaining: 5-hour %s, weekly %s\n' "$(format_quota "$last_five")" "$(format_quota "$last_weekly")"
+	printf 'Fallback remaining: weekly %s\n' "$(format_quota "$last_fallback_weekly")"
 	printf 'Reason: %s\n' "$(format_detail "$last_detail")"
 }
 
