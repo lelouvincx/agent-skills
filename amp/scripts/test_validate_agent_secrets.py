@@ -113,6 +113,25 @@ class AgentSecretPolicyValidationTests(unittest.TestCase):
             manifest["command_classes"]["smartclass-wrangler-dev"]["executablePaths"],
         )
 
+    def test_bot_publisher_can_use_github_cli_and_logseq_publisher(self):
+        manifest = self.read_manifest()
+        self.assertEqual(
+            {
+                "audience": "publisher",
+                "owner": "lelouvincx/second-brain-logseq",
+                "variables": ["GH_TOKEN"],
+                "compatibleBundles": [],
+                "allowedCommandClasses": ["github-cli", "logseq-publisher"],
+            },
+            manifest["bundles"]["lelouvincx-bot"],
+        )
+        self.assertEqual(
+            [
+                "/Users/lelouvincx/.local/share/mise/installs/gh/latest/gh_2.100.0_macOS_arm64/bin/gh"
+            ],
+            manifest["command_classes"]["github-cli"]["executablePaths"],
+        )
+
     def test_schema_is_closed(self):
         manifest = self.read_manifest()
         manifest["unexpected"] = True

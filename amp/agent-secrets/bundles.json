@@ -35,6 +35,11 @@
       "executablePaths": [
         "/Users/lelouvincx/Developer/second-brain-logseq/automation/publish-approved-output"
       ]
+    },
+    "github-cli": {
+      "executablePaths": [
+        "/Users/lelouvincx/.local/share/mise/installs/gh/latest/gh_2.100.0_macOS_arm64/bin/gh"
+      ]
     }
   },
   "bundles": {
@@ -80,6 +85,7 @@
       ],
       "compatibleBundles": [],
       "allowedCommandClasses": [
+        "github-cli",
         "logseq-publisher"
       ]
     },
