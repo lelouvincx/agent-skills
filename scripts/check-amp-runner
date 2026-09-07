@@ -18,6 +18,7 @@ cat > "$tmp_dir/bin/caffeinate" <<'EOF'
 	printf 'AMP_NO_TUI=%s\n' "${AMP_NO_TUI:-}"
 	printf 'AMP_LOG_LEVEL=%s\n' "${AMP_LOG_LEVEL:-}"
 	printf 'AMP_LOG_FILE=%s\n' "${AMP_LOG_FILE:-}"
+	printf 'AGENT_SECRET_AUTH=%s\n' "${AGENT_SECRET_AUTH:-}"
 	if [ -n "${OP_SERVICE_ACCOUNT_TOKEN:-}" ]; then
 		printf 'OP_SERVICE_ACCOUNT_TOKEN=set\n'
 	else
@@ -90,6 +91,7 @@ run_launcher run --debug --log-dir "$logs" macbook.agent-skills -- --no-ide
 grep -Fxq 'AMP_NO_TUI=1' "$tmp_dir/capture"
 grep -Fxq 'AMP_LOG_LEVEL=debug' "$tmp_dir/capture"
 grep -Fxq "AMP_LOG_FILE=$logs/macbook.agent-skills.log" "$tmp_dir/capture"
+grep -Fxq 'AGENT_SECRET_AUTH=service-account' "$tmp_dir/capture"
 grep -Fxq 'OP_SERVICE_ACCOUNT_TOKEN=set' "$tmp_dir/capture"
 grep -Fxq "args=<-s><$mock_amp><--no-tui><--runner-id=macbook.agent-skills><--no-ide>" "$tmp_dir/capture"
 [ "$(file_mode "$logs")" = 700 ]
@@ -110,6 +112,7 @@ grep -Fq "<string>$repo_root</string>" "$plist"
 grep -Fq '<key>EnvironmentVariables</key>' "$plist"
 grep -Fq '<key>PATH</key>' "$plist"
 grep -Fq "<string>$tmp_dir/bin:/usr/bin:/bin</string>" "$plist"
+! grep -Fq 'AGENT_SECRET_AUTH' "$plist"
 ! grep -Fq 'OP_SERVICE_ACCOUNT_TOKEN' "$plist"
 [ "$(file_mode "$plist")" = 600 ]
 
