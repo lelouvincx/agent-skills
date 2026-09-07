@@ -44,7 +44,7 @@ agent-secrets run \
 
 agent-secrets run \
   --bundle lelouvincx-bot \
-  -- /Users/lelouvincx/.local/share/mise/shims/gh auth status
+  -- gh auth status
 
 agent-secrets doctor
 ```

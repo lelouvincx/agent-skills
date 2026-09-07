@@ -321,6 +321,24 @@ class AgentSecretsTests(unittest.TestCase):
         self.assertIn("more than one class", result.stderr)
         self.assertEqual([], self.op_events())
 
+    def test_bare_command_name_resolves_through_path_to_a_registered_class(self):
+        output = self.home / "bare.json"
+        result = self.run_cli("run", "--bundle", "alpha", "--", "agent-child", output)
+        self.assertEqual(0, result.returncode, result.stderr)
+        payload = json.loads(output.read_text())
+        self.assertEqual([], payload["arguments"])
+
+        unregistered = self.bin_root / "unregistered-child"
+        write_executable(unregistered, FAKE_CHILD)
+        self.op_log.unlink(missing_ok=True)
+        result = self.run_cli(
+            "run", "--bundle", "alpha", "--", "unregistered-child", output,
+            auth="service-account",
+        )
+        self.assertNotEqual(0, result.returncode)
+        self.assertIn("does not match a registered command class", result.stderr)
+        self.assertEqual([], self.op_events())
+
     def test_bundle_and_command_policy_fail_before_1password_access(self):
         cases = [
             (["run", "--bundle", "unknown", "--", self.agent], "unknown bundle"),
@@ -337,7 +355,8 @@ class AgentSecretsTests(unittest.TestCase):
                 "mix agent and publisher",
             ),
             (["run", "--bundle", "publisher", "--", self.agent], "not allowed"),
-            (["run", "--bundle", "alpha", "--", "relative-command"], "absolute path"),
+            (["run", "--bundle", "alpha", "--", "relative-command"], "not found on PATH"),
+            (["run", "--bundle", "alpha", "--", "relative/command"], "absolute path or bare command name"),
         ]
         for arguments, message in cases:
             with self.subTest(message=message):
