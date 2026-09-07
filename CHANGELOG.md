@@ -69,6 +69,7 @@ and this project does not currently use versioned releases.
 
 ### Changed
 
+- Allow `agent-secrets` to run approved tools such as Homebrew `gh` through bare command names resolved from `PATH`. [#223](https://github.com/lelouvincx/agent-skills/pull/223)
 - Make `amp-chatgpt-subscription-selector status` show UTC+7 check times, the next scheduled check, and weekly remaining quota for both configured subscriptions. [#221](https://github.com/lelouvincx/agent-skills/pull/221)
 - Replace SmartClass's retired DeepSeek credential bundle with a Cohere bundle for local Parse v5 development. [#222](https://github.com/lelouvincx/agent-skills/pull/222)
 - Make `amp-chatgpt-subscription-selector status` print a short labelled report instead of raw last-run keys and a `launchctl print` dump. [#219](https://github.com/lelouvincx/agent-skills/pull/219)
