@@ -133,11 +133,11 @@
         "amp-runner-rclone"
       ]
     },
-    "smartclass-deepseek": {
+    "smartclass-cohere": {
       "audience": "agent",
       "owner": "lelouvincx/smartclass",
       "variables": [
-        "DEEPSEEK_API_KEY"
+        "COHERE_API_KEY"
       ],
       "compatibleBundles": [],
       "allowedCommandClasses": [

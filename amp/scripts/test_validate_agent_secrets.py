@@ -123,7 +123,7 @@ class AgentSecretPolicyValidationTests(unittest.TestCase):
                 "work",
                 "lelouvincx-bot",
                 "amp-runner-r2",
-                "smartclass-deepseek",
+                "smartclass-cohere",
             },
             set(manifest["bundles"]),
         )

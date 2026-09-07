@@ -782,25 +782,25 @@ class SmartClassWranglerWrapperTests(unittest.TestCase):
         )
 
     def test_probe_reports_presence_without_printing_the_value(self):
-        secret_name = "DEEPSEEK" + "_API_KEY"
+        secret_name = "COHERE" + "_API_KEY"
         result = self.run_wrapper("probe", {secret_name: "placeholder-value"})
         self.assertEqual(0, result.returncode, result.stderr)
-        self.assertEqual("DEEPSEEK_API_KEY is present\n", result.stdout)
+        self.assertEqual("COHERE_API_KEY is present\n", result.stdout)
         self.assertNotIn("placeholder-value", result.stdout + result.stderr)
 
     def test_wrapper_rejects_missing_secret_and_unapproved_modes(self):
         missing = self.run_wrapper("probe")
         self.assertNotEqual(0, missing.returncode)
-        self.assertIn("DEEPSEEK_API_KEY is unavailable", missing.stderr)
+        self.assertIn("COHERE_API_KEY is unavailable", missing.stderr)
 
-        secret_name = "DEEPSEEK" + "_API_KEY"
+        secret_name = "COHERE" + "_API_KEY"
         unapproved = self.run_wrapper("deploy", {secret_name: "placeholder-value"})
         self.assertEqual(2, unapproved.returncode)
         self.assertIn("{dev|probe}", unapproved.stderr)
         self.assertNotIn("placeholder-value", unapproved.stdout + unapproved.stderr)
 
     def test_dev_executes_only_local_wrangler_with_a_minimal_environment(self):
-        secret_name = "DEEPSEEK" + "_API_KEY"
+        secret_name = "COHERE" + "_API_KEY"
         inherited = {
             "HOME": "/tmp/untrusted-home",
             "PATH": "/tmp/untrusted-bin",
