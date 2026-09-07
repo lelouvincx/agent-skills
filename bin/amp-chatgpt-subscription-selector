@@ -231,11 +231,24 @@ format_quota() {
 	esac
 }
 
+format_utc_plus_7() {
+	local timestamp="$1" offset_seconds="$2" formatted epoch
+	if formatted="$(date -j -u -v+7H -v+"${offset_seconds}"S -f '%Y-%m-%dT%H:%M:%SZ' "$timestamp" '+%Y-%m-%d %H:%M:%S UTC+7' 2>/dev/null)"; then
+		printf '%s\n' "$formatted"
+		return 0
+	fi
+	if epoch="$(date -u -d "$timestamp" '+%s' 2>/dev/null)"; then
+		date -u -d "@$((epoch + 25200 + offset_seconds))" '+%Y-%m-%d %H:%M:%S UTC+7'
+		return 0
+	fi
+	return 1
+}
+
 format_timestamp() {
 	case "$1" in
 		never) printf 'never\n' ;;
 		[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]Z)
-			date -j -u -v+7H -f '%Y-%m-%dT%H:%M:%SZ' "$1" '+%Y-%m-%d %H:%M:%S UTC+7'
+			format_utc_plus_7 "$1" 0 || printf '%s\n' "$1"
 			;;
 		*) printf '%s\n' "$1" ;;
 	esac
@@ -248,7 +261,7 @@ format_next_check() {
 	esac
 	if [ "$timestamp" = never ]; then
 		printf 'awaiting first check\n'
-	elif formatted="$(date -j -u -v+7H -v+"${interval}"S -f '%Y-%m-%dT%H:%M:%SZ' "$timestamp" '+%Y-%m-%d %H:%M:%S UTC+7' 2>/dev/null)"; then
+	elif formatted="$(format_utc_plus_7 "$timestamp" "$interval" 2>/dev/null)"; then
 		printf '%s\n' "$formatted"
 	else
 		printf 'unknown\n'

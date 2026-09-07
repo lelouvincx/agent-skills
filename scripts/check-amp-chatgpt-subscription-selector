@@ -237,7 +237,8 @@ tests_before="$(grep -c '^test ' "$tmp/calls")"
 fallback_quota=$'x-codex-primary-window-minutes: 300\nx-codex-primary-used-percent: 12\nx-codex-secondary-window-minutes: 10080\nx-codex-secondary-used-percent: 30'
 TEST_QUOTA="$valid_quota" TEST_FALLBACK_QUOTA="$fallback_quota" run_tool run >/dev/null
 [ "$(grep -c '^test ' "$tmp/calls")" = "$((tests_before + 2))" ]
-sed -i '' 's/^timestamp=.*/timestamp=2026-09-07T01:20:37Z/' "$tmp/state/last-run"
+awk '{ if ($0 ~ /^timestamp=/) print "timestamp=2026-09-07T01:20:37Z"; else print }' "$tmp/state/last-run" > "$tmp/state/last-run.fixed"
+mv "$tmp/state/last-run.fixed" "$tmp/state/last-run"
 
 run_tool status > "$tmp/status.out"
 grep -Fxq 'Preferred: preferred-id-name (preferred-id)' "$tmp/status.out"
