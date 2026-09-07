@@ -57,7 +57,7 @@ The service-account bootstrap file is separate and is never projected from this 
 The resolver provides only `run` and `doctor`.
 It does not print, export, evaluate or copy resolved values to the clipboard.
 
-RFC-0011 browser login uses a pinned native `agent-browser` patch. Build and install it with `amp/agent-browser-custom/build`; the projected `agent-browser` wrapper refuses missing or stale builds.
+RFC-0011 browser login uses a temporary pinned native `agent-browser` patch. Build and install it with `amp/agent-browser-custom/build`; the projected `agent-browser` wrapper refuses missing or stale builds. Remove `amp/agent-browser-custom` when an official agent-browser release supports destination-checked credential login.
 
 ## Run a background Amp runner
 

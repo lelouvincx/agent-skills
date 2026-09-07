@@ -248,7 +248,9 @@ Neither this draft nor later implementation approval authorizes new vault items,
 
 ### Source and compatibility
 
-The existing lifecycle helper and [schema](../../agent-browser-lifecycle/schema.json) remain authoritative. This repository owns the custom build, credential plugin, registration merge and browser policy. `amp/agent-secrets/bundles.json` is the only browser-login policy registry. Project runtime files through `sync-skills.sh`.
+The existing lifecycle helper and [schema](../../agent-browser-lifecycle/schema.json) remain authoritative. This repository owns the temporary custom build, credential plugin, registration merge and browser policy. `amp/agent-secrets/bundles.json` is the only browser-login policy registry. Project runtime files through `sync-skills.sh`.
+
+`amp/agent-browser-custom` exists only until an official agent-browser release supports this destination-checked login contract. When that release is adopted, remove the custom patch, build wrapper and stale-build receipt check.
 
 ### Delivery and validation
 
