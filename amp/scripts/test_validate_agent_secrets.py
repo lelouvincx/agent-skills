@@ -219,6 +219,25 @@ class AgentSecretPolicyValidationTests(unittest.TestCase):
             any("credentialOrigin must be a valid HTTPS URL" in error for error in errors)
         )
 
+    def test_bot_publisher_can_use_github_cli_and_logseq_publisher(self):
+        manifest = self.read_manifest()
+        self.assertEqual(
+            {
+                "audience": "publisher",
+                "owner": "lelouvincx/second-brain-logseq",
+                "variables": ["GH_TOKEN"],
+                "compatibleBundles": [],
+                "allowedCommandClasses": ["github-cli", "logseq-publisher"],
+            },
+            manifest["bundles"]["lelouvincx-bot"],
+        )
+        self.assertEqual(
+            [
+                "/Users/lelouvincx/.local/share/mise/shims/gh"
+            ],
+            manifest["command_classes"]["github-cli"]["executablePaths"],
+        )
+
     def test_schema_is_closed(self):
         manifest = self.read_manifest()
         manifest["unexpected"] = True

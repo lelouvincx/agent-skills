@@ -169,10 +169,12 @@ Fallback: fallback-account (00000000-0000-4000-8000-000000000002)
 Threshold: 20% remaining
 Interval: 1 hour
 Background check: scheduled
-Last check: 2026-09-06 11:57:43 UTC
+Last check: 2026-09-06 18:57:43 UTC+7
+Next check: 2026-09-06 19:57:43 UTC+7
 Result: ok
 Selected: fallback-account (00000000-0000-4000-8000-000000000002)
 Preferred remaining: 5-hour unavailable, weekly 0%
+Fallback remaining: weekly 72%
 Reason: preferred subscription is at or below the remaining quota threshold
 ```
 

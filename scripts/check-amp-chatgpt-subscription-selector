@@ -25,12 +25,17 @@ show)
 	printf '{\n  "id": "%s",\n  "name": "%s",\n  "type": "model_provider_openai_chatgpt",\n  "active": %s\n}\n' "$id" "$name" "$active"
 	;;
 test)
-	printf 'test %s\n' "$4" >> "$TEST_CALLS"
+	id="$4"
+	printf 'test %s\n' "$id" >> "$TEST_CALLS"
 	if [ -n "${TEST_HOLD:-}" ]; then
 		: > "${TEST_ENTERED:?entered path required}"
 		while [ -e "$TEST_HOLD" ]; do sleep 0.05; done
 	fi
-	printf '%s\n' "${TEST_QUOTA:?quota fixture required}"
+	quota="${TEST_QUOTA:?quota fixture required}"
+	if [ "$id" = fallback-id ] && [ -n "${TEST_FALLBACK_QUOTA:-}" ]; then
+		quota="$TEST_FALLBACK_QUOTA"
+	fi
+	printf '%s\n' "$quota"
 	[ "${TEST_FAIL:-0}" = 0 ] || exit 9
 	;;
 activate)
@@ -132,9 +137,11 @@ printf '%s\n' "$never_run_status" | grep -Fxq 'Fallback: fallback-id-name (fallb
 printf '%s\n' "$never_run_status" | grep -Fxq 'Interval: 30 minutes'
 printf '%s\n' "$never_run_status" | grep -Fxq 'Background check: scheduled'
 printf '%s\n' "$never_run_status" | grep -Fxq 'Last check: never'
+printf '%s\n' "$never_run_status" | grep -Fxq 'Next check: awaiting first check'
 printf '%s\n' "$never_run_status" | grep -Fxq 'Result: never run'
 printf '%s\n' "$never_run_status" | grep -Fxq 'Selected: none'
 printf '%s\n' "$never_run_status" | grep -Fxq 'Preferred remaining: 5-hour unknown, weekly unknown'
+printf '%s\n' "$never_run_status" | grep -Fxq 'Fallback remaining: weekly unknown'
 printf '%s\n' "$never_run_status" | grep -Fxq 'Reason: selector has not run yet'
 if printf '%s\n' "$never_run_status" | grep -Fq 'gui/'; then exit 1; fi
 
@@ -218,7 +225,7 @@ if run_tool resume >/dev/null 2>&1; then exit 1; fi
 rm "$tmp/hold"
 wait "$held_pid"
 TEST_QUOTA="$valid_quota" run_tool run >/dev/null
-[ "$(grep -c '^test ' "$tmp/calls")" = "$((tests_before + 1))" ]
+[ "$(grep -c '^test ' "$tmp/calls")" = "$((tests_before + 3))" ]
 
 # A terminated lock owner cannot leave a stale lock.
 ( exec 9>> "$tmp/state/selector.lock"; "$tmp/bin/lockf" -s -t 0 9; sleep 30 9>&- ) &
@@ -227,8 +234,11 @@ sleep 0.1
 kill "$lock_pid"
 wait "$lock_pid" 2>/dev/null || true
 tests_before="$(grep -c '^test ' "$tmp/calls")"
-TEST_QUOTA="$valid_quota" run_tool run >/dev/null
-[ "$(grep -c '^test ' "$tmp/calls")" = "$((tests_before + 1))" ]
+fallback_quota=$'x-codex-primary-window-minutes: 300\nx-codex-primary-used-percent: 12\nx-codex-secondary-window-minutes: 10080\nx-codex-secondary-used-percent: 30'
+TEST_QUOTA="$valid_quota" TEST_FALLBACK_QUOTA="$fallback_quota" run_tool run >/dev/null
+[ "$(grep -c '^test ' "$tmp/calls")" = "$((tests_before + 2))" ]
+awk '{ if ($0 ~ /^timestamp=/) print "timestamp=2026-09-07T01:20:37Z"; else print }' "$tmp/state/last-run" > "$tmp/state/last-run.fixed"
+mv "$tmp/state/last-run.fixed" "$tmp/state/last-run"
 
 run_tool status > "$tmp/status.out"
 grep -Fxq 'Preferred: preferred-id-name (preferred-id)' "$tmp/status.out"
@@ -236,10 +246,12 @@ grep -Fxq 'Fallback: fallback-id-name (fallback-id)' "$tmp/status.out"
 grep -Fxq 'Threshold: 5% remaining' "$tmp/status.out"
 grep -Fxq 'Interval: 30 minutes' "$tmp/status.out"
 grep -Fxq 'Background check: scheduled' "$tmp/status.out"
-grep -Eq '^Last check: [0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2} UTC$' "$tmp/status.out"
+grep -Fxq 'Last check: 2026-09-07 08:20:37 UTC+7' "$tmp/status.out"
+grep -Fxq 'Next check: 2026-09-07 08:50:37 UTC+7' "$tmp/status.out"
 grep -Fxq 'Result: ok' "$tmp/status.out"
 grep -Fxq 'Selected: fallback-id-name (fallback-id)' "$tmp/status.out"
 grep -Fxq 'Preferred remaining: 5-hour 5%, weekly 80%' "$tmp/status.out"
+grep -Fxq 'Fallback remaining: weekly 70%' "$tmp/status.out"
 grep -Fxq 'Reason: preferred subscription is at or below the remaining quota threshold' "$tmp/status.out"
 if grep -Eq '^(timestamp|result|selected|five_hour_remaining|weekly_remaining|detail)=' "$tmp/status.out"; then exit 1; fi
 if grep -Fq 'gui/' "$tmp/status.out"; then exit 1; fi
@@ -271,6 +283,7 @@ if run_tool pause >/dev/null 2>&1; then exit 1; fi
 run_tool status > "$tmp/status.paused.out"
 grep -Fxq 'Background check: paused' "$tmp/status.paused.out"
 grep -Fxq 'Interval: 30 minutes' "$tmp/status.paused.out"
+grep -Fxq 'Next check: paused' "$tmp/status.paused.out"
 
 # Run while paused fails and does not make quota or activation requests.
 calls_before="$(wc -l < "$tmp/calls" | tr -d ' ')"
@@ -289,7 +302,7 @@ run_tool resume | grep -Fq 'Resumed ChatGPT subscription selector'
 [ ! -f "$tmp/state/paused" ]
 if run_tool resume >/dev/null 2>&1; then exit 1; fi
 TEST_QUOTA="$valid_quota" run_tool run >/dev/null
-[ "$(grep -c '^test ' "$tmp/calls")" = "$((tests_before + 2))" ]
+[ "$(grep -c '^test ' "$tmp/calls")" = "$((tests_before + 4))" ]
 
 # Reinstalling while paused clears the paused flag and loads the agent.
 run_tool pause >/dev/null

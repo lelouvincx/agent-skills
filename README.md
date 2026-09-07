@@ -42,6 +42,10 @@ agent-secrets run \
   --bundle work \
   -- /Users/lelouvincx/.amp/bin/amp
 
+agent-secrets run \
+  --bundle lelouvincx-bot \
+  -- /Users/lelouvincx/.local/share/mise/shims/gh auth status
+
 agent-secrets doctor
 ```
 

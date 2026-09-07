@@ -36,6 +36,11 @@
         "/Users/lelouvincx/Developer/second-brain-logseq/automation/publish-approved-output"
       ]
     },
+    "github-cli": {
+      "executablePaths": [
+        "/Users/lelouvincx/.local/share/mise/shims/gh"
+      ]
+    },
     "agent-browser-credential-handler": {
       "executablePaths": [
         "/Users/lelouvincx/.local/bin/agent-browser-credential-response"
@@ -118,6 +123,7 @@
       ],
       "compatibleBundles": [],
       "allowedCommandClasses": [
+        "github-cli",
         "logseq-publisher"
       ]
     },
