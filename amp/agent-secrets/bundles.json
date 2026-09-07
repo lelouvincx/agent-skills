@@ -38,7 +38,7 @@
     },
     "github-cli": {
       "executablePaths": [
-        "/Users/lelouvincx/.local/share/mise/shims/gh"
+        "/opt/homebrew/bin/gh"
       ]
     },
     "agent-browser-credential-handler": {
