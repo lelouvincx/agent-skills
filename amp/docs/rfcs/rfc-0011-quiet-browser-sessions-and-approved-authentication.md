@@ -7,7 +7,7 @@ file: "rfc-0011-quiet-browser-sessions-and-approved-authentication.md"
 status: "Accepted"
 summary: "Use isolated headless sessions and a destination-checked agent-browser credential plugin backed by agent-secrets."
 created: "2026-09-05"
-updated: "2026-09-06"
+updated: "2026-09-07"
 amp_thread_id:
   T-01a06fe4-8468-755a-911b-48950a722cb9: "defined contracts with Oracle; human typing reproduced the missing dot; approved headless work and fresh headed human sign-in"
   T-01a06f94-14b9-71dd-9d12-c9f538a4a257: "compared local browser automation with TinyFish and examined profile persistence and headed operation"
@@ -67,7 +67,7 @@ Local browser automation interrupts Chinh's desktop and lacks an automatic path 
 
 Each session retains a dedicated profile and CDP port, coordinated through `agent-browser-lifecycle`. Routine work uses headless Chrome. Human sign-in uses headed Chrome while browser workers are paused. Dashboard authentication remains deferred because synthetic automation and human typing failed on version 0.36.0.
 
-Packages A to E are implemented. A pinned 0.36.0 native patch enforces destination and identity policy. The `onepassword` plugin resolves the approved `work` bundle through strict `agent-secrets`; other bundles remain unchanged and browser-disabled. Synthetic adversarial tests pass. Package F remains blocked because Demo4's 2FA page needs off-origin assets that the required credential guard blocks.
+Packages A to E are implemented. A pinned 0.36.0 native patch enforces destination and identity policy. The `onepassword` plugin resolves approved `work` logins through strict `agent-secrets`; other bundles remain browser-disabled. Synthetic adversarial tests pass. Testing4 login passes with destination and account verification. Package F remains blocked for Demo4 because its 2FA page needs off-origin assets that the required credential guard blocks.
 
 ## Context
 
@@ -94,7 +94,7 @@ The desired outcome is quiet automation with deliberate requests for help, not u
 | [Agent-browser plugin documentation](https://agent-browser.dev/plugins) | Defines `credential.read` for external vaults. A local executable exchanges one JSON request and response; browser automation stays in agent-browser. |
 | Version 0.36.0 [streaming](https://github.com/vercel-labs/agent-browser/blob/v0.36.0/docs/src/app/streaming/page.mdx) and [dashboard](https://github.com/vercel-labs/agent-browser/blob/v0.36.0/docs/src/app/dashboard/page.mdx) documentation | The dashboard displays a live viewport and sends mouse, keyboard and touch input to an existing headless browser. Each stream has its own port; one local dashboard can proxy several streams. |
 
-The CLI and version 0.36.0 source were rechecked after Chinh's review comments. These findings replace the earlier 0.32.3 assessment. Strict non-interactive vault resolution passes. Hardened Demo4 authentication does not yet pass.
+The CLI and version 0.36.0 source were rechecked after Chinh's review comments. These findings replace the earlier 0.32.3 assessment. Strict non-interactive vault resolution passes. Hardened Testing4 authentication passes. Hardened Demo4 authentication does not yet pass.
 
 The [5 September live experiments](./rfc-0011/2026-09-05-dashboard-and-isolation-tests.md) confirmed session isolation and control without restarting Chrome, but failed dashboard sign-in. Dashboard credential input remains blocked.
 
@@ -252,7 +252,7 @@ The existing lifecycle helper and [schema](../../agent-browser-lifecycle/schema.
 
 ### Delivery and validation
 
-Packages A to E are complete. Package F remains blocked. The [implementation baseline and acceptance record](./rfc-0011/2026-09-05-implementation-baseline-and-acceptance.md) holds the evidence. Use the README validation table for implementation changes.
+Packages A to E are complete. Testing4 has passed live acceptance. Package F remains blocked for Demo4. The [implementation baseline and acceptance record](./rfc-0011/2026-09-05-implementation-baseline-and-acceptance.md) holds the evidence. Use the README validation table for implementation changes.
 
 For RFC-only changes, run `python3 amp/scripts/validate-rfcs.py` and `scripts/check-projection`. Run `./sync-skills.sh` and verify the RFC projection.
 

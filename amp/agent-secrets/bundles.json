@@ -65,7 +65,10 @@
         "GITHUB_TOKEN",
         "HOLISTICS_DEMO4_USERNAME",
         "HOLISTICS_DEMO4_PASSWORD",
-        "HOLISTICS_DEMO4_OTP"
+        "HOLISTICS_DEMO4_OTP",
+        "HOLISTICS_TESTING4_USERNAME",
+        "HOLISTICS_TESTING4_PASSWORD",
+        "HOLISTICS_TESTING4_API_KEY"
       ],
       "compatibleBundles": [
         "amp-runtime"
@@ -92,6 +95,18 @@
           "expectedPostLoginUrl": "https://demo4.holistics.io/home",
           "accountMarkerSelector": "body",
           "accountMarkerVariable": "HOLISTICS_DEMO4_USERNAME"
+        },
+        "testing4": {
+          "usernameVariable": "HOLISTICS_TESTING4_USERNAME",
+          "passwordVariable": "HOLISTICS_TESTING4_PASSWORD",
+          "loginUrl": "https://testing4.holistics.io/users/sign_in",
+          "credentialOrigin": "https://testing4.holistics.io",
+          "usernameSelector": "#user_email",
+          "passwordSelector": "#user_password",
+          "submitSelector": "input[name=\"commit\"]",
+          "expectedPostLoginUrl": "https://testing4.holistics.io/home",
+          "accountMarkerSelector": "head",
+          "accountMarkerVariable": "HOLISTICS_TESTING4_USERNAME"
         }
       }
     },

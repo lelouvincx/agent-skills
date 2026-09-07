@@ -36,6 +36,12 @@ Use the pinned RFC-0011 build and an approved login alias. Through the explicit 
 
 If automatic authentication cannot complete, stop the headless session and claim a fresh headed session. Do not reuse its profile. Pause automated input until attached browser workers detach; resume when the destination and account match.
 
+## Timing browser workflows
+
+- Resolve the app's canonical origin and authenticate before timing the operation.
+- Await one completion signal for the measured action. Resource Timing entries finalize after responses complete, so prefer the request promise or the UI's completion state over chained polling timeouts.
+- Report setup, client processing and backend request time separately.
+
 ## Owner shutdown and recovery
 
 1. Wait until `show` reports no attached threads; record `stopping` and verify the state.

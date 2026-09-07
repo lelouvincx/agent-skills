@@ -115,7 +115,7 @@ class AgentSecretPolicyValidationTests(unittest.TestCase):
             )
         )
 
-    def test_existing_bundle_inventory_enables_only_demo4_browser_login(self):
+    def test_existing_bundle_inventory_enables_approved_browser_logins(self):
         manifest = self.read_manifest()
         self.assertEqual(
             {
@@ -134,11 +134,15 @@ class AgentSecretPolicyValidationTests(unittest.TestCase):
                 "HOLISTICS_DEMO4_USERNAME",
                 "HOLISTICS_DEMO4_PASSWORD",
                 "HOLISTICS_DEMO4_OTP",
+                "HOLISTICS_TESTING4_USERNAME",
+                "HOLISTICS_TESTING4_PASSWORD",
+                "HOLISTICS_TESTING4_API_KEY",
             ],
             manifest["bundles"]["work"]["variables"],
         )
         self.assertEqual(
-            ["demo4"], sorted(manifest["bundles"]["work"]["browserLogins"])
+            ["demo4", "testing4"],
+            sorted(manifest["bundles"]["work"]["browserLogins"]),
         )
         self.assertTrue(
             all(

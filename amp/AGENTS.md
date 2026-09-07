@@ -19,7 +19,7 @@
 ## Conventions
 
 - Before working with dbx, dbdiagram, dbdocs, or runsql, read `{AMP_CONFIG_DIR:~/.config/amp}/conventions/dbdiagram.md`.
-- Before using `agent-browser`, read `{AMP_CONFIG_DIR:~/.config/amp}/conventions/agent-browser.md` and `{AMP_CONFIG_DIR:~/.config/amp}/conventions/agent-browser-lifecycle.md`.
+- Before using `agent-browser` or timing a browser workflow, read `{AMP_CONFIG_DIR:~/.config/amp}/conventions/agent-browser.md` and `{AMP_CONFIG_DIR:~/.config/amp}/conventions/agent-browser-lifecycle.md`.
 - Before working with `.aml` files or interpreting Holistics query results, read `{AMP_CONFIG_DIR:~/.config/amp}/conventions/holistics.md`.
 - Before Python tasks, read `{AMP_CONFIG_DIR:~/.config/amp}/conventions/python.md`.
 - Before writing or editing SQL, read `{AMP_CONFIG_DIR:~/.config/amp}/conventions/sql.md`.
