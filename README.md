@@ -49,7 +49,7 @@ agent-secrets run \
 agent-secrets doctor
 ```
 
-The source-controlled policy and shared automation library are in [`amp/agent-secrets/`](amp/agent-secrets/).
+The [agent-secrets guide](amp/agent-secrets/README.md) covers policy, private references and browser-login profile registration.
 `./sync-skills.sh` validates and projects them, then links the resolver into `~/.local/bin`.
 The shared GitHub identity policy records the complete repository access expected for bot accounts.
 Each consuming repository separately restricts which targets and operations its automation may use.
@@ -60,6 +60,8 @@ The service-account bootstrap file is separate and is never projected from this 
 
 The resolver provides only `run` and `doctor`.
 It does not print, export, evaluate or copy resolved values to the clipboard.
+
+RFC-0011 browser login uses a temporary pinned native `agent-browser` patch. Build and install it with `amp/agent-browser-custom/build`; the projected `agent-browser` wrapper refuses missing or stale builds. Remove `amp/agent-browser-custom` when an official agent-browser release supports destination-checked credential login.
 
 ## Run a background Amp runner
 
@@ -183,8 +185,9 @@ Run the relevant repository command directly:
 | Test the Amp documentation validator | `python3 -m unittest amp/scripts/test_validate_plugin_docs.py` |
 | Validate Amp capability and issue docs | `python3 amp/scripts/validate-plugin-docs.py` |
 | Validate Amp RFCs | `python3 amp/scripts/validate-rfcs.py` |
-| Test the agent secret resolver | `uvx --with jsonschema==4.25.1 python -m unittest amp/scripts/test_validate_agent_secrets.py amp/scripts/test_agent_secrets.py` |
+| Test the agent secret resolver and browser credential plugin | `uvx --with jsonschema==4.25.1 python -m unittest amp/scripts/test_validate_agent_secrets.py amp/scripts/test_agent_secrets.py amp/scripts/test_agent_browser_plugin_onepassword.py` |
 | Validate agent secret policy | `uvx --with jsonschema==4.25.1 python amp/scripts/validate-agent-secrets.py` |
+| Build and test the destination-safe agent-browser | `AGENT_BROWSER_RUN_TESTS=1 amp/agent-browser-custom/build` |
 | Test the GitHub thread event validator | `python3 -m unittest amp/scripts/test_validate_github_thread_events.py` |
 | Validate GitHub thread event configuration | `python3 amp/scripts/validate-github-thread-events.py` |
 | Validate the project registry | `scripts/check-project-registry` |

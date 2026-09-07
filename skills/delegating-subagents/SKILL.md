@@ -37,6 +37,15 @@ Include:
 
 Ask the user when the child or parent needs input only the user can provide. The parent owns synthesis, integration, and final verification.
 
+### Browser session handoff
+
+When a child needs an existing agent-browser session:
+
+1. The owner passes the lifecycle session and owner thread IDs, namespace, mapped short daemon name, claimed CDP endpoint, profile and Chrome PID.
+2. The child verifies that lifecycle reports the session ready and that the live PID, profile and listener match. It records its attachment and continues when lifecycle confirms it.
+3. The child opens its own tab and uses the [explicit browser identity](../../amp/conventions/agent-browser.md#explicit-agent-browser-identity) for every command.
+4. Before returning, the child closes its tab, records detachment and waits for lifecycle confirmation. The owner retains shutdown responsibility.
+
 ## Manage native child threads
 
 For `create_thread`, choose exactly one result path:

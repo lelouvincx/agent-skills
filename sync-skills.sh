@@ -572,6 +572,13 @@ if [ -d "$BIN_DIR" ]; then
 	done
 fi
 
+if [ -f "$BIN_DIR/agent-browser-plugin-onepassword" ]; then
+	python3 "$AMP_DIR/scripts/merge-agent-browser-plugin.py" \
+		"$HOME/.agent-browser/config.json" \
+		"$LOCAL_BIN/agent-browser-plugin-onepassword"
+	echo "registered: agent-browser plugin onepassword"
+fi
+
 # Symlink skill scripts that should be CLI-accessible
 for script in "$SKILLS_DIR"/*/scripts/*.sh; do
 	[ -f "$script" ] || continue

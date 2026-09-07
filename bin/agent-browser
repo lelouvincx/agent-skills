@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+script="${BASH_SOURCE[0]}"
+if [ -L "$script" ]; then
+  target="$(readlink "$script")"
+  if [[ "$target" = /* ]]; then
+    script="$target"
+  else
+    script="$(dirname "$script")/$target"
+  fi
+fi
+repo_root="$(cd "$(dirname "$script")/.." && pwd)"
+install_dir="${AGENT_BROWSER_CUSTOM_INSTALL_DIR:-$HOME/.local/libexec/agent-browser-rfc0011}"
+binary="$install_dir/agent-browser"
+receipt="$install_dir/build-input.sha256"
+fingerprint="$repo_root/amp/agent-browser-custom/fingerprint"
+
+if [ ! -x "$binary" ] || [ ! -f "$receipt" ]; then
+  echo "agent-browser: RFC-0011 custom build is not installed; run amp/agent-browser-custom/build" >&2
+  exit 1
+fi
+expected="$($fingerprint)"
+actual="$(tr -d '[:space:]' <"$receipt")"
+if [ "$actual" != "$expected" ]; then
+  echo "agent-browser: RFC-0011 custom build is stale; run amp/agent-browser-custom/build" >&2
+  exit 1
+fi
+
+exec "$binary" "$@"
