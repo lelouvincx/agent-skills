@@ -127,6 +127,8 @@ Use `--debug` or `--log-level debug` during an incident. Reinstall without that 
 
 The LaunchAgent runs Amp with `--no-tui` and the supplied runner ID. `KeepAlive` restarts the process after failure. A 10-second throttle limits restart loops.
 
+Before it starts Amp, `amp-runner run` reads `~/.local/share/agent-secrets/op-service-account-token` if the file exists and is not empty. It exports the value as `OP_SERVICE_ACCOUNT_TOKEN` for the Amp process. It does not write the token value to the plist.
+
 `list` sums CPU and resident memory across the LaunchAgent process and all of its descendants, including `caffeinate`, Amp, and child processes. Resource values are unavailable for runners that are not loaded or have no live process.
 
 Amp writes structured records to `<runner-id>.log`. The LaunchAgent writes startup and supervisor output to `<runner-id>.supervisor.log`.
@@ -136,6 +138,8 @@ Amp writes structured records to `<runner-id>.log`. The LaunchAgent writes start
 The launcher creates, loads, restarts, and removes user LaunchAgents. It starts local Amp and `caffeinate` processes. It does not need administrator access.
 
 Installation captures `PATH` so plugins and MCP servers can find commands such as `npx`. It captures `HOME` for normal user-path resolution. It does not copy secret environment variables into the plist.
+
+The service-account bootstrap token stays in the local agent-secrets file. The runner reads it only when the process starts.
 
 Treat both log files as sensitive. They can contain local paths, prompts, tool activity, and failure details.
 
