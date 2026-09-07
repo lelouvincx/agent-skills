@@ -127,7 +127,7 @@ class AgentSecretPolicyValidationTests(unittest.TestCase):
         )
         self.assertEqual(
             [
-                "/Users/lelouvincx/.local/share/mise/installs/gh/latest/gh_2.100.0_macOS_arm64/bin/gh"
+                "/Users/lelouvincx/.local/share/mise/shims/gh"
             ],
             manifest["command_classes"]["github-cli"]["executablePaths"],
         )
