@@ -3,7 +3,7 @@ doc_schema: "amp-artifact/v2"
 title: "Amp ChatGPT subscription selector"
 slug: "amp-chatgpt-subscription-selector"
 status: "active"
-summary: "Keeps a preferred ChatGPT subscription active in Amp until an available Codex quota window is at or below a configured remaining threshold."
+summary: "Keeps a preferred ChatGPT subscription active in Amp until its weekly Codex quota is at or below a configured remaining threshold."
 artifact:
   id: "amp-chatgpt-subscription-selector"
   type: "local_cli"
@@ -64,9 +64,9 @@ safety:
   permission_level: "local-process-management-and-remote-account-write"
   user_gate: "manual installation or explicit invocation"
   constraints:
-    - "Selects the fallback when any available preferred quota window is at or below the configured remaining threshold."
-    - "Selects the preferred subscription only when every available quota window is above the configured remaining threshold."
-    - "Ignores a quota window that the provider explicitly disables with a duration of 0 minutes."
+    - "Selects the fallback when the preferred weekly quota is at or below the configured remaining threshold."
+    - "Selects the preferred subscription when its weekly quota is above the configured remaining threshold."
+    - "Ignores non-weekly quota windows."
     - "Uses complete quota headers from a usage-limit response even when Amp exits with an error."
     - "Preserves the active subscription when the response omits either window header pair or provides no supported active window."
     - "Activates a subscription only when the selected connection is not already active."
@@ -87,7 +87,7 @@ tags:
 
 ## Summary
 
-`amp-chatgpt-subscription-selector` keeps the primary ChatGPT subscription active in Amp while every available Codex quota window is above your configured remaining threshold. It activates the secondary subscription when any available window is at or below that threshold.
+`amp-chatgpt-subscription-selector` keeps the primary ChatGPT subscription active in Amp while its weekly Codex quota is above your configured remaining threshold. It activates the secondary subscription when the weekly window is at or below that threshold.
 
 ## Invocation
 
@@ -106,9 +106,9 @@ The LaunchAgent checks when you log in to macOS and then at the interval you set
 - `x-codex-primary-window-minutes` and `x-codex-primary-used-percent`
 - `x-codex-secondary-window-minutes` and `x-codex-secondary-used-percent`
 
-The selector identifies the 5-hour window as 300 minutes and the weekly window as 10,080 minutes. Header order does not affect the result. Some plans explicitly disable one window by reporting a duration of 0 minutes; the selector ignores that window and evaluates the remaining supported window.
+The selector identifies the weekly window as 10,080 minutes. Header order does not affect the result. It ignores all non-weekly windows, including windows that the provider disables with a duration of 0 minutes.
 
-The selector activates the fallback when any available preferred window is at or below the configured remaining threshold. It switches back when every available window is above that threshold. You set the remaining quota threshold and the check interval during installation.
+The selector activates the fallback when the preferred weekly window is at or below the configured remaining threshold. It switches back when the weekly window is above that threshold. You set the remaining quota threshold and the check interval during installation.
 
 Use `pause` to stop background checks without removing your configuration or altering the active subscription. It unloads the LaunchAgent and records that the selector is paused. While paused, `run` exits with an error instead of testing or switching subscriptions. Use `resume` to clear the paused state and bootstrap the LaunchAgent again.
 
@@ -122,7 +122,7 @@ The command calculates remaining quota as `100 - used_percent`. It checks the se
 
 A kernel-managed file lock prevents checks, installation, pause, resume and removal from overlapping. A response with a missing window header pair, no supported active window, invalid percentage or invalid provider state leaves the current subscription active and records a failed result.
 
-`status` prints a short labelled report. The report names both subscriptions, the remaining quota threshold, and the check interval. It also shows the last check time, the last result, the selected subscription, remaining 5-hour and weekly quota, why that subscription was chosen, and whether the background check is scheduled. It uses Amp connection names when `amp config model-providers show` can resolve them. Otherwise it uses the stored connection IDs.
+`status` prints a short labelled report. The report names both subscriptions, the remaining quota threshold, and the check interval. It also shows the last check time, the last result, the selected subscription, remaining weekly quota, why that subscription was chosen, and whether the background check is scheduled. It uses Amp connection names when `amp config model-providers show` can resolve them. Otherwise it uses the stored connection IDs.
 
 ## Permissions and side effects
 
@@ -173,7 +173,7 @@ Last check: 2026-09-06 18:57:43 UTC+7
 Next check: 2026-09-06 19:57:43 UTC+7
 Result: ok
 Selected: fallback-account (00000000-0000-4000-8000-000000000002)
-Preferred remaining: 5-hour unavailable, weekly 0%
+Preferred remaining: weekly 0%
 Fallback remaining: weekly 72%
 Reason: preferred subscription is at or below the remaining quota threshold
 ```
@@ -194,4 +194,4 @@ amp-chatgpt-subscription-selector uninstall
 
 ## Maintenance notes
 
-Keep this document aligned with `bin/amp-chatgpt-subscription-selector`. Update the duration mapping if OpenAI changes its 5-hour or weekly quota windows. Update response parsing if Amp changes the output of `model-providers test` or `show`.
+Keep this document aligned with `bin/amp-chatgpt-subscription-selector`. Update the duration mapping if OpenAI changes its weekly quota window. Update response parsing if Amp changes the output of `model-providers test` or `show`.

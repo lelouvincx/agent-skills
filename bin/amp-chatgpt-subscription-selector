@@ -11,8 +11,8 @@ Usage:
   amp-chatgpt-subscription-selector run
   amp-chatgpt-subscription-selector status
 
-Keep a preferred Amp ChatGPT subscription active until either its 5-hour or
-weekly Codex quota has the configured remaining percentage or less.
+Keep a preferred Amp ChatGPT subscription active until its weekly Codex quota
+has the configured remaining percentage or less.
 EOF
 }
 
@@ -50,11 +50,11 @@ log() {
 }
 
 write_result() {
-	local result="$1" selected="$2" five_remaining="$3" weekly_remaining="$4" fallback_weekly_remaining="$5" detail="$6" tmp="$last_run_file.tmp.$$"
+	local result="$1" selected="$2" weekly_remaining="$3" fallback_weekly_remaining="$4" detail="$5" tmp="$last_run_file.tmp.$$"
 	{
 		printf 'timestamp=%s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
-		printf 'result=%s\nselected=%s\nfive_hour_remaining=%s\nweekly_remaining=%s\nfallback_weekly_remaining=%s\ndetail=%s\n' \
-			"$result" "$selected" "$five_remaining" "$weekly_remaining" "$fallback_weekly_remaining" "$detail"
+		printf 'result=%s\nselected=%s\nweekly_remaining=%s\nfallback_weekly_remaining=%s\ndetail=%s\n' \
+			"$result" "$selected" "$weekly_remaining" "$fallback_weekly_remaining" "$detail"
 	} > "$tmp"
 	chmod 600 "$tmp"
 	mv "$tmp" "$last_run_file"
@@ -98,13 +98,11 @@ quota_usage() {
 			if (pwindow != 0 && pwindow != 300 && pwindow != 10080) exit 1
 			if (swindow != 0 && swindow != 300 && swindow != 10080) exit 1
 			if (pwindow != 0 && pwindow == swindow) exit 1
-			five = weekly = "unavailable"
-			if (pwindow == 300) five = pused
-			if (swindow == 300) five = sused
+			weekly = "unavailable"
 			if (pwindow == 10080) weekly = pused
 			if (swindow == 10080) weekly = sused
-			if (five == "unavailable" && weekly == "unavailable") exit 1
-			print five, weekly
+			if (weekly == "unavailable") exit 1
+			print weekly
 		}
 	'
 }
@@ -126,16 +124,13 @@ format_remaining() {
 }
 
 weekly_remaining_for_connection() {
-	local connection="$1" output usage five_used weekly_used
+	local connection="$1" output weekly_used
 	output="$("$amp_command" config model-providers test "$connection" 9>&- 2>&1)" || true
-	if ! usage="$(printf '%s\n' "$output" | quota_usage)"; then
+	if ! weekly_used="$(printf '%s\n' "$output" | quota_usage)"; then
 		printf 'unknown\n'
 		return 0
 	fi
-	read -r five_used weekly_used <<< "$usage"
-	if [ "$weekly_used" = unavailable ]; then
-		printf 'unavailable\n'
-	elif valid_percent "$weekly_used"; then
+	if valid_percent "$weekly_used"; then
 		format_remaining "$weekly_used"
 	else
 		printf 'unknown\n'
@@ -281,7 +276,7 @@ format_detail() {
 		preferred-has-capacity-activated) printf 'preferred subscription still has remaining quota; activated it\n' ;;
 		preferred-at-threshold) printf 'preferred subscription is at or below the remaining quota threshold\n' ;;
 		preferred-at-threshold-activated) printf 'preferred subscription is at or below the remaining quota threshold; activated the fallback\n' ;;
-		quota-windows-missing) printf 'preferred subscription did not report a usable 5-hour or weekly quota window\n' ;;
+		quota-windows-missing) printf 'preferred subscription did not report a usable weekly quota window\n' ;;
 		provider-test-failed) printf 'preferred subscription test failed and did not report a usable quota window\n' ;;
 		invalid-quota-percentage) printf 'preferred subscription returned an invalid quota percentage\n' ;;
 		selected-provider-unavailable) printf 'could not inspect the selected subscription\n' ;;
@@ -305,53 +300,47 @@ run_selector() {
 		fi
 		fail 'selector is paused; run resume first'
 	fi
-	local output usage five_used weekly_used five_remaining weekly_remaining fallback_weekly_remaining five_suffix=% weekly_suffix=% selected detail show state test_status=0
+	local output weekly_used weekly_remaining fallback_weekly_remaining selected detail show state test_status=0
 	output="$("$amp_command" config model-providers test "$preferred" 9>&- 2>&1)" || test_status=$?
-	if ! usage="$(printf '%s\n' "$output" | quota_usage)"; then
+	if ! weekly_used="$(printf '%s\n' "$output" | quota_usage)"; then
 		if [ "$test_status" -eq 0 ]; then detail=quota-windows-missing; else detail=provider-test-failed; fi
-		write_result failed unchanged unknown unknown unknown "$detail"
-		log 'preferred provider response did not provide a usable 5-hour or weekly quota window; kept the current subscription'
+		write_result failed unchanged unknown unknown "$detail"
+		log 'preferred provider response did not provide a usable weekly quota window; kept the current subscription'
 		return 1
 	fi
-	read -r five_used weekly_used <<< "$usage"
-	for used in "$five_used" "$weekly_used"; do
-		if [ "$used" != unavailable ] && ! valid_percent "$used"; then
-			write_result failed unchanged unknown unknown unknown invalid-quota-percentage
-			log 'preferred provider returned an invalid quota percentage; kept the current subscription'
-			return 1
-		fi
-	done
-	five_remaining="$(format_remaining "$five_used")"
+	if ! valid_percent "$weekly_used"; then
+		write_result failed unchanged unknown unknown invalid-quota-percentage
+		log 'preferred provider returned an invalid quota percentage; kept the current subscription'
+		return 1
+	fi
 	weekly_remaining="$(format_remaining "$weekly_used")"
-	[ "$five_remaining" != unavailable ] || five_suffix=
-	[ "$weekly_remaining" != unavailable ] || weekly_suffix=
 	selected="$preferred"
 	detail=preferred-has-capacity
-	if at_or_below_threshold "$five_used" || at_or_below_threshold "$weekly_used"; then
+	if at_or_below_threshold "$weekly_used"; then
 		selected="$fallback"
 		detail=preferred-at-threshold
 	fi
 	if ! show="$("$amp_command" config model-providers show "$selected" 9>&- 2>&1)"; then
-		write_result failed unchanged "$five_remaining" "$weekly_remaining" unknown selected-provider-unavailable
+		write_result failed unchanged "$weekly_remaining" unknown selected-provider-unavailable
 		log 'could not inspect the selected provider; kept the current subscription'
 		return 1
 	fi
 	if ! state="$(printf '%s\n' "$show" | active_state)"; then
-		write_result failed unchanged "$five_remaining" "$weekly_remaining" unknown invalid-selected-provider-state
+		write_result failed unchanged "$weekly_remaining" unknown invalid-selected-provider-state
 		log 'selected provider returned an invalid active state; kept the current subscription'
 		return 1
 	fi
 	if [ "$state" = false ]; then
 		if ! "$amp_command" config model-providers activate "$selected" 9>&- >/dev/null; then
-			write_result failed unchanged "$five_remaining" "$weekly_remaining" unknown activation-failed
+			write_result failed unchanged "$weekly_remaining" unknown activation-failed
 			log 'could not activate the selected provider; kept the current subscription'
 			return 1
 		fi
 		detail="$detail-activated"
 	fi
 	fallback_weekly_remaining="$(weekly_remaining_for_connection "$fallback")"
-	write_result ok "$selected" "$five_remaining" "$weekly_remaining" "$fallback_weekly_remaining" "$detail"
-	log "selected $selected; preferred remaining: 5-hour ${five_remaining}${five_suffix}, weekly ${weekly_remaining}${weekly_suffix}"
+	write_result ok "$selected" "$weekly_remaining" "$fallback_weekly_remaining" "$detail"
+	log "selected $selected; preferred weekly remaining: ${weekly_remaining}%"
 }
 
 xml_escape() { printf '%s' "$1" | sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g' -e 's/"/\&quot;/g'; }
@@ -487,7 +476,7 @@ status_agent() {
 	prepare_state
 	load_config
 	local last_timestamp=never last_result=never-run last_selected=none
-	local last_five=unknown last_weekly=unknown last_fallback_weekly=unknown last_detail=never-run
+	local last_weekly=unknown last_fallback_weekly=unknown last_detail=never-run
 	local key value agent_state preferred_label fallback_label selected_label
 	if [ -f "$last_run_file" ]; then
 		while IFS='=' read -r key value; do
@@ -495,7 +484,6 @@ status_agent() {
 				timestamp) last_timestamp="$value" ;;
 				result) last_result="$value" ;;
 				selected) last_selected="$value" ;;
-				five_hour_remaining) last_five="$value" ;;
 				weekly_remaining) last_weekly="$value" ;;
 				fallback_weekly_remaining) last_fallback_weekly="$value" ;;
 				detail) last_detail="$value" ;;
@@ -518,7 +506,7 @@ status_agent() {
 	printf 'Next check: %s\n' "$(format_next_check "$last_timestamp" "$agent_state")"
 	printf 'Result: %s\n' "$(format_result "$last_result")"
 	printf 'Selected: %s\n' "$selected_label"
-	printf 'Preferred remaining: 5-hour %s, weekly %s\n' "$(format_quota "$last_five")" "$(format_quota "$last_weekly")"
+	printf 'Preferred remaining: weekly %s\n' "$(format_quota "$last_weekly")"
 	printf 'Fallback remaining: weekly %s\n' "$(format_quota "$last_fallback_weekly")"
 	printf 'Reason: %s\n' "$(format_detail "$last_detail")"
 }
