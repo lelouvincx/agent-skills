@@ -140,34 +140,33 @@ printf '%s\n' "$never_run_status" | grep -Fxq 'Last check: never'
 printf '%s\n' "$never_run_status" | grep -Fxq 'Next check: awaiting first check'
 printf '%s\n' "$never_run_status" | grep -Fxq 'Result: never run'
 printf '%s\n' "$never_run_status" | grep -Fxq 'Selected: none'
-printf '%s\n' "$never_run_status" | grep -Fxq 'Preferred remaining: 5-hour unknown, weekly unknown'
+printf '%s\n' "$never_run_status" | grep -Fxq 'Preferred remaining: weekly unknown'
 printf '%s\n' "$never_run_status" | grep -Fxq 'Fallback remaining: weekly unknown'
 printf '%s\n' "$never_run_status" | grep -Fxq 'Reason: selector has not run yet'
 if printf '%s\n' "$never_run_status" | grep -Fq 'gui/'; then exit 1; fi
 
 # A plan with one explicitly disabled window uses its supported active window.
 disabled_output="$(TEST_QUOTA=$'x-codex-primary-window-minutes: 10080\nx-codex-primary-used-percent: 96\nx-codex-secondary-window-minutes: 0\nx-codex-secondary-used-percent: 0' run_tool run)"
-printf '%s\n' "$disabled_output" | grep -Fq 'preferred remaining: 5-hour unavailable, weekly 4%'
+printf '%s\n' "$disabled_output" | grep -Fq 'preferred weekly remaining: 4%'
 [ "$(cat "$tmp/active")" = "$fallback" ]
 [ "$(wc -l < "$tmp/activations" | tr -d ' ')" = 1 ]
-grep -Fxq 'five_hour_remaining=unavailable' "$tmp/state/last-run"
 grep -Fxq 'weekly_remaining=4' "$tmp/state/last-run"
 
-# Either window at the configured threshold selects the fallback.
+# The 5-hour window at the configured threshold is ignored when weekly quota has capacity.
 TEST_FAIL=1 TEST_QUOTA=$'x-codex-primary-window-minutes: 300\nx-codex-primary-used-percent: 95\nx-codex-secondary-window-minutes: 10080\nx-codex-secondary-used-percent: 20' run_tool run
-[ "$(cat "$tmp/active")" = "$fallback" ]
-[ "$(wc -l < "$tmp/activations" | tr -d ' ')" = 1 ]
-grep -Fxq 'five_hour_remaining=5' "$tmp/state/last-run"
-grep -Fxq 'weekly_remaining=80' "$tmp/state/last-run"
-
-# Header order does not matter and an already active selection is not reactivated.
-TEST_QUOTA=$'x-codex-primary-window-minutes: 10080\nx-codex-primary-used-percent: 95\nx-codex-secondary-window-minutes: 300\nx-codex-secondary-used-percent: 40' run_tool run
-[ "$(wc -l < "$tmp/activations" | tr -d ' ')" = 1 ]
-
-# Both windows above the threshold select the preferred connection again.
-TEST_QUOTA=$'x-codex-primary-window-minutes: 300\nx-codex-primary-used-percent: 94\nx-codex-secondary-window-minutes: 10080\nx-codex-secondary-used-percent: 94' run_tool run
 [ "$(cat "$tmp/active")" = "$primary" ]
 [ "$(wc -l < "$tmp/activations" | tr -d ' ')" = 2 ]
+grep -Fxq 'weekly_remaining=80' "$tmp/state/last-run"
+
+# Header order does not matter and weekly quota at the threshold selects the fallback.
+TEST_QUOTA=$'x-codex-primary-window-minutes: 10080\nx-codex-primary-used-percent: 95\nx-codex-secondary-window-minutes: 300\nx-codex-secondary-used-percent: 40' run_tool run
+[ "$(cat "$tmp/active")" = "$fallback" ]
+[ "$(wc -l < "$tmp/activations" | tr -d ' ')" = 3 ]
+
+# Weekly quota above the threshold selects the preferred connection again.
+TEST_QUOTA=$'x-codex-primary-window-minutes: 300\nx-codex-primary-used-percent: 100\nx-codex-secondary-window-minutes: 10080\nx-codex-secondary-used-percent: 94' run_tool run
+[ "$(cat "$tmp/active")" = "$primary" ]
+[ "$(wc -l < "$tmp/activations" | tr -d ' ')" = 4 ]
 
 # A missing window preserves the active connection and records a failure.
 if TEST_FAIL=1 TEST_QUOTA=$'x-codex-primary-window-minutes: 300\nx-codex-primary-used-percent: 99' run_tool run >/dev/null; then exit 1; fi
@@ -188,9 +187,9 @@ done
 # Invalid percentages preserve the active connection.
 for invalid in nope -1 101; do
 	before="$(wc -l < "$tmp/activations" | tr -d ' ')"
-	if TEST_QUOTA="x-codex-primary-window-minutes: 300
+	if TEST_QUOTA="x-codex-primary-window-minutes: 10080
 x-codex-primary-used-percent: $invalid
-x-codex-secondary-window-minutes: 10080
+x-codex-secondary-window-minutes: 300
 x-codex-secondary-used-percent: 20" run_tool run >/dev/null; then exit 1; fi
 	[ "$(wc -l < "$tmp/activations" | tr -d ' ')" = "$before" ]
 	grep -Fxq 'detail=invalid-quota-percentage' "$tmp/state/last-run"
@@ -235,7 +234,8 @@ kill "$lock_pid"
 wait "$lock_pid" 2>/dev/null || true
 tests_before="$(grep -c '^test ' "$tmp/calls")"
 fallback_quota=$'x-codex-primary-window-minutes: 300\nx-codex-primary-used-percent: 12\nx-codex-secondary-window-minutes: 10080\nx-codex-secondary-used-percent: 30'
-TEST_QUOTA="$valid_quota" TEST_FALLBACK_QUOTA="$fallback_quota" run_tool run >/dev/null
+threshold_quota=$'x-codex-primary-window-minutes: 10080\nx-codex-primary-used-percent: 95\nx-codex-secondary-window-minutes: 300\nx-codex-secondary-used-percent: 12'
+TEST_QUOTA="$threshold_quota" TEST_FALLBACK_QUOTA="$fallback_quota" run_tool run >/dev/null
 [ "$(grep -c '^test ' "$tmp/calls")" = "$((tests_before + 2))" ]
 awk '{ if ($0 ~ /^timestamp=/) print "timestamp=2026-09-07T01:20:37Z"; else print }' "$tmp/state/last-run" > "$tmp/state/last-run.fixed"
 mv "$tmp/state/last-run.fixed" "$tmp/state/last-run"
@@ -250,10 +250,11 @@ grep -Fxq 'Last check: 2026-09-07 08:20:37 UTC+7' "$tmp/status.out"
 grep -Fxq 'Next check: 2026-09-07 08:50:37 UTC+7' "$tmp/status.out"
 grep -Fxq 'Result: ok' "$tmp/status.out"
 grep -Fxq 'Selected: fallback-id-name (fallback-id)' "$tmp/status.out"
-grep -Fxq 'Preferred remaining: 5-hour 5%, weekly 80%' "$tmp/status.out"
+grep -Fxq 'Preferred remaining: weekly 5%' "$tmp/status.out"
 grep -Fxq 'Fallback remaining: weekly 70%' "$tmp/status.out"
-grep -Fxq 'Reason: preferred subscription is at or below the remaining quota threshold' "$tmp/status.out"
-if grep -Eq '^(timestamp|result|selected|five_hour_remaining|weekly_remaining|detail)=' "$tmp/status.out"; then exit 1; fi
+grep -Fxq 'Reason: preferred subscription is at or below the remaining quota threshold; activated the fallback' "$tmp/status.out"
+if grep -Eq '^(timestamp|result|selected|weekly_remaining|detail)=' "$tmp/status.out"; then exit 1; fi
+if grep -Fq '5-hour' "$tmp/status.out"; then exit 1; fi
 if grep -Fq 'gui/' "$tmp/status.out"; then exit 1; fi
 
 # Argument validation for pause and resume.
