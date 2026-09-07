@@ -128,6 +128,16 @@ class AgentSecretPolicyValidationTests(unittest.TestCase):
             set(manifest["bundles"]),
         )
         self.assertEqual(
+            {
+                "audience": "agent",
+                "owner": "lelouvincx/smartclass",
+                "variables": ["COHERE_API_KEY"],
+                "compatibleBundles": [],
+                "allowedCommandClasses": ["smartclass-wrangler-dev"],
+            },
+            manifest["bundles"]["smartclass-cohere"],
+        )
+        self.assertEqual(
             [
                 "GH_TOKEN",
                 "GITHUB_TOKEN",
