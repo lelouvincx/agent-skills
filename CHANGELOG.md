@@ -70,6 +70,7 @@ and this project does not currently use versioned releases.
 
 ### Changed
 
+- Force every managed Amp runner to select service-account authentication at runtime. [#226](https://github.com/lelouvincx/agent-skills/pull/226)
 - Make `amp-chatgpt-subscription-selector` switch ChatGPT subscriptions based only on weekly Codex quota, ignoring the 5-hour quota window. [#225](https://github.com/lelouvincx/agent-skills/pull/225)
 - Allow `agent-secrets` to run approved tools such as Homebrew `gh` through bare command names resolved from `PATH`. [#223](https://github.com/lelouvincx/agent-skills/pull/223)
 - Make `amp-chatgpt-subscription-selector status` show UTC+7 check times, the next scheduled check, and weekly remaining quota for both configured subscriptions. [#221](https://github.com/lelouvincx/agent-skills/pull/221)
