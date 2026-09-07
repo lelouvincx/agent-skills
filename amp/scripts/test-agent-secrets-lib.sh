@@ -44,7 +44,7 @@ mkdir "$SNAPSHOT_REPO"
 	git init -q
 	printf 'tracked image\n' >'-.png'
 	git add -- '-.png'
-	git -c user.name=test -c user.email=test@example.com commit -qm 'Add tracked image'
+	git -c user.name=test -c user.email=test@example.com -c commit.gpgsign=false commit -qm 'Add tracked image'
 	printf 'untracked image\n' >'--sample.jpg'
 	agent_snapshot_worktree "$TMP_DIR/snapshot.manifest"
 )

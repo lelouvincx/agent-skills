@@ -1,0 +1,1782 @@
+diff --git a/cli/build.rs b/cli/build.rs
+index 7bc9cf1..1f643b1 100644
+--- a/cli/build.rs
++++ b/cli/build.rs
+@@ -1,7 +1,65 @@
+ use std::collections::HashSet;
+ use std::env;
+ use std::fs;
+-use std::path::Path;
++use std::path::{Path, PathBuf};
++
++fn collect_source_files(directory: &Path, files: &mut Vec<PathBuf>) {
++    let mut entries = fs::read_dir(directory)
++        .unwrap_or_else(|error| panic!("failed to read {}: {error}", directory.display()))
++        .map(|entry| entry.expect("failed to read source entry").path())
++        .collect::<Vec<_>>();
++    entries.sort();
++
++    for path in entries {
++        if path.is_dir() {
++            collect_source_files(&path, files);
++        } else if path.extension().is_some_and(|extension| extension == "rs") {
++            files.push(path);
++        }
++    }
++}
++
++fn hash_bytes(hash: &mut u64, bytes: &[u8]) {
++    // FNV-1a is sufficient here: the build identity detects incompatible
++    // binaries, rather than serving as a security boundary.
++    for byte in bytes {
++        *hash ^= u64::from(*byte);
++        *hash = hash.wrapping_mul(0x100000001b3);
++    }
++}
++
++fn emit_build_identity() {
++    let mut inputs = vec![
++        PathBuf::from("Cargo.toml"),
++        PathBuf::from("Cargo.lock"),
++        PathBuf::from("build.rs"),
++        PathBuf::from("cdp-protocol/browser_protocol.json"),
++        PathBuf::from("cdp-protocol/js_protocol.json"),
++    ];
++    collect_source_files(Path::new("src"), &mut inputs);
++    inputs.retain(|path| path.exists());
++    inputs.sort();
++
++    let mut hash = 0xcbf29ce484222325_u64;
++    for path in inputs {
++        println!("cargo:rerun-if-changed={}", path.display());
++        hash_bytes(&mut hash, path.to_string_lossy().as_bytes());
++        hash_bytes(
++            &mut hash,
++            &fs::read(&path)
++                .unwrap_or_else(|error| panic!("failed to read {}: {error}", path.display())),
++        );
++    }
++
++    for variable in ["PROFILE", "TARGET", "CARGO_ENCODED_RUSTFLAGS"] {
++        println!("cargo:rerun-if-env-changed={variable}");
++        hash_bytes(&mut hash, variable.as_bytes());
++        hash_bytes(&mut hash, env::var(variable).unwrap_or_default().as_bytes());
++    }
++
++    let build_id = format!("{}+{hash:016x}", env!("CARGO_PKG_VERSION"));
++    println!("cargo:rustc-env=AGENT_BROWSER_BUILD_ID={build_id}");
++}
+
+ /// Ensure `packages/dashboard/out/` exists so `rust-embed` doesn't fail during
+ /// Rust-only dev builds where the dashboard hasn't been built. The placeholder
+@@ -19,6 +77,7 @@ fn ensure_dashboard_dir() {
+ }
+
+ fn main() {
++    emit_build_identity();
+     ensure_dashboard_dir();
+
+     let protocol_dir = Path::new("cdp-protocol");
+diff --git a/cli/src/connection.rs b/cli/src/connection.rs
+index ca78c7f..67989ab 100644
+--- a/cli/src/connection.rs
++++ b/cli/src/connection.rs
+@@ -19,6 +19,9 @@ use windows_sys::Win32::Foundation::CloseHandle;
+ #[cfg(windows)]
+ use windows_sys::Win32::System::Threading::{OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION};
+
++/// Identifies daemon-compatible builds, including custom builds that share the
++/// same package version. Generated from native source and build inputs.
++pub(crate) const DAEMON_BUILD_ID: &str = env!("AGENT_BROWSER_BUILD_ID");
+ pub(crate) const INTERNAL_DAEMON_SHUTDOWN_ACTION: &str = "__agent_browser_internal_shutdown";
+
+ #[derive(Serialize)]
+@@ -707,7 +710,7 @@ fn concurrent_daemon_config_error(session: &str) -> String {
+ fn daemon_version_matches(session: &str) -> bool {
+     let version_path = get_version_path(session);
+     match fs::read_to_string(&version_path) {
+-        Ok(v) => v.trim() == env!("CARGO_PKG_VERSION"),
++        Ok(v) => v.trim() == DAEMON_BUILD_ID,
+         Err(_) => false,
+     }
+ }
+@@ -1088,6 +1091,8 @@ fn has_os_error(error: &str, code: u32) -> bool {
+ /// --timeout is given) get that timeout plus margin, so the daemon can report
+ /// a proper operation timeout instead of the client dying with EAGAIN at 30s
+ /// and the retry loop re-sending the whole long-running command.
++/// Credential-provider login also includes the plugin's resolution budget;
++/// otherwise the client retries while the daemon is still resolving secrets.
+ ///
+ /// The env var is deliberately NOT consulted here. Reading it would apply a
+ /// long wait budget to every command, so a genuinely hung daemon on a simple
+@@ -1097,7 +1102,14 @@ fn has_os_error(error: &str, code: u32) -> bool {
+ /// avoiding the daemon's spawn-time env snapshot drifting from the client.
+ fn read_timeout_for(cmd: &Value) -> Duration {
+     let op_ms = cmd.get("timeout").and_then(|v| v.as_u64()).unwrap_or(0);
+-    Duration::from_millis(op_ms.saturating_add(10_000).max(30_000))
++    let operation_timeout = Duration::from_millis(op_ms.saturating_add(10_000).max(30_000));
++    if cmd.get("action").and_then(Value::as_str) == Some("auth_login")
++        && cmd.get("credentialProvider").is_some()
++    {
++        operation_timeout + Duration::from_secs(crate::plugins::CREDENTIAL_PLUGIN_TIMEOUT_SECS)
++    } else {
++        operation_timeout
++    }
+ }
+
+ fn send_command_once(cmd: &Value, session: &str) -> Result<Response, String> {
+@@ -1127,6 +1139,26 @@ mod tests {
+     use super::*;
+     use crate::test_utils::EnvGuard;
+
++    #[test]
++    fn credential_login_read_timeout_includes_plugin_resolution() {
++        let command = json!({
++            "action": "auth_login",
++            "credentialProvider": "onepassword"
++        });
++        assert_eq!(
++            read_timeout_for(&command),
++            Duration::from_secs(30 + crate::plugins::CREDENTIAL_PLUGIN_TIMEOUT_SECS)
++        );
++    }
++
++    #[test]
++    fn stored_login_keeps_the_ordinary_read_timeout() {
++        assert_eq!(
++            read_timeout_for(&json!({ "action": "auth_login" })),
++            Duration::from_secs(30)
++        );
++    }
++
+     #[test]
+     fn test_get_socket_dir_explicit_override() {
+         let _guard = EnvGuard::new(&["AGENT_BROWSER_SOCKET_DIR", "XDG_RUNTIME_DIR"]);
+@@ -1551,7 +1583,7 @@ mod tests {
+         _guard.set("AGENT_BROWSER_SOCKET_DIR", dir.to_str().unwrap());
+
+         let version_path = dir.join("test-session.version");
+-        let _ = fs::write(&version_path, env!("CARGO_PKG_VERSION"));
++        let _ = fs::write(&version_path, DAEMON_BUILD_ID);
+
+         assert!(daemon_version_matches("test-session"));
+
+@@ -1559,6 +1591,22 @@ mod tests {
+         let _ = fs::remove_dir(&dir);
+     }
+
++    #[test]
++    fn test_daemon_version_rejects_semver_without_build_identity() {
++        let dir = std::env::temp_dir().join("ab-test-stock-version-mismatch");
++        let _ = fs::create_dir_all(&dir);
++        let _guard = EnvGuard::new(&["AGENT_BROWSER_SOCKET_DIR", "XDG_RUNTIME_DIR"]);
++        _guard.set("AGENT_BROWSER_SOCKET_DIR", dir.to_str().unwrap());
++
++        let version_path = dir.join("test-session.version");
++        let _ = fs::write(&version_path, env!("CARGO_PKG_VERSION"));
++
++        assert!(!daemon_version_matches("test-session"));
++
++        let _ = fs::remove_file(&version_path);
++        let _ = fs::remove_dir(&dir);
++    }
++
+     #[test]
+     fn test_daemon_version_matches_different_version() {
+         let dir = std::env::temp_dir().join("ab-test-version-mismatch");
+diff --git a/cli/src/doctor/daemon.rs b/cli/src/doctor/daemon.rs
+index b2f5fc1..975f421 100644
+--- a/cli/src/doctor/daemon.rs
++++ b/cli/src/doctor/daemon.rs
+@@ -1,12 +1,12 @@
+-//! Check running daemons: inventory of sessions, version match with the
++//! Check running daemons: inventory of sessions, build match with the
+ //! CLI, and stale sidecar files cleaned up as a side effect of the walk.
+
+ use super::{Check, Status};
+-use crate::connection::{walk_daemons, CleanReason};
++use crate::connection::{walk_daemons, CleanReason, DAEMON_BUILD_ID};
+
+ pub(super) fn check(checks: &mut Vec<Check>) {
+     let category = "Daemons";
+-    let cli_version = env!("CARGO_PKG_VERSION");
++    let cli_build = DAEMON_BUILD_ID;
+
+     let inventory = walk_daemons();
+
+@@ -33,7 +33,7 @@ pub(super) fn check(checks: &mut Vec<Check>) {
+         ));
+     } else {
+         for session in &inventory.sessions {
+-            let version_match = session.version.as_deref() == Some(cli_version);
++            let version_match = session.version.as_deref() == Some(cli_build);
+             let status = if version_match {
+                 Status::Pass
+             } else {
+@@ -42,7 +42,7 @@ pub(super) fn check(checks: &mut Vec<Check>) {
+             let suffix = if version_match {
+                 String::new()
+             } else {
+-                format!(" (version mismatch with CLI {})", cli_version)
++                format!(" (build mismatch with CLI {})", cli_build)
+             };
+             let mut check = Check::new(
+                 format!("daemon.session.{}", session.name),
+diff --git a/cli/src/native/actions.rs b/cli/src/native/actions.rs
+index 4b33319..cd1cca3 100644
+--- a/cli/src/native/actions.rs
++++ b/cli/src/native/actions.rs
+@@ -4,7 +4,7 @@ use std::env;
+ use std::fs;
+ use std::io::Write;
+ use std::path::PathBuf;
+-use std::sync::atomic::AtomicU64;
++use std::sync::atomic::{AtomicU64, AtomicU8, Ordering};
+ use std::sync::Arc;
+ use time::{format_description::well_known::Rfc3339, OffsetDateTime};
+ use tokio::sync::{broadcast, oneshot, RwLock};
+@@ -189,6 +189,34 @@ pub struct FetchPausedRequest {
+     pub request_headers: Option<serde_json::Map<String, Value>>,
+ }
+
++#[derive(Clone)]
++struct CredentialNavigationGuard {
++    credential_origin: String,
++    /// All attached sessions in the guarded target tree, including wrapper
++    /// targets that are needed only to discover renderer descendants.
++    session_ids: Arc<RwLock<HashSet<String>>>,
++    /// Renderer sessions where Fetch interception is supported and installed.
++    fetch_session_ids: Arc<RwLock<HashSet<String>>>,
++    target_ids: Arc<RwLock<HashSet<String>>>,
++    blocked_requests: Arc<RwLock<HashSet<String>>>,
++    blocked: Arc<AtomicU8>,
++}
++
++#[derive(Clone)]
++struct AutoAttachedTarget {
++    parent_session_id: Option<String>,
++    target_id: String,
++    target_type: String,
++    url: String,
++    opener_id: Option<String>,
++}
++
++fn request_origin(url: &str) -> Option<String> {
++    url::Url::parse(url)
++        .ok()
++        .map(|url| url.origin().ascii_serialization())
++}
++
+ pub enum BackendType {
+     Cdp,
+     WebDriver,
+@@ -479,6 +507,8 @@ pub struct DaemonState {
+     /// Proxy authentication credentials (username, password) for handling
+     /// Fetch.authRequired events from authenticated proxies.
+     pub proxy_credentials: Arc<RwLock<Option<(String, String)>>>,
++    credential_navigation_guard: Arc<RwLock<Option<CredentialNavigationGuard>>>,
++    auto_attached_sessions: Arc<RwLock<HashMap<String, AutoAttachedTarget>>>,
+     /// Background task that processes Fetch.requestPaused events in real-time,
+     /// handling domain filtering, route interception, and origin-scoped headers
+     /// without deadlocking navigation/evaluate.
+@@ -606,6 +636,8 @@ impl DaemonState {
+             active_iframe_sessions: HashSet::new(),
+             origin_headers: Arc::new(RwLock::new(HashMap::new())),
+             proxy_credentials: Arc::new(RwLock::new(None)),
++            credential_navigation_guard: Arc::new(RwLock::new(None)),
++            auto_attached_sessions: Arc::new(RwLock::new(HashMap::new())),
+             fetch_handler_task: None,
+             dialog_handler_task: None,
+             mouse_state: MouseState::default(),
+@@ -710,6 +742,8 @@ impl DaemonState {
+         let routes = self.routes.clone();
+         let origin_headers = self.origin_headers.clone();
+         let proxy_credentials = self.proxy_credentials.clone();
++        let credential_navigation_guard = self.credential_navigation_guard.clone();
++        let auto_attached_sessions = self.auto_attached_sessions.clone();
+
+         self.fetch_handler_task = Some(tokio::spawn(async move {
+             loop {
+@@ -754,6 +788,7 @@ impl DaemonState {
+                         }
+                     }
+                     Ok(event) if event.method == "Target.attachedToTarget" => {
++                        let parent_session_id = event.session_id.clone();
+                         let Some(sid) = event
+                             .params
+                             .get("sessionId")
+@@ -765,14 +800,67 @@ impl DaemonState {
+                         let target_info = event.params.get("targetInfo").and_then(|value| {
+                             serde_json::from_value::<TargetInfo>(value.clone()).ok()
+                         });
++                        let opener_id = event
++                            .params
++                            .get("targetInfo")
++                            .and_then(|target| target.get("openerId"))
++                            .and_then(Value::as_str)
++                            .map(ToString::to_string);
++                        if let Some(ref target) = target_info {
++                            auto_attached_sessions.write().await.insert(
++                                sid.clone(),
++                                AutoAttachedTarget {
++                                    parent_session_id: parent_session_id.clone(),
++                                    target_id: target.target_id.clone(),
++                                    target_type: target.target_type.clone(),
++                                    url: target.url.clone(),
++                                    opener_id: opener_id.clone(),
++                                },
++                            );
++                        }
++                        let guard = credential_navigation_guard.read().await.clone();
++                        let mut target_is_guarded = false;
++                        if let Some(ref guard) = guard {
++                            if let Some(ref target) = target_info {
++                                let guarded_sessions = guard.session_ids.read().await;
++                                let guarded_targets = guard.target_ids.read().await;
++                                target_is_guarded = parent_session_id
++                                    .as_deref()
++                                    .is_some_and(|parent| guarded_sessions.contains(parent))
++                                    || guarded_targets.contains(&target.target_id)
++                                    || opener_id
++                                        .as_deref()
++                                        .is_some_and(|opener| guarded_targets.contains(opener))
++                                    || (target_is_worker_like(target)
++                                        && request_origin(&target.url).as_deref()
++                                            == Some(guard.credential_origin.as_str()));
++                                drop(guarded_targets);
++                                drop(guarded_sessions);
++                                if target_is_guarded {
++                                    guard.session_ids.write().await.insert(sid.clone());
++                                    if target_supports_credential_fetch_controls(target) {
++                                        guard.fetch_session_ids.write().await.insert(sid.clone());
++                                    }
++                                    guard
++                                        .target_ids
++                                        .write()
++                                        .await
++                                        .insert(target.target_id.clone());
++                                }
++                            }
++                        }
+                         let target_needs_controls = target_info
+                             .as_ref()
+                             .is_some_and(target_supports_network_controls);
+
+                         let df = domain_filter.read().await.clone();
+                         let has_proxy_creds = proxy_credentials.read().await.is_some();
+-                        let controls_active = df.is_some() || has_proxy_creds;
+-                        let controls_result = if controls_active && target_needs_controls {
++                        let has_credential_guard = target_is_guarded;
++                        let controls_active =
++                            df.is_some() || has_proxy_creds || has_credential_guard;
++                        let controls_result: Result<(), String> = if controls_active
++                            && target_needs_controls
++                        {
+                             async {
+                                 if let Some(ref target) = target_info {
+                                     prepare_network_control_target_session(&client, &sid, target)
+@@ -799,7 +887,27 @@ impl DaemonState {
+                                     }
+                                 } else {
+                                     Ok(())
++                                }?;
++                                if has_credential_guard
++                                    && target_info
++                                        .as_ref()
++                                        .is_some_and(target_supports_credential_fetch_controls)
++                                {
++                                    client
++                                        .send_command(
++                                            "Fetch.enable",
++                                            Some(json!({
++                                                "patterns": [{
++                                                    "urlPattern": "*",
++                                                    "requestStage": "Request"
++                                                }],
++                                                "handleAuthRequests": has_proxy_creds
++                                            })),
++                                            Some(&sid),
++                                        )
++                                        .await?;
+                                 }
++                                Ok(())
+                             }
+                             .await
+                         } else {
+@@ -815,12 +923,20 @@ impl DaemonState {
+                                 )
+                                 .await;
+                         } else if let Err(error) = controls_result {
++                            if let Some(guard) = guard {
++                                guard.blocked.store(2, Ordering::SeqCst);
++                            }
+                             eprintln!(
+                                 "Failed to apply browser network controls to auto-attached target: {}",
+                                 error
+                             );
+                         }
+                     }
++                    Ok(event) if event.method == "Target.detachedFromTarget" => {
++                        if let Some(sid) = event.params.get("sessionId").and_then(Value::as_str) {
++                            auto_attached_sessions.write().await.remove(sid);
++                        }
++                    }
+                     Ok(event) if event.method == "Fetch.requestPaused" => {
+                         let request_id = event
+                             .params
+@@ -857,6 +973,34 @@ impl DaemonState {
+                             request_headers,
+                         };
+
++                        let guard = credential_navigation_guard.read().await.clone();
++                        if let Some(guard) = guard {
++                            let guarded_session =
++                                guard.session_ids.read().await.contains(&paused.session_id);
++                            let wrong_origin = guarded_session
++                                && request_origin(&paused.url).as_deref()
++                                    != Some(guard.credential_origin.as_str());
++                            if wrong_origin {
++                                guard.blocked_requests.write().await.insert(format!(
++                                    "{} {}",
++                                    paused.resource_type,
++                                    request_origin(&paused.url)
++                                        .unwrap_or_else(|| "invalid-origin".to_string())
++                                ));
++                                let _ = client
++                                    .send_command(
++                                        "Fetch.failRequest",
++                                        Some(json!({
++                                            "requestId": paused.request_id,
++                                            "errorReason": "BlockedByClient"
++                                        })),
++                                        Some(&paused.session_id),
++                                    )
++                                    .await;
++                                continue;
++                            }
++                        }
++
+                         let df = domain_filter.read().await;
+                         let rt = routes.read().await;
+                         let oh = origin_headers.read().await;
+@@ -2166,6 +2310,7 @@ async fn close_active_provider_session(state: &mut DaemonState) {
+ }
+
+ pub(crate) async fn close_current_browser(state: &mut DaemonState) -> Result<(), String> {
++    let browser_was_present = state.browser.is_some();
+     let close_error = if let Some(mut mgr) = state.browser.take() {
+         mgr.close().await.err()
+     } else {
+@@ -2175,6 +2320,7 @@ pub(crate) async fn close_current_browser(state: &mut DaemonState) -> Result<(),
+     close_active_provider_session(state).await;
+     state.launch_hash = None;
+     state.network_auto_attach_installed = false;
++    state.auto_attached_sessions.write().await.clear();
+     state.iframe_sessions.clear();
+     state.active_iframe_sessions.clear();
+     state.webmcp.clear_all();
+@@ -2185,6 +2331,9 @@ pub(crate) async fn close_current_browser(state: &mut DaemonState) -> Result<(),
+     if let Some(err) = close_error {
+         return Err(err);
+     }
++    if browser_was_present {
++        *state.credential_navigation_guard.write().await = None;
++    }
+     Ok(())
+ }
+
+@@ -3357,6 +3506,18 @@ fn target_supports_network_controls(target: &TargetInfo) -> bool {
+     target.target_type == "iframe" || should_track_target(target) || target_is_worker_like(target)
+ }
+
++fn target_supports_credential_fetch_controls(target: &TargetInfo) -> bool {
++    target_supports_network_controls(target)
++        && (!target_is_worker_like(target) || target_supports_worker_fetch_controls(target))
++}
++
++fn target_type_supports_credential_fetch_controls(target_type: &str) -> bool {
++    matches!(
++        target_type,
++        "page" | "webview" | "iframe" | "service_worker"
++    )
++}
++
+ async fn prepare_network_control_target_session(
+     client: &CdpClient,
+     session_id: &str,
+@@ -10798,6 +10959,13 @@ async fn build_fetch_patterns(state: &DaemonState) -> Vec<Value> {
+     let has_domain_filter = state.domain_filter.read().await.is_some();
+     let has_origin_headers = !state.origin_headers.read().await.is_empty();
+     let has_proxy_creds = state.proxy_credentials.read().await.is_some();
++    let has_credential_guard = state.credential_navigation_guard.read().await.is_some();
++    if has_credential_guard {
++        patterns.push(json!({
++            "urlPattern": "*",
++            "requestStage": "Request"
++        }));
++    }
+     if (has_domain_filter || has_origin_headers || has_proxy_creds)
+         && !patterns.iter().any(|p| p["urlPattern"] == "*")
+     {
+@@ -10806,6 +10974,22 @@ async fn build_fetch_patterns(state: &DaemonState) -> Vec<Value> {
+     patterns
+ }
+
++async fn refresh_fetch_interception(state: &DaemonState, session_id: &str) -> Result<(), String> {
++    let mgr = state.browser.as_ref().ok_or("Browser not launched")?;
++    let patterns = build_fetch_patterns(state).await;
++    if patterns.is_empty() {
++        mgr.client
++            .send_command("Fetch.disable", None, Some(session_id))
++            .await?;
++    } else {
++        let params = build_fetch_enable_params(state, patterns).await;
++        mgr.client
++            .send_command("Fetch.enable", Some(params), Some(session_id))
++            .await?;
++    }
++    Ok(())
++}
++
+ /// Build the full Fetch.enable params object, including `handleAuthRequests`
+ /// when proxy credentials are configured.
+ async fn build_fetch_enable_params(state: &DaemonState, patterns: Vec<Value>) -> Value {
+@@ -11161,6 +11345,342 @@ async fn wait_for_any_selector(
+     }
+ }
+
++async fn call_main_frame_function(
++    client: &CdpClient,
++    session_id: &str,
++    function_declaration: &str,
++    arguments: Vec<Value>,
++) -> Result<Value, String> {
++    let global = client
++        .send_command(
++            "Runtime.evaluate",
++            Some(json!({ "expression": "globalThis" })),
++            Some(session_id),
++        )
++        .await?;
++    let object_id = global
++        .get("result")
++        .and_then(|result| result.get("objectId"))
++        .and_then(Value::as_str)
++        .ok_or("Could not bind the main-frame document")?;
++    let result = client
++        .send_command(
++            "Runtime.callFunctionOn",
++            Some(json!({
++                "objectId": object_id,
++                "functionDeclaration": function_declaration,
++                "arguments": arguments
++                    .into_iter()
++                    .map(|value| json!({ "value": value }))
++                    .collect::<Vec<_>>(),
++                "returnByValue": true,
++                "awaitPromise": false,
++            })),
++            Some(session_id),
++        )
++        .await?;
++    if result.get("exceptionDetails").is_some() {
++        return Err("Destination-checked login script failed".to_string());
++    }
++    result
++        .get("result")
++        .and_then(|remote| remote.get("value"))
++        .cloned()
++        .ok_or_else(|| "Destination-checked login returned no result".to_string())
++}
++
++async fn destination_checked_submit(
++    client: &CdpClient,
++    session_id: &str,
++    expected_url: Option<&str>,
++    credential_origin: &str,
++    fields: &[(&str, &str)],
++    submit_selector: &str,
++    stage: &str,
++) -> Result<(), String> {
++    let script = r#"function(expectedUrl, credentialOrigin, fields, submitSelector) {
++        const originalDocument = document;
++        const fail = error => ({ ok: false, error });
++        if (window !== window.top) return fail('not-main-frame');
++        if (expectedUrl !== null && location.href !== expectedUrl) return fail('wrong-url');
++        if (location.origin !== credentialOrigin) return fail('wrong-origin');
++
++        const elements = [];
++        for (const [selector] of fields) {
++            const matches = originalDocument.querySelectorAll(selector);
++            if (matches.length !== 1) return fail('field-selector');
++            const element = matches[0];
++            if (!(element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement)) {
++                return fail('field-type');
++            }
++            elements.push(element);
++        }
++        const submitMatches = originalDocument.querySelectorAll(submitSelector);
++        if (submitMatches.length !== 1) return fail('submit-selector');
++        const submit = submitMatches[0];
++        const form = elements[0].form;
++        if (elements.some(element => element.form !== form) || submit.form !== form) {
++            return fail('form-mismatch');
++        }
++        if (form !== null) {
++            if (new URL(form.action, originalDocument.baseURI).origin !== credentialOrigin) {
++                return fail('form-origin');
++            }
++            if (form.target && form.target.toLowerCase() !== '_self') return fail('form-target');
++        }
++
++        const inputSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
++        const textareaSetter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set;
++        for (let index = 0; index < elements.length; index++) {
++            const element = elements[index];
++            const setter = element instanceof HTMLInputElement ? inputSetter : textareaSetter;
++            setter.call(element, fields[index][1]);
++            element.dispatchEvent(new Event('input', { bubbles: true }));
++            element.dispatchEvent(new Event('change', { bubbles: true }));
++            if (document !== originalDocument || location.origin !== credentialOrigin) {
++                return fail('document-replaced');
++            }
++        }
++        if (expectedUrl !== null && location.href !== expectedUrl) return fail('url-changed');
++        if (elements.some(element => element.ownerDocument !== originalDocument || element.form !== form)) {
++            return fail('document-replaced');
++        }
++        if (submit.ownerDocument !== originalDocument || submit.form !== form) return fail('form-replaced');
++        if (form !== null) {
++            if (new URL(form.action, originalDocument.baseURI).origin !== credentialOrigin) {
++                return fail('form-origin-changed');
++            }
++            if (form.target && form.target.toLowerCase() !== '_self') return fail('form-target-changed');
++        }
++        submit.click();
++        return { ok: true };
++    }"#;
++    let result = call_main_frame_function(
++        client,
++        session_id,
++        script,
++        vec![
++            expected_url.map(Value::from).unwrap_or(Value::Null),
++            Value::from(credential_origin),
++            Value::Array(
++                fields
++                    .iter()
++                    .map(|(selector, value)| json!([selector, value]))
++                    .collect(),
++            ),
++            Value::from(submit_selector),
++        ],
++    )
++    .await?;
++    if result.get("ok").and_then(Value::as_bool) == Some(true) {
++        Ok(())
++    } else {
++        let reason = result
++            .get("error")
++            .and_then(Value::as_str)
++            .filter(|reason| {
++                matches!(
++                    *reason,
++                    "not-main-frame"
++                        | "wrong-url"
++                        | "wrong-origin"
++                        | "field-selector"
++                        | "field-type"
++                        | "submit-selector"
++                        | "form-mismatch"
++                        | "form-origin"
++                        | "form-target"
++                        | "document-replaced"
++                        | "url-changed"
++                        | "form-replaced"
++                        | "form-origin-changed"
++                        | "form-target-changed"
++                )
++            })
++            .unwrap_or("unknown");
++        Err(format!(
++            "Destination check rejected {stage} credential submission: {reason}"
++        ))
++    }
++}
++
++async fn wait_for_provider_login_state(
++    client: &CdpClient,
++    session_id: &str,
++    expected_url: &str,
++    marker_selector: &str,
++    marker_value: &str,
++    otp_selector: Option<&str>,
++    blocked: &AtomicU8,
++    timeout_ms: u64,
++) -> Result<&'static str, String> {
++    let deadline = tokio::time::Instant::now() + tokio::time::Duration::from_millis(timeout_ms);
++    let mut last_state = None;
++    let script = r#"function(expectedUrl, markerSelector, markerValue, otpSelector) {
++        let state = 'waiting';
++        let markerMatches = document.querySelectorAll(markerSelector);
++        let markerMatched = markerMatches.length === 1 && (markerMatches[0].textContent || '').includes(markerValue);
++        if (location.href === expectedUrl) {
++            if (markerMatched) state = 'authenticated';
++        }
++        const otpPresent = otpSelector !== null && location.origin === new URL(expectedUrl).origin && document.querySelector(otpSelector) !== null;
++        if (state === 'waiting' && otpPresent) {
++            state = 'otp';
++        }
++        return {
++            state,
++            origin: location.origin,
++            pathname: location.pathname,
++            expectedDestinationReached: location.href === expectedUrl,
++            markerCount: markerMatches.length,
++            markerMatched,
++            otpPresent,
++        };
++    }"#;
++    loop {
++        let blocked_reason = blocked.load(Ordering::SeqCst);
++        if blocked_reason != 0 {
++            let reason = match blocked_reason {
++                2 => "descendant interception setup",
++                _ => "unknown",
++            };
++            return Err(format!(
++                "Credential login was blocked to keep it on its approved origin: {reason}"
++            ));
++        }
++        if let Ok(result) = call_main_frame_function(
++            client,
++            session_id,
++            script,
++            vec![
++                Value::from(expected_url),
++                Value::from(marker_selector),
++                Value::from(marker_value),
++                otp_selector.map(Value::from).unwrap_or(Value::Null),
++            ],
++        )
++        .await
++        {
++            match result.get("state").and_then(Value::as_str) {
++                Some("authenticated") => return Ok("authenticated"),
++                Some("otp") => return Ok("otp"),
++                _ => last_state = Some(result),
++            }
++        }
++        if tokio::time::Instant::now() >= deadline {
++            let detail = last_state
++                .as_ref()
++                .map(|state| {
++                    format!(
++                        "observed={}{}; expectedDestinationReached={}; markerCount={}; markerMatched={}; otpPresent={}",
++                        state.get("origin").and_then(Value::as_str).unwrap_or("unknown"),
++                        state.get("pathname").and_then(Value::as_str).unwrap_or(""),
++                        state
++                            .get("expectedDestinationReached")
++                            .and_then(Value::as_bool)
++                            .unwrap_or(false),
++                        state.get("markerCount").and_then(Value::as_u64).unwrap_or(0),
++                        state
++                            .get("markerMatched")
++                            .and_then(Value::as_bool)
++                            .unwrap_or(false),
++                        state
++                            .get("otpPresent")
++                            .and_then(Value::as_bool)
++                            .unwrap_or(false),
++                    )
++                })
++                .unwrap_or_else(|| "page state unavailable".to_string());
++            return Err(format!(
++                "Login destination or account identity was not verified: {detail}"
++            ));
++        }
++        tokio::time::sleep(tokio::time::Duration::from_millis(
++            AUTH_LOGIN_SELECTOR_POLL_INTERVAL_MS,
++        ))
++        .await;
++    }
++}
++
++async fn close_and_confirm_credential_targets(
++    client: &CdpClient,
++    target_ids: &HashSet<String>,
++) -> Result<(), String> {
++    for target_id in target_ids {
++        let _ = client
++            .send_command(
++                "Target.closeTarget",
++                Some(json!({ "targetId": target_id })),
++                None,
++            )
++            .await;
++    }
++
++    let deadline = tokio::time::Instant::now() + tokio::time::Duration::from_secs(2);
++    loop {
++        if let Ok(result) = client
++            .send_command_no_params("Target.getTargets", None)
++            .await
++        {
++            if let Some(targets) = result.get("targetInfos").and_then(Value::as_array) {
++                let any_open = targets.iter().any(|target| {
++                    target
++                        .get("targetId")
++                        .and_then(Value::as_str)
++                        .is_some_and(|target_id| target_ids.contains(target_id))
++                });
++                if !any_open {
++                    return Ok(());
++                }
++            }
++        }
++        if tokio::time::Instant::now() >= deadline {
++            return Err(
++                "Could not confirm closure of the failed credential login target; network interception remains active"
++                    .to_string(),
++            );
++        }
++        tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
++    }
++}
++
++async fn finish_credential_navigation_guard(
++    state: &DaemonState,
++    succeeded: bool,
++) -> Result<(), String> {
++    let guard = state
++        .credential_navigation_guard
++        .read()
++        .await
++        .clone()
++        .ok_or("Credential navigation guard was unexpectedly absent")?;
++    let mgr = state.browser.as_ref().ok_or(
++        "Could not close credential login because the browser is unavailable; network interception remains active",
++    )?;
++
++    if !succeeded {
++        let target_ids = guard.target_ids.read().await.clone();
++        close_and_confirm_credential_targets(&mgr.client, &target_ids).await?;
++        *state.credential_navigation_guard.write().await = None;
++        return Ok(());
++    }
++
++    let session_ids = guard.fetch_session_ids.read().await.clone();
++    *state.credential_navigation_guard.write().await = None;
++    for session_id in session_ids {
++        if let Err(error) = refresh_fetch_interception(state, &session_id).await {
++            *state.credential_navigation_guard.write().await = Some(guard.clone());
++            let target_ids = guard.target_ids.read().await.clone();
++            close_and_confirm_credential_targets(&mgr.client, &target_ids).await?;
++            *state.credential_navigation_guard.write().await = None;
++            return Err(format!(
++                "Could not remove credential network interception: {error}; closed the login target"
++            ));
++        }
++    }
++    Ok(())
++}
++
+ async fn handle_auth_save(cmd: &Value) -> Result<Value, String> {
+     let name = cmd
+         .get("name")
+@@ -11201,14 +11721,20 @@ async fn handle_auth_login(cmd: &Value, state: &mut DaemonState) -> Result<Value
+         return Err("Browser not launched".to_string());
+     }
+     let url_override = cmd.get("url").and_then(|v| v.as_str());
+-    let cred = if let Some(provider) = cmd.get("credentialProvider").and_then(|v| v.as_str()) {
++    if let Some(provider) = cmd.get("credentialProvider").and_then(|v| v.as_str()) {
++        if ["usernameSelector", "passwordSelector", "submitSelector"]
++            .iter()
++            .any(|field| cmd.get(field).is_some())
++        {
++            return Err("Credential provider login does not allow selector overrides".to_string());
++        }
+         let command_plugins = cmd
+             .get("plugins")
+             .and_then(|v| {
+                 serde_json::from_value::<Vec<crate::plugins::PluginConfig>>(v.clone()).ok()
+             })
+             .unwrap_or_else(crate::plugins::plugins_from_env);
+-        let resolved = crate::plugins::resolve_credential_with_plugins(
++        let credential = crate::plugins::resolve_credential_with_plugins(
+             provider,
+             &command_plugins,
+             crate::plugins::CredentialResolveRequest {
+@@ -11218,27 +11744,195 @@ async fn handle_auth_login(cmd: &Value, state: &mut DaemonState) -> Result<Value
+             },
+         )
+         .await?;
+-        auth::AuthProfile {
+-            name: name.to_string(),
+-            url: url_override
+-                .map(String::from)
+-                .or(resolved.url)
+-                .unwrap_or_default(),
+-            username: resolved.username,
+-            password: resolved.password,
+-            username_selector: resolved.username_selector,
+-            password_selector: resolved.password_selector,
+-            submit_selector: resolved.submit_selector,
+-            created_at: None,
+-            last_login_at: None,
++        if url_override.is_some_and(|url| url != credential.url) {
++            return Err("Credential provider returned a different login URL".to_string());
+         }
+-    } else {
+-        let mut profile = auth::credentials_get_full(name)?;
+-        if let Some(url) = url_override {
+-            profile.url = url.to_string();
++        let auth_timeout_ms = state.timeout_ms(cmd);
++        let install_auto_attach = !state.network_auto_attach_installed;
++        let (client, session_id, target_id) = {
++            let mgr = state.browser.as_mut().ok_or("Browser not launched")?;
++            if mgr.is_direct_page_connection() {
++                return Err(
++                    "Credential provider login requires browser-level target auto-attach to contain descendant network requests"
++                        .to_string(),
++                );
++            }
++            mgr.navigate(&credential.url, AUTH_LOGIN_WAIT_UNTIL).await?;
++            if install_auto_attach {
++                mgr.enable_browser_auto_attach_pub().await?;
++            }
++            (
++                mgr.client.clone(),
++                mgr.active_session_id()?.to_string(),
++                mgr.active_target_id()?.to_string(),
++            )
++        };
++        if install_auto_attach {
++            state.network_auto_attach_installed = true;
++        }
++        let blocked = Arc::new(AtomicU8::new(0));
++        let attached_targets = state.auto_attached_sessions.read().await.clone();
++        let mut session_ids = HashSet::from([session_id.clone()]);
++        let mut fetch_session_ids = HashSet::from([session_id.clone()]);
++        let mut target_ids = HashSet::from([target_id]);
++        loop {
++            let mut changed = false;
++            for (attached_session_id, attached) in &attached_targets {
++                if attached
++                    .parent_session_id
++                    .as_deref()
++                    .is_some_and(|parent| session_ids.contains(parent))
++                    || attached
++                        .opener_id
++                        .as_deref()
++                        .is_some_and(|opener| target_ids.contains(opener))
++                    || (matches!(
++                        attached.target_type.as_str(),
++                        "worker" | "service_worker" | "shared_worker"
++                    ) && request_origin(&attached.url).as_deref()
++                        == Some(credential.credential_origin.as_str()))
++                    || target_ids.contains(&attached.target_id)
++                {
++                    changed |= session_ids.insert(attached_session_id.clone());
++                    if target_type_supports_credential_fetch_controls(&attached.target_type) {
++                        fetch_session_ids.insert(attached_session_id.clone());
++                    }
++                    changed |= target_ids.insert(attached.target_id.clone());
++                }
++            }
++            if !changed {
++                break;
++            }
+         }
+-        profile
+-    };
++        *state.credential_navigation_guard.write().await = Some(CredentialNavigationGuard {
++            credential_origin: credential.credential_origin.clone(),
++            session_ids: Arc::new(RwLock::new(session_ids.clone())),
++            fetch_session_ids: Arc::new(RwLock::new(fetch_session_ids.clone())),
++            target_ids: Arc::new(RwLock::new(target_ids)),
++            blocked_requests: Arc::new(RwLock::new(HashSet::new())),
++            blocked: blocked.clone(),
++        });
++        for guarded_session_id in fetch_session_ids {
++            if let Err(error) = refresh_fetch_interception(state, &guarded_session_id).await {
++                let cleanup = finish_credential_navigation_guard(state, false).await;
++                return Err(match cleanup {
++                    Ok(()) => error,
++                    Err(cleanup_error) => format!("{error}; {cleanup_error}"),
++                });
++            }
++        }
++
++        let login_result: Result<(), String> = async {
++            wait_for_selector(
++                &client,
++                &session_id,
++                &credential.username_selector,
++                "visible",
++                auth_timeout_ms,
++            )
++            .await
++            .map_err(|_| "Timed out waiting for approved login form".to_string())?;
++            destination_checked_submit(
++                &client,
++                &session_id,
++                Some(&credential.url),
++                &credential.credential_origin,
++                &[
++                    (&credential.username_selector, &credential.username),
++                    (&credential.password_selector, &credential.password),
++                ],
++                &credential.submit_selector,
++                "primary",
++            )
++            .await?;
++
++            let state_result = wait_for_provider_login_state(
++                &client,
++                &session_id,
++                &credential.expected_post_login_url,
++                &credential.account_marker_selector,
++                &credential.account_marker_value,
++                credential.otp_selector.as_deref(),
++                &blocked,
++                auth_timeout_ms,
++            )
++            .await?;
++            if state_result == "otp" {
++                let otp = credential.otp.as_deref().ok_or("Credential has no OTP")?;
++                let otp_selector = credential
++                    .otp_selector
++                    .as_deref()
++                    .ok_or("Credential has no OTP selector")?;
++                let otp_submit_selector = credential
++                    .otp_submit_selector
++                    .as_deref()
++                    .ok_or("Credential has no OTP submit selector")?;
++                destination_checked_submit(
++                    &client,
++                    &session_id,
++                    None,
++                    &credential.credential_origin,
++                    &[(otp_selector, otp)],
++                    otp_submit_selector,
++                    "OTP",
++                )
++                .await?;
++                wait_for_provider_login_state(
++                    &client,
++                    &session_id,
++                    &credential.expected_post_login_url,
++                    &credential.account_marker_selector,
++                    &credential.account_marker_value,
++                    None,
++                    &blocked,
++                    auth_timeout_ms,
++                )
++                .await?;
++            }
++            Ok(())
++        }
++        .await;
++        let blocked_requests = state
++            .credential_navigation_guard
++            .read()
++            .await
++            .as_ref()
++            .map(|guard| guard.blocked_requests.clone());
++        let login_result = match (login_result, blocked_requests) {
++            (Err(error), Some(blocked_requests)) => {
++                let mut blocked_requests = blocked_requests
++                    .read()
++                    .await
++                    .iter()
++                    .cloned()
++                    .collect::<Vec<_>>();
++                blocked_requests.sort();
++                if blocked_requests.is_empty() {
++                    Err(error)
++                } else {
++                    Err(format!(
++                        "{error}; blockedOffOrigin={}",
++                        serde_json::to_string(&blocked_requests)
++                            .unwrap_or_else(|_| "[]".to_string())
++                    ))
++                }
++            }
++            (result, _) => result,
++        };
++        let cleanup_result = finish_credential_navigation_guard(state, login_result.is_ok()).await;
++        match (login_result, cleanup_result) {
++            (Err(error), Err(cleanup_error)) => return Err(format!("{error}; {cleanup_error}")),
++            (Err(error), Ok(())) => return Err(error),
++            (Ok(()), Err(cleanup_error)) => return Err(cleanup_error),
++            (Ok(()), Ok(())) => {}
++        }
++        return Ok(json!({ "loggedIn": true, "name": name, "verified": true }));
++    }
++
++    let mut cred = auth::credentials_get_full(name)?;
++    if let Some(url) = url_override {
++        cred.url = url.to_string();
++    }
+     if cred.url.is_empty() {
+         return Err("Credential has no URL".to_string());
+     }
+@@ -15442,6 +16136,72 @@ printf '%s' '{"protocol":"agent-browser.plugin.v1","success":true,"browser":{"cd
+         );
+     }
+
++    #[test]
++    fn test_credential_guard_uses_exact_origin() {
++        assert_eq!(
++            request_origin("https://login.example.test:8443/session?next=1").as_deref(),
++            Some("https://login.example.test:8443")
++        );
++        assert_ne!(
++            request_origin("https://login.example.test/session").as_deref(),
++            Some("https://login.example.test:8443")
++        );
++        assert_eq!(request_origin("not a URL"), None);
++    }
++
++    #[tokio::test]
++    async fn test_credential_guard_intercepts_every_request() {
++        let state = DaemonState::new();
++        *state.credential_navigation_guard.write().await = Some(CredentialNavigationGuard {
++            credential_origin: "https://login.example.test".to_string(),
++            session_ids: Arc::new(RwLock::new(HashSet::from(["page".to_string()]))),
++            fetch_session_ids: Arc::new(RwLock::new(HashSet::from(["page".to_string()]))),
++            target_ids: Arc::new(RwLock::new(HashSet::from(["target".to_string()]))),
++            blocked_requests: Arc::new(RwLock::new(HashSet::new())),
++            blocked: Arc::new(AtomicU8::new(0)),
++        });
++
++        let patterns = build_fetch_patterns(&state).await;
++        assert_eq!(
++            patterns,
++            vec![json!({ "urlPattern": "*", "requestStage": "Request" })]
++        );
++    }
++
++    #[test]
++    fn test_credential_guard_skips_non_renderer_wrapper_sessions() {
++        assert!(target_type_supports_credential_fetch_controls("page"));
++        assert!(target_type_supports_credential_fetch_controls("iframe"));
++        assert!(target_type_supports_credential_fetch_controls(
++            "service_worker"
++        ));
++        assert!(!target_type_supports_credential_fetch_controls("worker"));
++        assert!(!target_type_supports_credential_fetch_controls(
++            "shared_worker"
++        ));
++        assert!(!target_type_supports_credential_fetch_controls("tab"));
++        assert!(!target_type_supports_credential_fetch_controls("browser"));
++    }
++
++    #[tokio::test]
++    async fn test_failed_guard_cleanup_retains_interception_without_browser() {
++        let state = DaemonState::new();
++        *state.credential_navigation_guard.write().await = Some(CredentialNavigationGuard {
++            credential_origin: "https://login.example.test".to_string(),
++            session_ids: Arc::new(RwLock::new(HashSet::from(["page".to_string()]))),
++            fetch_session_ids: Arc::new(RwLock::new(HashSet::from(["page".to_string()]))),
++            target_ids: Arc::new(RwLock::new(HashSet::from(["target".to_string()]))),
++            blocked_requests: Arc::new(RwLock::new(HashSet::new())),
++            blocked: Arc::new(AtomicU8::new(0)),
++        });
++
++        let error = finish_credential_navigation_guard(&state, false)
++            .await
++            .unwrap_err();
++        assert!(error.contains("interception remains active"));
++        assert!(state.credential_navigation_guard.read().await.is_some());
++    }
++
+     #[test]
+     fn test_auth_login_waits_for_load_event() {
+         use super::super::browser::WaitUntil;
+diff --git a/cli/src/native/daemon.rs b/cli/src/native/daemon.rs
+index 28689d2..deae896 100644
+--- a/cli/src/native/daemon.rs
++++ b/cli/src/native/daemon.rs
+@@ -18,7 +18,7 @@ use super::actions::{
+ use super::cdp::client::CdpClient;
+ use super::state;
+ use super::stream::{IdleActivity, StreamServer};
+-use crate::connection::INTERNAL_DAEMON_SHUTDOWN_ACTION;
++use crate::connection::{DAEMON_BUILD_ID, INTERNAL_DAEMON_SHUTDOWN_ACTION};
+
+ pub async fn run_daemon(session: &str) {
+     let socket_dir = get_daemon_socket_dir();
+@@ -67,7 +67,7 @@ pub async fn run_daemon(session: &str) {
+     let _ = fs::write(&pid_path, process::id().to_string());
+
+     let version_path = socket_dir.join(format!("{}.version", session));
+-    let _ = fs::write(&version_path, env!("CARGO_PKG_VERSION"));
++    let _ = fs::write(&version_path, DAEMON_BUILD_ID);
+
+     // On Unix the daemon listens on a Unix domain socket; on Windows it uses
+     // TCP, so there is no .sock file — only a .port file written by the server.
+diff --git a/cli/src/native/e2e_tests.rs b/cli/src/native/e2e_tests.rs
+index c133ba9..c4503c0 100644
+--- a/cli/src/native/e2e_tests.rs
++++ b/cli/src/native/e2e_tests.rs
+@@ -10,6 +10,7 @@
+ use base64::{engine::general_purpose::STANDARD, Engine};
+ use futures_util::StreamExt;
+ use serde_json::{json, Value};
++use std::sync::atomic::AtomicBool;
+ use std::sync::{Arc, Mutex};
+ use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+@@ -5273,6 +5274,412 @@ async fn e2e_auth_login_waits_for_delayed_spa_form_render() {
+     assert_success(&close);
+ }
+
++#[cfg(unix)]
++fn write_safe_login_plugin(credential: Value) -> (tempfile::TempDir, crate::plugins::PluginConfig) {
++    use std::os::unix::fs::PermissionsExt;
++
++    let directory = tempfile::tempdir().unwrap();
++    let path = directory.path().join("credential-plugin");
++    let response = json!({
++        "protocol": crate::plugins::PROTOCOL_VERSION,
++        "success": true,
++        "credential": credential,
++    });
++    std::fs::write(
++        &path,
++        format!(
++            "#!/bin/sh\ncat >/dev/null\nprintf '%s' '{}'\n",
++            response.to_string()
++        ),
++    )
++    .unwrap();
++    let mut permissions = std::fs::metadata(&path).unwrap().permissions();
++    permissions.set_mode(0o700);
++    std::fs::set_permissions(&path, permissions).unwrap();
++    let plugin = crate::plugins::PluginConfig {
++        name: "safe-test".to_string(),
++        command: path.to_string_lossy().to_string(),
++        capabilities: vec![crate::plugins::CAPABILITY_CREDENTIAL_READ.to_string()],
++        ..crate::plugins::PluginConfig::default()
++    };
++    (directory, plugin)
++}
++
++async fn start_safe_login_server(
++    mode: &'static str,
++) -> (String, Arc<Mutex<Vec<String>>>, tokio::task::JoinHandle<()>) {
++    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
++    let port = listener.local_addr().unwrap().port();
++    let base_url = format!("http://127.0.0.1:{}", port);
++    let requests = Arc::new(Mutex::new(Vec::new()));
++    let recorded = requests.clone();
++    let server_base = base_url.clone();
++    let handle = tokio::spawn(async move {
++        for _ in 0..100 {
++            let Ok((mut stream, _)) = listener.accept().await else {
++                break;
++            };
++            let recorded = recorded.clone();
++            let server_base = server_base.clone();
++            tokio::spawn(async move {
++                let mut buffer = vec![0u8; 16 * 1024];
++                let count = stream.read(&mut buffer).await.unwrap_or(0);
++                let request = String::from_utf8_lossy(&buffer[..count]);
++                let path = request
++                    .lines()
++                    .next()
++                    .and_then(|line| line.split_whitespace().nth(1))
++                    .unwrap_or("/")
++                    .to_string();
++                recorded.lock().unwrap().push(path.clone());
++
++                let (status, extra_headers, body) = if path == "/pre" {
++                    (
++                        "200 OK",
++                        "",
++                        "<!doctype html><iframe id=f src='/frame'></iframe>".to_string(),
++                    )
++                } else if path == "/frame" {
++                    ("200 OK", "", "<!doctype html><input id=decoy>".to_string())
++                } else if path == "/redirect" {
++                    (
++                        "302 Found",
++                        "Location: https://example.invalid/login\r\n",
++                        String::new(),
++                    )
++                } else {
++                    let action = if mode == "bad-action" {
++                        "https://example.invalid/session".to_string()
++                    } else {
++                        format!("{}/session", server_base)
++                    };
++                    let replacement = if mode == "replace-document" {
++                        "document.querySelector('#username').addEventListener('input', () => { document.open(); document.write(`<form action=\"https://example.invalid/session\"><input id=\"password\"><button id=\"submit\"></button></form>`); document.close(); });"
++                    } else if mode == "context-loss" {
++                        "document.querySelector('#username').addEventListener('input', () => location.reload());"
++                    } else {
++                        ""
++                    };
++                    let marker = if mode == "wrong-identity" {
++                        "different-user"
++                    } else {
++                        "synthetic-user"
++                    };
++                    let otp_flow = if mode == "formless-otp" {
++                        format!(
++                            "document.body.innerHTML = `<input id=\"otp\"><button id=\"otp-submit\" type=\"button\">Verify</button>`; document.querySelector('#otp-submit').addEventListener('click', () => {{ history.replaceState(null, '', '/account'); document.body.innerHTML = `<div id=\"account\">{marker}</div>`; }});"
++                        )
++                    } else {
++                        format!(
++                            "document.body.innerHTML = `<form id=\"otp-form\" action=\"{server_base}/otp\"><input id=\"otp\"><button id=\"otp-submit\" type=\"submit\">Verify</button></form>`; document.querySelector('#otp-form').addEventListener('submit', otpEvent => {{ otpEvent.preventDefault(); history.replaceState(null, '', '/account'); document.body.innerHTML = `<div id=\"account\">{marker}</div>`; }});"
++                        )
++                    };
++                    let body = format!(
++                        r#"<!doctype html><form id="login" action="{action}">
++<input id="username"><input id="password" type="password"><button id="submit" type="submit">Login</button></form>
++<script>
++{replacement}
++document.querySelector('#login').addEventListener('submit', event => {{
++  event.preventDefault();
++  {otp_flow}
++}});
++</script>"#,
++                    );
++                    ("200 OK", "", body)
++                };
++                let response = format!(
++                    "HTTP/1.1 {status}\r\nContent-Type: text/html\r\n{extra_headers}Content-Length: {}\r\nConnection: close\r\n\r\n{body}",
++                    body.len()
++                );
++                let _ = stream.write_all(response.as_bytes()).await;
++                let _ = stream.flush().await;
++            });
++        }
++    });
++    (base_url, requests, handle)
++}
++
++#[cfg(unix)]
++fn safe_login_credential(base_url: &str, login_path: &str, marker: &str) -> Value {
++    json!({
++        "username": "synthetic-user",
++        "password": "synthetic-password",
++        "otp": "123456",
++        "url": format!("{base_url}{login_path}"),
++        "credentialOrigin": base_url,
++        "usernameSelector": "#username",
++        "passwordSelector": "#password",
++        "submitSelector": "#submit",
++        "otpSelector": "#otp",
++        "otpSubmitSelector": "#otp-submit",
++        "expectedPostLoginUrl": format!("{base_url}/account"),
++        "accountMarkerSelector": "#account",
++        "accountMarkerValue": marker,
++    })
++}
++
++#[cfg(unix)]
++async fn run_safe_provider_login(mode: &'static str, login_path: &str, marker: &str) -> Value {
++    let (base_url, _requests, server) = start_safe_login_server(mode).await;
++    let (_plugin_dir, plugin) =
++        write_safe_login_plugin(safe_login_credential(&base_url, login_path, marker));
++    let mut state = DaemonState::new();
++    assert_success(
++        &execute_command(
++            &json!({ "id": "1", "action": "launch", "headless": true }),
++            &mut state,
++        )
++        .await,
++    );
++    if mode == "stale-frame" {
++        assert_success(
++            &execute_command(
++                &json!({ "id": "2", "action": "navigate", "url": format!("{base_url}/pre") }),
++                &mut state,
++            )
++            .await,
++        );
++        assert_success(
++            &execute_command(
++                &json!({ "id": "3", "action": "frame", "selector": "#f" }),
++                &mut state,
++            )
++            .await,
++        );
++    }
++    let login_target_id = state
++        .browser
++        .as_ref()
++        .unwrap()
++        .active_target_id()
++        .unwrap()
++        .to_string();
++    let mut command = json!({
++        "id": "4",
++        "action": "auth_login",
++        "name": "synthetic",
++        "credentialProvider": "safe-test",
++        "plugins": [plugin],
++        "timeout": 3000,
++    });
++    if mode == "selector-override" {
++        command["usernameSelector"] = json!("#other");
++    }
++    let response = execute_command(&command, &mut state).await;
++    if response["success"] == false
++        && matches!(
++            mode,
++            "bad-action" | "replace-document" | "context-loss" | "wrong-identity"
++        )
++    {
++        let targets = state
++            .browser
++            .as_ref()
++            .unwrap()
++            .client
++            .send_command_no_params("Target.getTargets", None)
++            .await
++            .expect("failed login closure should remain observable");
++        assert!(
++            targets["targetInfos"]
++                .as_array()
++                .unwrap()
++                .iter()
++                .all(|target| target["targetId"] != login_target_id),
++            "failed login target was not closed before browser cleanup: {response}"
++        );
++    }
++    let _ = execute_command(&json!({ "id": "99", "action": "close" }), &mut state).await;
++    server.abort();
++    response
++}
++
++#[cfg(unix)]
++#[tokio::test]
++#[ignore]
++async fn e2e_provider_login_is_destination_checked_and_supports_otp() {
++    let response = run_safe_provider_login("stale-frame", "/login", "synthetic-user").await;
++    assert_success(&response);
++    assert_eq!(get_data(&response)["verified"], true);
++
++    let response = run_safe_provider_login("formless-otp", "/login", "synthetic-user").await;
++    assert_success(&response);
++    assert_eq!(get_data(&response)["verified"], true);
++}
++
++#[cfg(unix)]
++#[tokio::test]
++#[ignore]
++async fn e2e_provider_login_rejects_wrong_destination_and_identity() {
++    for (mode, path, marker) in [
++        ("redirect", "/redirect", "synthetic-user"),
++        ("bad-action", "/login", "synthetic-user"),
++        ("replace-document", "/login", "synthetic-user"),
++        ("context-loss", "/login", "synthetic-user"),
++        ("wrong-identity", "/login", "synthetic-user"),
++        ("selector-override", "/login", "synthetic-user"),
++    ] {
++        let response = run_safe_provider_login(mode, path, marker).await;
++        assert_eq!(response["success"], false, "mode {mode}: {response}");
++    }
++}
++
++#[cfg(unix)]
++#[tokio::test]
++#[ignore]
++async fn e2e_provider_login_blocks_cross_origin_requests() {
++    let sink = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
++    let sink_port = sink.local_addr().unwrap().port();
++    let sink_requests = Arc::new(Mutex::new(Vec::new()));
++    let sink_paths = sink_requests.clone();
++    let sink_server = tokio::spawn(async move {
++        while let Ok((mut stream, _)) = sink.accept().await {
++            let mut request = vec![0u8; 4096];
++            let count = stream.read(&mut request).await.unwrap_or(0);
++            let path = String::from_utf8_lossy(&request[..count])
++                .lines()
++                .next()
++                .and_then(|line| line.split_whitespace().nth(1))
++                .unwrap_or("/")
++                .to_string();
++            sink_paths.lock().unwrap().push(path);
++            let _ = stream
++                .write_all(b"HTTP/1.1 204 No Content\r\nContent-Length: 0\r\n\r\n")
++                .await;
++        }
++    });
++
++    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
++    let port = listener.local_addr().unwrap().port();
++    let base_url = format!("http://127.0.0.1:{port}");
++    let approved_posts = Arc::new(std::sync::atomic::AtomicUsize::new(0));
++    let approved_count = approved_posts.clone();
++    let approved_credentials = Arc::new(AtomicBool::new(false));
++    let credential_match = approved_credentials.clone();
++    let approved_server = tokio::spawn(async move {
++        while let Ok((mut stream, _)) = listener.accept().await {
++            let approved_count = approved_count.clone();
++            let credential_match = credential_match.clone();
++            tokio::spawn(async move {
++                let mut request = vec![0u8; 16 * 1024];
++                let count = stream.read(&mut request).await.unwrap_or(0);
++                let request = String::from_utf8_lossy(&request[..count]);
++                let is_post = request.starts_with("POST /session ");
++                let (status, headers, body) = if is_post {
++                    approved_count.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
++                    credential_match.store(
++                        request.contains("name=\"username\"")
++                            && request.contains("synthetic-user")
++                            && request.contains("name=\"password\"")
++                            && request.contains("synthetic-password"),
++                        std::sync::atomic::Ordering::SeqCst,
++                    );
++                    ("204 No Content", String::new(), String::new())
++                } else {
++                    (
++                        "200 OK",
++                        String::new(),
++                        format!(
++                            r#"<!doctype html><form id="login" action="http://127.0.0.1:{port}/session" method="post"><input id="username" name="username"><input id="password" name="password"><button id="submit" type="submit">Login</button></form>
++<script>document.querySelector('#login').addEventListener('submit', event => {{
++event.preventDefault();
++fetch('/session', {{method: 'POST', body: new FormData(event.target)}});
++const frame = document.createElement('iframe');
++frame.src = 'about:blank';
++document.body.appendChild(frame);
++const popup = window.open('about:blank', '_blank');
++const worker = new Worker(URL.createObjectURL(new Blob([`onmessage = () => fetch('http://127.0.0.1:{sink_port}/worker-plain')`], {{type: 'text/javascript'}})));
++setTimeout(() => {{
++  fetch('http://127.0.0.1:{sink_port}/delayed-plain', {{mode: 'no-cors'}});
++  frame.src = 'http://127.0.0.1:{sink_port}/oopif-plain';
++  popup.location = 'http://127.0.0.1:{sink_port}/popup-plain';
++  worker.postMessage('go');
++}}, 250);
++}});</script>"#
++                        ),
++                    )
++                };
++                let response = format!(
++                    "HTTP/1.1 {status}\r\nContent-Type: text/html\r\n{headers}Content-Length: {}\r\nConnection: close\r\n\r\n{body}",
++                    body.len()
++                );
++                let _ = stream.write_all(response.as_bytes()).await;
++            });
++        }
++    });
++
++    let mut credential = safe_login_credential(&base_url, "/login", "synthetic-user");
++    credential.as_object_mut().unwrap().remove("otp");
++    credential.as_object_mut().unwrap().remove("otpSelector");
++    credential
++        .as_object_mut()
++        .unwrap()
++        .remove("otpSubmitSelector");
++    let (_plugin_dir, plugin) = write_safe_login_plugin(credential);
++    let mut state = DaemonState::new();
++    assert_success(
++        &execute_command(
++            &json!({ "id": "1", "action": "launch", "headless": true }),
++            &mut state,
++        )
++        .await,
++    );
++    let login_target_id = state
++        .browser
++        .as_ref()
++        .unwrap()
++        .active_target_id()
++        .unwrap()
++        .to_string();
++    let response = execute_command(
++        &json!({
++            "id": "2",
++            "action": "auth_login",
++            "name": "synthetic",
++            "credentialProvider": "safe-test",
++            "plugins": [plugin],
++            "timeout": 3000,
++        }),
++        &mut state,
++    )
++    .await;
++    assert_eq!(response["success"], false, "{response}");
++    assert!(
++        !response["error"]
++            .as_str()
++            .is_some_and(|error| error.contains("descendant interception setup")),
++        "credential guard should block off-origin requests without failing control installation: {response}"
++    );
++    let targets = state
++        .browser
++        .as_ref()
++        .unwrap()
++        .client
++        .send_command_no_params("Target.getTargets", None)
++        .await
++        .unwrap();
++    assert!(
++        targets["targetInfos"]
++            .as_array()
++            .unwrap()
++            .iter()
++            .all(|target| target["targetId"] != login_target_id),
++        "failed login target must close before whole-browser cleanup"
++    );
++    tokio::time::sleep(tokio::time::Duration::from_millis(300)).await;
++    assert_eq!(approved_posts.load(std::sync::atomic::Ordering::SeqCst), 1);
++    assert!(approved_credentials.load(std::sync::atomic::Ordering::SeqCst));
++    let leaked_requests = sink_requests.lock().unwrap().clone();
++    assert!(
++        leaked_requests.is_empty(),
++        "unapproved origin received requests: {leaked_requests:?}"
++    );
++    approved_server.abort();
++    sink_server.abort();
++    let close = execute_command(&json!({ "id": "99", "action": "close" }), &mut state).await;
++    assert_success(&close);
++}
++
+ // ---------------------------------------------------------------------------
+ // Origin-scoped --headers tests
+ // ---------------------------------------------------------------------------
+diff --git a/cli/src/plugins.rs b/cli/src/plugins.rs
+index bf286c9..7e524a6 100644
+--- a/cli/src/plugins.rs
++++ b/cli/src/plugins.rs
+@@ -12,11 +12,13 @@ use std::process::Stdio;
+ use tokio::io::AsyncWriteExt;
+
+ pub const PROTOCOL_VERSION: &str = "agent-browser.plugin.v1";
++pub const CREDENTIAL_CONTRACT: &str = "rfc0011-v1";
+ pub const TYPE_PLUGIN_MANIFEST: &str = "plugin.manifest";
+ pub const CAPABILITY_CREDENTIAL_READ: &str = "credential.read";
+ pub const CAPABILITY_BROWSER_PROVIDER: &str = "browser.provider";
+ pub const CAPABILITY_LAUNCH_MUTATE: &str = "launch.mutate";
+ pub const CAPABILITY_COMMAND_RUN: &str = "command.run";
++pub const CREDENTIAL_PLUGIN_TIMEOUT_SECS: u64 = 120;
+
+ #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+ #[serde(default, rename_all = "camelCase")]
+@@ -41,16 +43,20 @@ pub struct CredentialResolveRequest<'a> {
+ pub struct ResolvedCredential {
+     pub username: String,
+     pub password: String,
+-    #[serde(default)]
+-    pub url: Option<String>,
++    pub url: String,
+     #[serde(default)]
+     pub otp: Option<String>,
++    pub credential_origin: String,
++    pub username_selector: String,
++    pub password_selector: String,
++    pub submit_selector: String,
+     #[serde(default)]
+-    pub username_selector: Option<String>,
+-    #[serde(default)]
+-    pub password_selector: Option<String>,
++    pub otp_selector: Option<String>,
+     #[serde(default)]
+-    pub submit_selector: Option<String>,
++    pub otp_submit_selector: Option<String>,
++    pub expected_post_login_url: String,
++    pub account_marker_selector: String,
++    pub account_marker_value: String,
+ }
+
+ #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+@@ -280,11 +286,12 @@ pub async fn resolve_credential_with_plugins(
+         "credential.resolve",
+         CAPABILITY_CREDENTIAL_READ,
+         json!({
++            "credentialContract": CREDENTIAL_CONTRACT,
+             "profileName": request.profile_name,
+             "itemRef": request.item_ref,
+             "url": request.url,
+         }),
+-        15,
++        CREDENTIAL_PLUGIN_TIMEOUT_SECS,
+         false,
+     )
+     .await?;
+@@ -305,12 +312,48 @@ pub async fn resolve_credential_with_plugins(
+     let credential = response
+         .credential
+         .ok_or_else(|| format!("Credential plugin '{}' returned no credential", provider))?;
+-    if credential.username.is_empty() || credential.password.is_empty() {
++    if credential.username.is_empty()
++        || credential.password.is_empty()
++        || credential.url.is_empty()
++        || credential.credential_origin.is_empty()
++        || credential.username_selector.is_empty()
++        || credential.password_selector.is_empty()
++        || credential.submit_selector.is_empty()
++        || credential.expected_post_login_url.is_empty()
++        || credential.account_marker_selector.is_empty()
++        || credential.account_marker_value.is_empty()
++        || credential.otp.is_some() != credential.otp_selector.is_some()
++        || credential.otp.is_some() != credential.otp_submit_selector.is_some()
++    {
+         return Err(format!(
+             "Credential plugin '{}' returned an incomplete credential",
+             provider
+         ));
+     }
++    let credential_origin = url::Url::parse(&credential.credential_origin)
++        .ok()
++        .filter(|url| {
++            url.origin().ascii_serialization() == credential.credential_origin
++                && matches!(url.path(), "" | "/")
++                && url.query().is_none()
++                && url.fragment().is_none()
++        })
++        .map(|url| url.origin().ascii_serialization());
++    let login_origin = url::Url::parse(&credential.url)
++        .ok()
++        .map(|url| url.origin().ascii_serialization());
++    let expected_origin = url::Url::parse(&credential.expected_post_login_url)
++        .ok()
++        .map(|url| url.origin().ascii_serialization());
++    if credential_origin.is_none()
++        || credential_origin.as_ref() != login_origin.as_ref()
++        || credential_origin.as_ref() != expected_origin.as_ref()
++    {
++        return Err(format!(
++            "Credential plugin '{}' returned inconsistent destination policy",
++            provider
++        ));
++    }
+     Ok(credential)
+ }
+
+@@ -1143,10 +1186,14 @@ mod tests {
+         let plugin_path = dir.path().join("mock-credential-plugin");
+         std::fs::write(
+             &plugin_path,
+-            r#"#!/bin/sh
+-cat >/dev/null
+-printf '%s' '{"protocol":"agent-browser.plugin.v1","success":true,"credential":{"username":"user","password":"pass","url":"https://example.com/login"}}'
+-"#,
++            r##"#!/bin/sh
++request="$(cat)"
++case "$request" in
++  *'"credentialContract":"rfc0011-v1"'*) ;;
++  *) printf '%s' '{"protocol":"agent-browser.plugin.v1","success":false}'; exit 0 ;;
++esac
++printf '%s' '{"protocol":"agent-browser.plugin.v1","success":true,"credential":{"username":"user","password":"pass","url":"https://example.com/login","credentialOrigin":"https://example.com","usernameSelector":"#user","passwordSelector":"#pass","submitSelector":"#submit","expectedPostLoginUrl":"https://example.com/account","accountMarkerSelector":"#account","accountMarkerValue":"user"}}'
++"##,
+         )
+         .unwrap();
+         let mut perms = std::fs::metadata(&plugin_path).unwrap().permissions();
+@@ -1177,7 +1224,8 @@ printf '%s' '{"protocol":"agent-browser.plugin.v1","success":true,"credential":{
+
+         assert_eq!(credential.username, "user");
+         assert_eq!(credential.password, "pass");
+-        assert_eq!(credential.url.as_deref(), Some("https://example.com/login"));
++        assert_eq!(credential.url, "https://example.com/login");
++        assert_eq!(credential.credential_origin, "https://example.com");
+     }
+
+     #[cfg(unix)]

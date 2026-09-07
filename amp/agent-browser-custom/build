@@ -1,0 +1,75 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+source_dir="${AGENT_BROWSER_SOURCE_DIR:-$repo_root/.amp/vendor/agent-browser}"
+build_root="$repo_root/.amp/build"
+target_dir="${AGENT_BROWSER_TARGET_DIR:-$build_root/agent-browser-target}"
+install_dir="${AGENT_BROWSER_CUSTOM_INSTALL_DIR:-$HOME/.local/libexec/agent-browser-rfc0011}"
+cargo_home="${CARGO_HOME:-$HOME/.cargo}"
+rustup_home="${RUSTUP_HOME:-$HOME/.rustup}"
+commit="$(tr -d '[:space:]' <"$repo_root/amp/agent-browser-custom/upstream-commit")"
+patch="$repo_root/amp/agent-browser-custom/rfc0011.patch"
+fingerprint="$repo_root/amp/agent-browser-custom/fingerprint"
+build_fingerprint="$($fingerprint)"
+lock_dir="$repo_root/.amp/build/agent-browser-rfc0011.lock"
+tmp_binary="$install_dir/.agent-browser.$$"
+tmp_receipt="$install_dir/.build-input.sha256.$$"
+test_root=""
+
+mkdir -p "$build_root"
+if ! mkdir "$lock_dir" 2>/dev/null; then
+  echo "agent-browser build already running: $lock_dir" >&2
+  exit 1
+fi
+build_dir="$(mktemp -d /tmp/agent-browser-r11-build.XXXXXX)"
+trap 'rm -rf "$lock_dir" "$build_dir" "$test_root"; rm -f "$tmp_binary" "$tmp_receipt"' EXIT
+
+if [ ! -d "$source_dir/.git" ]; then
+  mkdir -p "$(dirname "$source_dir")"
+  git clone https://github.com/vercel-labs/agent-browser.git "$source_dir"
+fi
+git -C "$source_dir" cat-file -e "$commit^{commit}"
+
+git -C "$source_dir" archive "$commit" | tar -x -C "$build_dir"
+git -C "$build_dir" init -q
+git -C "$build_dir" apply "$patch"
+
+if [ "${AGENT_BROWSER_RUN_TESTS:-0}" = 1 ]; then
+  test_root="$(mktemp -d /tmp/agent-browser-r11.XXXXXX)"
+  test_home="$test_root/home"
+  test_runtime="$test_root/runtime"
+  mkdir -m 0700 "$test_home" "$test_runtime"
+  test_env=(
+    env
+    HOME="$test_home"
+    TMPDIR=/tmp
+    XDG_CONFIG_HOME="$test_home/.config"
+    XDG_RUNTIME_DIR="$test_runtime"
+    CARGO_HOME="$cargo_home"
+    RUSTUP_HOME="$rustup_home"
+    CARGO_TARGET_DIR="$target_dir"
+  )
+  "${test_env[@]}" cargo +nightly fmt --manifest-path "$build_dir/cli/Cargo.toml" -- --check
+  "${test_env[@]}" cargo +nightly test --manifest-path "$build_dir/cli/Cargo.toml" \
+    -- --test-threads=1
+  "${test_env[@]}" cargo +nightly test --manifest-path "$build_dir/cli/Cargo.toml" \
+      e2e_provider_login -- --ignored --test-threads=1
+fi
+
+CARGO_PROFILE_RELEASE_LTO=false \
+  CARGO_PROFILE_RELEASE_CODEGEN_UNITS=16 \
+  CARGO_TARGET_DIR="$target_dir" \
+  cargo +nightly build --release --manifest-path "$build_dir/cli/Cargo.toml"
+if [ "$($fingerprint)" != "$build_fingerprint" ]; then
+  echo "agent-browser build inputs changed during build; retry" >&2
+  exit 1
+fi
+mkdir -p "$install_dir"
+install -m 0755 "$target_dir/release/agent-browser" "$tmp_binary"
+printf '%s\n' "$build_fingerprint" >"$tmp_receipt"
+mv "$tmp_binary" "$install_dir/agent-browser"
+mv "$tmp_receipt" "$install_dir/build-input.sha256"
+chmod 0644 "$install_dir/build-input.sha256"
+
+echo "installed: $install_dir/agent-browser"
