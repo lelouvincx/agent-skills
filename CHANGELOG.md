@@ -9,6 +9,7 @@ and this project does not currently use versioned releases.
 
 ### Added
 
+- Add service-account token export for local Amp runners without storing the token in LaunchAgent plists. [#224](https://github.com/lelouvincx/agent-skills/pull/224)
 - Add pause and resume controls to `amp-chatgpt-subscription-selector` to stop and restart background checks without removing configuration. [#220](https://github.com/lelouvincx/agent-skills/pull/220)
 - Implement RFC-0011 with quiet isolated browser sessions, strict `agent-secrets` browser credentials, and a pinned destination-safe `agent-browser` build. [#218](https://github.com/lelouvincx/agent-skills/pull/218)
 - Add `syncing-holistics-external-git` to bootstrap local sync for a new, empty external Git repository connected to a Holistics project. [#211](https://github.com/lelouvincx/agent-skills/pull/211)

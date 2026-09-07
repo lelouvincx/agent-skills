@@ -6,7 +6,8 @@ launcher="$repo_root/bin/amp-runner"
 tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/check-amp-runner.XXXXXX")"
 trap 'rm -rf "$tmp_dir"' EXIT
 
-mkdir -p "$tmp_dir/bin" "$tmp_dir/launch-agents"
+mkdir -p "$tmp_dir/bin" "$tmp_dir/home/.local/share/agent-secrets" "$tmp_dir/launch-agents"
+printf '%s\n' 'test-token' > "$tmp_dir/home/.local/share/agent-secrets/op-service-account-token"
 cat > "$tmp_dir/bin/amp" <<'EOF'
 #!/usr/bin/env bash
 exit 0
@@ -17,6 +18,11 @@ cat > "$tmp_dir/bin/caffeinate" <<'EOF'
 	printf 'AMP_NO_TUI=%s\n' "${AMP_NO_TUI:-}"
 	printf 'AMP_LOG_LEVEL=%s\n' "${AMP_LOG_LEVEL:-}"
 	printf 'AMP_LOG_FILE=%s\n' "${AMP_LOG_FILE:-}"
+	if [ -n "${OP_SERVICE_ACCOUNT_TOKEN:-}" ]; then
+		printf 'OP_SERVICE_ACCOUNT_TOKEN=set\n'
+	else
+		printf 'OP_SERVICE_ACCOUNT_TOKEN=missing\n'
+	fi
 	printf 'args='
 	printf '<%s>' "$@"
 	printf '\n'
@@ -64,6 +70,7 @@ file_mode() {
 
 run_launcher() {
 	PATH="$tmp_dir/bin:/usr/bin:/bin" \
+	HOME="$tmp_dir/home" \
 	AMP_RUNNER_AMP_BIN="$tmp_dir/bin/amp" \
 	AMP_RUNNER_CAFFEINATE="$tmp_dir/bin/caffeinate" \
 	AMP_RUNNER_LAUNCHCTL="$tmp_dir/bin/launchctl" \
@@ -83,6 +90,7 @@ run_launcher run --debug --log-dir "$logs" macbook.agent-skills -- --no-ide
 grep -Fxq 'AMP_NO_TUI=1' "$tmp_dir/capture"
 grep -Fxq 'AMP_LOG_LEVEL=debug' "$tmp_dir/capture"
 grep -Fxq "AMP_LOG_FILE=$logs/macbook.agent-skills.log" "$tmp_dir/capture"
+grep -Fxq 'OP_SERVICE_ACCOUNT_TOKEN=set' "$tmp_dir/capture"
 grep -Fxq "args=<-s><$mock_amp><--no-tui><--runner-id=macbook.agent-skills><--no-ide>" "$tmp_dir/capture"
 [ "$(file_mode "$logs")" = 700 ]
 [ "$(file_mode "$logs/macbook.agent-skills.log")" = 600 ]
@@ -102,6 +110,7 @@ grep -Fq "<string>$repo_root</string>" "$plist"
 grep -Fq '<key>EnvironmentVariables</key>' "$plist"
 grep -Fq '<key>PATH</key>' "$plist"
 grep -Fq "<string>$tmp_dir/bin:/usr/bin:/bin</string>" "$plist"
+! grep -Fq 'OP_SERVICE_ACCOUNT_TOKEN' "$plist"
 [ "$(file_mode "$plist")" = 600 ]
 
 run_launcher start macbook.agent-skills

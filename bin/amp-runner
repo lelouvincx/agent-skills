@@ -60,6 +60,19 @@ log_dir_default() {
 	printf '%s' "${AMP_RUNNER_LOG_DIR:-$HOME/.cache/amp/logs/runners}"
 }
 
+service_account_token_path() {
+	printf '%s' "${AMP_RUNNER_OP_SERVICE_ACCOUNT_TOKEN_FILE:-$HOME/.local/share/agent-secrets/op-service-account-token}"
+}
+
+export_service_account_token() {
+	local token_file
+	token_file="$(service_account_token_path)"
+	if [ -f "$token_file" ] && [ -s "$token_file" ]; then
+		OP_SERVICE_ACCOUNT_TOKEN="$(cat "$token_file")"
+		export OP_SERVICE_ACCOUNT_TOKEN
+	fi
+}
+
 prepare_logs() {
 	local log_dir="$1"
 	local runner_id="$2"
@@ -186,6 +199,8 @@ run_runner() {
 	[ "$no_start" = false ] || fail '--no-start is valid only with install'
 	[ "$workdir" = "$PWD" ] || fail '--workdir is valid only with install'
 	prepare_logs "$log_dir" "$runner_id"
+
+	export_service_account_token
 
 	export AMP_NO_TUI=1
 	export AMP_LOG_LEVEL="$log_level"
