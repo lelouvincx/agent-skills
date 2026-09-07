@@ -202,6 +202,7 @@ run_runner() {
 
 	export_service_account_token
 
+	export AGENT_SECRET_AUTH=service-account
 	export AMP_NO_TUI=1
 	export AMP_LOG_LEVEL="$log_level"
 	export AMP_LOG_FILE="$log_dir/$runner_id.log"
