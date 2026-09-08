@@ -15,6 +15,7 @@ install_dir="${AGENT_BROWSER_CUSTOM_INSTALL_DIR:-$HOME/.local/libexec/agent-brow
 binary="$install_dir/agent-browser"
 receipt="$install_dir/build-input.sha256"
 fingerprint="$repo_root/amp/agent-browser-custom/fingerprint"
+source "$repo_root/amp/agent-browser-custom/lib.sh"
 
 if [ ! -x "$binary" ] || [ ! -f "$receipt" ]; then
   echo "agent-browser: RFC-0011 custom build is not installed; run amp/agent-browser-custom/build" >&2
@@ -26,5 +27,7 @@ if [ "$actual" != "$expected" ]; then
   echo "agent-browser: RFC-0011 custom build is stale; run amp/agent-browser-custom/build" >&2
   exit 1
 fi
+agent_browser_custom_verify_skill_data "$install_dir" "$repo_root"
 
+export AGENT_BROWSER_SKILLS_DIR="$install_dir/skill-data"
 exec "$binary" "$@"

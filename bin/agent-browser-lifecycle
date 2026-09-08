@@ -4,32 +4,189 @@
 from __future__ import annotations
 
 import argparse
+import dataclasses
+import errno
+import hashlib
+import importlib.util
 import fcntl
 import json
 import os
 import re
 import socket
+import subprocess
 import sys
 import tempfile
+import time
+import urllib.request
 import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 HISTORY_SCHEMA = "agent-browser-lifecycle/v1"
 CURRENT_SCHEMA = "agent-browser-current/v1"
+MANAGED_HISTORY_SCHEMA = "agent-browser-lifecycle/v2"
+MANAGED_CURRENT_SCHEMA = "agent-browser-current/v2"
 TERMINAL_EVENTS = {"start_failed", "stopped", "observed_dead"}
 RECORD_EVENTS = {"ready", "attached", "detached", "stopping", *TERMINAL_EVENTS}
+MANAGED_EVENTS = {
+    "managed_intent",
+    "managed_profile_created",
+    "managed_role_identity",
+    "managed_role_release",
+    "managed_ready",
+    "managed_attachment",
+    "managed_detachment",
+    "managed_draining",
+    "managed_attachment_reconciled",
+    "managed_artifacts_recorded",
+    "cleanup_pending",
+    "managed_closed",
+    "managed_artifacts_removed",
+}
+MANAGED_ROLES = {"chrome", "daemon"}
+MANAGED_READY_STATE = "ready"
+MANAGED_DRAINING_STATE = "draining"
 THREAD_ID_RE = re.compile(
     r"^T-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
 )
 TIMESTAMP_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
+DAEMON_NAME_RE = re.compile(r"^[a-z][a-z0-9-]{0,62}$")
+STABLE_TARGET_ID_RE = re.compile(r"^(?:t[1-9][0-9]*|[0-9A-Fa-f]{32})$")
+ALLOWED_MANAGED_ACTIONS = {
+    "open",
+    "goto",
+    "navigate",
+    "back",
+    "forward",
+    "reload",
+    "read",
+    "snapshot",
+    "click",
+    "dblclick",
+    "hover",
+    "focus",
+    "check",
+    "uncheck",
+    "select",
+    "type",
+    "drag",
+    "upload",
+    "download",
+    "fill",
+    "eval",
+    "get",
+    "screenshot",
+    "wait",
+    "press",
+    "scroll",
+    "tab",
+    "auth",
+    "frame",
+    "dialog",
+    "is",
+    "find",
+    "mouse",
+    "keyboard",
+    "keydown",
+    "keyup",
+    "console",
+    "errors",
+    "pdf",
+}
+MANAGED_RESERVED_FLAGS = {
+    "--config",
+    "--session",
+    "--cdp",
+    "--browser",
+    "--browser-pid",
+    "--profile",
+    "--user-data-dir",
+    "--remote-debugging-port",
+    "--remote-debugging-address",
+    "--stream",
+    "--headed",
+    "--headless",
+    "--auto-connect",
+    "--autoConnect",
+}
+ALLOWED_MANAGED_GLOBAL_FLAGS_WITH_VALUES = {
+    "--screenshot-format",
+    "--screenshot-quality",
+    "--screenshot-dir",
+}
+ALLOWED_MANAGED_GLOBAL_BOOL_FLAGS = {"--json", "--annotate", "--content-boundaries"}
+ALLOWED_INHERITED_AGENT_BROWSER_ENV = {"AGENT_BROWSER_CUSTOM_INSTALL_DIR"}
 
 
 class LifecycleError(Exception):
     """A safe user-facing lifecycle failure."""
+
+
+@dataclasses.dataclass(frozen=True)
+class BootIdentityRecord:
+    session_uuid: str | None
+    boot_time_us: int
+
+
+@dataclasses.dataclass(frozen=True)
+class ProcessBirthIdentityRecord:
+    boot: BootIdentityRecord
+    pid: int
+    start_time_us: int
+
+
+@dataclasses.dataclass(frozen=True)
+class ProfileIdentityRecord:
+    path: str
+    device: int
+    inode: int
+
+
+@dataclasses.dataclass(frozen=True)
+class ReplayState:
+    active: dict[str, dict[str, Any]]
+    retired: dict[str, dict[str, Any]]
+
+
+@dataclasses.dataclass(frozen=True)
+class ManagedSessionPreparation:
+    session_id: str
+    generation: int
+    owner_thread_id: str
+    workspace: str
+    namespace: str
+    short_daemon_name: str
+    runtime_path: str
+    launch_mode: str
+    cdp_host: str
+    cdp_port: int
+    user_data_dir: str
+    profile_identity: ProfileIdentityRecord | None
+    build_digest: str
+    config_digest: str
+
+
+@dataclasses.dataclass(frozen=True)
+class ManagedRuntimeIdentity:
+    wrapper_path: str
+    binary_path: str
+    install_dir: str
+    build_id: str
+    build_digest: str
+
+
+@dataclasses.dataclass(frozen=True)
+class ManagedRuntimeConfig:
+    source_path: str
+    snapshot_path: str
+    config_digest: str
+    data: dict[str, Any]
+
+
+IdentityProvider = Callable[[int], Any]
 
 
 def timestamp() -> str:
@@ -58,6 +215,14 @@ def ensure_private_file(path: Path) -> None:
     path.chmod(0o600)
 
 
+def fsync_directory(path: Path) -> None:
+    descriptor = os.open(path, os.O_RDONLY)
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+
+
 @contextmanager
 def lifecycle_lock(state_dir: Path) -> Iterator[None]:
     ensure_private_directory(state_dir)
@@ -71,6 +236,26 @@ def lifecycle_lock(state_dir: Path) -> Iterator[None]:
             fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
 
 
+@contextmanager
+def session_operation_lock(state_dir: Path, session_id: str) -> Iterator[None]:
+    """Serialize preparation and gated launches for one managed session."""
+
+    if not isinstance(session_id, str) or not re.fullmatch(r"[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}", session_id):
+        raise LifecycleError("session_id must be a canonical UUID")
+    ensure_private_directory(state_dir)
+    locks_dir = state_dir / "operation-locks"
+    ensure_private_directory(locks_dir)
+    lock_path = locks_dir / f"{session_id}.lock"
+    ensure_private_file(lock_path)
+    descriptor = os.open(lock_path, os.O_RDWR | os.O_CLOEXEC)
+    try:
+        fcntl.flock(descriptor, fcntl.LOCK_EX)
+        yield
+    finally:
+        fcntl.flock(descriptor, fcntl.LOCK_UN)
+        os.close(descriptor)
+
+
 def validate_thread_id(value: str, field: str) -> None:
     if not THREAD_ID_RE.fullmatch(value):
         raise LifecycleError(
@@ -78,8 +263,50 @@ def validate_thread_id(value: str, field: str) -> None:
         )
 
 
+def validate_absolute_path(value: str, field: str) -> None:
+    if not isinstance(value, str) or not Path(value).is_absolute():
+        raise LifecycleError(f"{field} must be an absolute path")
+
+
+def validate_digest(value: str, field: str) -> None:
+    if not isinstance(value, str) or not re.fullmatch(r"sha256:[0-9a-f]{64}", value):
+        raise LifecycleError(f"{field} must be sha256:<64 lowercase hex digits>")
+
+
+def validate_boot_identity(value: Any, field: str) -> None:
+    if not isinstance(value, dict) or set(value) != {"session_uuid", "boot_time_us"}:
+        raise LifecycleError(f"{field} must contain session_uuid and boot_time_us")
+    if value["session_uuid"] is not None and not isinstance(value["session_uuid"], str):
+        raise LifecycleError(f"{field}.session_uuid must be a string or null")
+    if type(value["boot_time_us"]) is not int or value["boot_time_us"] <= 0:
+        raise LifecycleError(f"{field}.boot_time_us must be a positive integer")
+
+
+def validate_birth_identity(value: Any, field: str) -> None:
+    if not isinstance(value, dict) or set(value) != {"boot", "pid", "start_time_us"}:
+        raise LifecycleError(f"{field} must contain boot, pid and start_time_us")
+    validate_boot_identity(value["boot"], f"{field}.boot")
+    if type(value["pid"]) is not int or value["pid"] <= 0:
+        raise LifecycleError(f"{field}.pid must be a positive integer")
+    if type(value["start_time_us"]) is not int or value["start_time_us"] <= 0:
+        raise LifecycleError(f"{field}.start_time_us must be a positive integer")
+
+
+def validate_profile_record(value: Any, field: str) -> None:
+    if not isinstance(value, dict) or set(value) != {"path", "device", "inode"}:
+        raise LifecycleError(f"{field} must contain path, device and inode")
+    validate_absolute_path(value["path"], f"{field}.path")
+    if type(value["device"]) is not int or value["device"] < 0:
+        raise LifecycleError(f"{field}.device must be a non-negative integer")
+    if type(value["inode"]) is not int or value["inode"] <= 0:
+        raise LifecycleError(f"{field}.inode must be a positive integer")
+
+
 def validate_record(record: dict[str, Any], line_number: int | None = None) -> None:
     location = f" on history line {line_number}" if line_number is not None else ""
+    if record.get("schema") == MANAGED_HISTORY_SCHEMA:
+        validate_managed_record(record, location)
+        return
     required = {
         "schema",
         "timestamp",
@@ -137,6 +364,100 @@ def validate_record(record: dict[str, Any], line_number: int | None = None) -> N
         raise LifecycleError(f"workspace must be an absolute path{location}")
 
 
+def validate_managed_record(record: dict[str, Any], location: str = "") -> None:
+    common_required = {
+        "schema",
+        "timestamp",
+        "event",
+        "session_id",
+        "generation",
+        "owner_thread_id",
+        "workspace",
+        "namespace",
+        "short_daemon_name",
+        "runtime_path",
+        "launch_mode",
+        "cdp_host",
+        "cdp_port",
+        "user_data_dir",
+        "build_digest",
+        "config_digest",
+    }
+    event = record.get("event")
+    extra_by_event = {
+        "managed_intent": set(),
+        "managed_profile_created": {"profile_identity"},
+        "managed_role_identity": {"role", "birth_identity"},
+        "managed_role_release": {"role"},
+        "managed_ready": {"chrome_pid", "daemon_pid", "daemon_build_id"},
+        "managed_attachment": {"actor_thread_id"},
+        "managed_detachment": {"actor_thread_id"},
+        "managed_draining": {"actor_thread_id"},
+        "managed_attachment_reconciled": {"actor_thread_id", "reconciled_thread_id"},
+        "managed_artifacts_recorded": {"profile_identity", "runtime_identity", "artifact_boot"},
+        "cleanup_pending": {"reason"},
+        "managed_closed": set(),
+        "managed_artifacts_removed": set(),
+    }
+    if event not in extra_by_event:
+        raise LifecycleError(f"unsupported lifecycle event{location}: {event!r}")
+    if set(record) != common_required | extra_by_event[event]:
+        raise LifecycleError(f"managed lifecycle record has unexpected fields{location}")
+    if record["schema"] != MANAGED_HISTORY_SCHEMA:
+        raise LifecycleError(f"unsupported lifecycle schema{location}: {record['schema']!r}")
+    if not isinstance(record["timestamp"], str) or not TIMESTAMP_RE.fullmatch(record["timestamp"]):
+        raise LifecycleError(f"timestamp must be UTC ISO 8601 to whole seconds{location}")
+    try:
+        uuid.UUID(record["session_id"])
+    except (AttributeError, TypeError, ValueError) as exc:
+        raise LifecycleError(f"invalid session_id{location}") from exc
+    if type(record["generation"]) is not int or record["generation"] <= 0:
+        raise LifecycleError(f"generation must be a positive integer{location}")
+    validate_thread_id(record["owner_thread_id"], f"owner_thread_id{location}")
+    validate_absolute_path(record["workspace"], f"workspace{location}")
+    if not isinstance(record["namespace"], str) or not DAEMON_NAME_RE.fullmatch(record["namespace"]):
+        raise LifecycleError(f"namespace must be a short lowercase name{location}")
+    if not isinstance(record["short_daemon_name"], str) or not DAEMON_NAME_RE.fullmatch(record["short_daemon_name"]):
+        raise LifecycleError(f"short_daemon_name must be a short lowercase name{location}")
+    validate_absolute_path(record["runtime_path"], f"runtime_path{location}")
+    if record["launch_mode"] not in {"headless", "headed"}:
+        raise LifecycleError(f"launch_mode must be headless or headed{location}")
+    if record["cdp_host"] != "127.0.0.1":
+        raise LifecycleError(f"cdp_host must be 127.0.0.1{location}")
+    if type(record["cdp_port"]) is not int or not 1 <= record["cdp_port"] <= 65535:
+        raise LifecycleError(f"cdp_port must be between 1 and 65535{location}")
+    validate_absolute_path(record["user_data_dir"], f"user_data_dir{location}")
+    validate_digest(record["build_digest"], f"build_digest{location}")
+    validate_digest(record["config_digest"], f"config_digest{location}")
+    if event == "managed_profile_created":
+        validate_profile_record(record["profile_identity"], f"profile_identity{location}")
+    if event == "managed_artifacts_recorded":
+        validate_profile_record(record["profile_identity"], f"profile_identity{location}")
+        validate_profile_record(record["runtime_identity"], f"runtime_identity{location}")
+        validate_boot_identity(record["artifact_boot"], f"artifact_boot{location}")
+    if event == "managed_role_identity":
+        if record["role"] not in MANAGED_ROLES:
+            raise LifecycleError(f"role must be chrome or daemon{location}")
+        validate_birth_identity(record["birth_identity"], f"birth_identity{location}")
+    if event == "managed_role_release" and record["role"] not in MANAGED_ROLES:
+        raise LifecycleError(f"role must be chrome or daemon{location}")
+    if event == "managed_ready":
+        for field in ("chrome_pid", "daemon_pid"):
+            if type(record[field]) is not int or record[field] <= 0:
+                raise LifecycleError(f"{field} must be a positive integer{location}")
+        if not isinstance(record["daemon_build_id"], str) or not record["daemon_build_id"]:
+            raise LifecycleError(f"daemon_build_id must be a non-empty string{location}")
+    if event in {"managed_attachment", "managed_detachment", "managed_draining"}:
+        validate_thread_id(record["actor_thread_id"], f"actor_thread_id{location}")
+    if event == "managed_attachment_reconciled":
+        validate_thread_id(record["actor_thread_id"], f"actor_thread_id{location}")
+        validate_thread_id(record["reconciled_thread_id"], f"reconciled_thread_id{location}")
+    if event == "cleanup_pending" and (
+        not isinstance(record["reason"], str) or not record["reason"] or len(record["reason"]) > 200
+    ):
+        raise LifecycleError(f"reason must be a non-empty short string{location}")
+
+
 def read_committed_history(history_path: Path) -> bytes:
     ensure_private_file(history_path)
     with history_path.open("r+b") as history_file:
@@ -181,11 +502,39 @@ def assert_same_session(session: dict[str, Any], record: dict[str, Any]) -> None
             )
 
 
-def apply_record(sessions: dict[str, dict[str, Any]], record: dict[str, Any]) -> None:
+def assert_same_managed_session(session: dict[str, Any], record: dict[str, Any]) -> None:
+    for field in (
+        "generation",
+        "owner_thread_id",
+        "workspace",
+        "namespace",
+        "short_daemon_name",
+        "runtime_path",
+        "launch_mode",
+        "cdp_host",
+        "cdp_port",
+        "user_data_dir",
+        "build_digest",
+        "config_digest",
+    ):
+        if session[field] != record[field]:
+            raise LifecycleError(f"{field} changed within managed session {record['session_id']}")
+
+
+def apply_record(
+    sessions: dict[str, dict[str, Any]],
+    record: dict[str, Any],
+    retired: dict[str, dict[str, Any]] | None = None,
+) -> None:
+    if record["schema"] == MANAGED_HISTORY_SCHEMA:
+        apply_managed_record(sessions, record, retired)
+        return
     session_id = record["session_id"]
     event = record["event"]
     session = sessions.get(session_id)
 
+    if session is not None and session.get("schema") == MANAGED_CURRENT_SCHEMA:
+        raise LifecycleError("managed sessions do not accept legacy events")
     if event == "claimed":
         if session is not None:
             raise LifecycleError(f"session {session_id} was claimed more than once")
@@ -275,22 +624,199 @@ def apply_record(sessions: dict[str, dict[str, Any]], record: dict[str, Any]) ->
     session["last_event_at"] = record["timestamp"]
 
 
+def apply_managed_record(
+    sessions: dict[str, dict[str, Any]],
+    record: dict[str, Any],
+    retired: dict[str, dict[str, Any]] | None = None,
+) -> None:
+    session_id = record["session_id"]
+    event = record["event"]
+    session = sessions.get(session_id)
+
+    if event == "managed_artifacts_removed":
+        if retired is None or session_id not in retired:
+            raise LifecycleError(f"managed artifacts removal refers to unknown retired session {session_id}")
+        retired_session = retired[session_id]
+        assert_same_managed_session(retired_session, record)
+        if retired_session.get("artifacts_removed") is True:
+            raise LifecycleError("managed artifacts were removed more than once")
+        retired_session["artifacts_removed"] = True
+        retired_session["artifacts_removed_at"] = record["timestamp"]
+        return
+
+    if event == "managed_intent":
+        if session is not None:
+            raise LifecycleError(f"session {session_id} was claimed more than once")
+        if retired is not None and session_id in retired:
+            raise LifecycleError(f"session {session_id} was claimed again after closure")
+        sessions[session_id] = {
+            "schema": MANAGED_CURRENT_SCHEMA,
+            "session_id": session_id,
+            "generation": record["generation"],
+            "state": "intent-recorded",
+            "verification": "managed-unverified",
+            "owner_thread_id": record["owner_thread_id"],
+            "workspace": record["workspace"],
+            "namespace": record["namespace"],
+            "short_daemon_name": record["short_daemon_name"],
+            "runtime_path": record["runtime_path"],
+            "launch_mode": record["launch_mode"],
+            "cdp_host": record["cdp_host"],
+            "cdp_port": record["cdp_port"],
+            "user_data_dir": record["user_data_dir"],
+            "profile_identity": None,
+            "runtime_identity": None,
+            "artifact_boot": None,
+            "build_digest": record["build_digest"],
+            "config_digest": record["config_digest"],
+            "roles": {role: {"birth_identity": None, "released": False} for role in sorted(MANAGED_ROLES)},
+            "attached_thread_ids": [],
+            "chrome_pid": None,
+            "daemon_pid": None,
+            "daemon_build_id": None,
+            "cleanup_pending_reason": None,
+            "last_event_at": record["timestamp"],
+        }
+        return
+
+    if session is None:
+        raise LifecycleError(f"event {event} refers to inactive session {session_id}")
+    if session.get("schema") != MANAGED_CURRENT_SCHEMA:
+        raise LifecycleError("legacy sessions cannot be adopted as managed sessions")
+    assert_same_managed_session(session, record)
+    if session["state"] == "cleanup-pending" and event not in {"managed_detachment", "managed_attachment_reconciled", "managed_closed"}:
+        raise LifecycleError("cleanup-pending sessions cannot resume launch")
+
+    if event == "managed_profile_created":
+        if session["profile_identity"] is not None:
+            raise LifecycleError("managed profile identity was already recorded")
+        if record["profile_identity"]["path"] != session["user_data_dir"]:
+            raise LifecycleError("profile identity path differs from session profile")
+        session["profile_identity"] = record["profile_identity"]
+        session["state"] = "profile-created"
+    elif event == "managed_artifacts_recorded":
+        if session["profile_identity"] is None:
+            raise LifecycleError("managed artifacts require a recorded profile")
+        if any(session["roles"][role]["released"] for role in MANAGED_ROLES):
+            raise LifecycleError("managed artifacts must be recorded before role launch release")
+        if session.get("runtime_identity") is not None or session.get("artifact_boot") is not None:
+            raise LifecycleError("managed artifacts were already recorded")
+        if record["profile_identity"] != session["profile_identity"]:
+            raise LifecycleError("managed artifacts profile identity differs from session profile")
+        if record["runtime_identity"]["path"] != session["runtime_path"]:
+            raise LifecycleError("runtime identity path differs from session runtime")
+        session["runtime_identity"] = record["runtime_identity"]
+        session["artifact_boot"] = record["artifact_boot"]
+        if session["state"] == "profile-created":
+            session["state"] = "artifacts-recorded"
+    elif event == "managed_role_identity":
+        role_state = session["roles"][record["role"]]
+        if session["profile_identity"] is None:
+            raise LifecycleError("role identity requires a recorded profile identity")
+        if role_state["birth_identity"] is not None:
+            raise LifecycleError(f"{record['role']} identity was already recorded")
+        role_state["birth_identity"] = record["birth_identity"]
+        session["state"] = f"{record['role']}-identity-recorded"
+    elif event == "managed_role_release":
+        role_state = session["roles"][record["role"]]
+        if role_state["birth_identity"] is None:
+            raise LifecycleError(f"{record['role']} release requires recorded identity")
+        if role_state["released"]:
+            raise LifecycleError(f"{record['role']} release was already recorded")
+        role_state["released"] = True
+        session["state"] = f"{record['role']}-released"
+    elif event == "managed_ready":
+        if not all(session["roles"][role]["released"] for role in MANAGED_ROLES):
+            raise LifecycleError("managed ready requires released chrome and daemon roles")
+        if record["chrome_pid"] != session["roles"]["chrome"]["birth_identity"]["pid"]:
+            raise LifecycleError("managed ready chrome PID differs from recorded identity")
+        if record["daemon_pid"] != session["roles"]["daemon"]["birth_identity"]["pid"]:
+            raise LifecycleError("managed ready daemon PID differs from recorded identity")
+        session["state"] = MANAGED_READY_STATE
+        session["verification"] = "managed-ready"
+        session["chrome_pid"] = record["chrome_pid"]
+        session["daemon_pid"] = record["daemon_pid"]
+        session["daemon_build_id"] = record["daemon_build_id"]
+    elif event == "managed_attachment":
+        if session["state"] != MANAGED_READY_STATE or session["verification"] != "managed-ready":
+            raise LifecycleError("a child can attach only to a ready managed session")
+        if record["actor_thread_id"] == session["owner_thread_id"]:
+            raise LifecycleError("the owning thread does not record managed attachment")
+        if record["actor_thread_id"] in session["attached_thread_ids"]:
+            raise LifecycleError("the child thread is already attached")
+        session["attached_thread_ids"].append(record["actor_thread_id"])
+        session["attached_thread_ids"].sort()
+    elif event == "managed_detachment":
+        if record["actor_thread_id"] not in session["attached_thread_ids"]:
+            raise LifecycleError("managed detachment requires a matching attachment")
+        session["attached_thread_ids"].remove(record["actor_thread_id"])
+    elif event == "managed_draining":
+        if record["actor_thread_id"] != session["owner_thread_id"]:
+            raise LifecycleError("only the owner can drain a managed session")
+        if session["state"] != MANAGED_READY_STATE or session["verification"] != "managed-ready":
+            raise LifecycleError("only a ready managed session can start draining")
+        if not session["attached_thread_ids"]:
+            raise LifecycleError("managed draining requires attached child threads")
+        session["state"] = MANAGED_DRAINING_STATE
+    elif event == "managed_attachment_reconciled":
+        if record["actor_thread_id"] != session["owner_thread_id"]:
+            raise LifecycleError("only the owner can reconcile a managed attachment")
+        if record["reconciled_thread_id"] == session["owner_thread_id"]:
+            raise LifecycleError("the owner thread is not a managed attachment")
+        if record["reconciled_thread_id"] not in session["attached_thread_ids"]:
+            raise LifecycleError("managed attachment reconciliation requires a matching attachment")
+        session["attached_thread_ids"].remove(record["reconciled_thread_id"])
+    elif event == "cleanup_pending":
+        session["state"] = "cleanup-pending"
+        session["verification"] = "managed-unverified"
+        session["cleanup_pending_reason"] = record["reason"]
+    elif event == "managed_closed":
+        if session["attached_thread_ids"]:
+            raise LifecycleError("managed closure requires no attached child threads")
+        if session["state"] != "cleanup-pending":
+            raise LifecycleError("managed closure requires a recorded shutdown attempt")
+        if retired is not None:
+            retired_session = dict(session)
+            retired_session["state"] = "closed"
+            retired_session["closed_at"] = record["timestamp"]
+            retired_session["artifacts_removed"] = False
+            retired[session_id] = retired_session
+        del sessions[session_id]
+        return
+
+    session["last_event_at"] = record["timestamp"]
+
+
 def replay(records: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    return replay_state(records).active
+
+
+def replay_state(records: list[dict[str, Any]]) -> ReplayState:
     sessions: dict[str, dict[str, Any]] = {}
+    retired: dict[str, dict[str, Any]] = {}
     for record in records:
-        apply_record(sessions, record)
-    return sessions
+        apply_record(sessions, record, retired)
+    return ReplayState(active=sessions, retired=retired)
 
 
 def current_view(sessions: dict[str, dict[str, Any]]) -> dict[str, Any]:
     return {
-        "schema": CURRENT_SCHEMA,
+        "schema": MANAGED_CURRENT_SCHEMA,
         "generated_at": timestamp(),
         "sessions": sorted(
-            sessions.values(),
+            [current_session_view(session) for session in sessions.values()],
             key=lambda session: (session["cdp_port"], session["session_id"]),
         ),
     }
+
+
+def current_session_view(session: dict[str, Any]) -> dict[str, Any]:
+    if session.get("schema") == MANAGED_CURRENT_SCHEMA:
+        return session
+    legacy = dict(session)
+    legacy["schema"] = CURRENT_SCHEMA
+    legacy["verification"] = "legacy-unverified"
+    return legacy
 
 
 def write_current(
@@ -330,10 +856,361 @@ def append_record(history_path: Path, record: dict[str, Any]) -> None:
         remaining = memoryview(encoded_record)
         while remaining:
             written = os.write(descriptor, remaining)
+            if written <= 0:
+                raise LifecycleError("history append made no progress")
             remaining = remaining[written:]
         os.fsync(descriptor)
+        fsync_directory(history_path.parent)
     finally:
         os.close(descriptor)
+
+
+def load_process_identity_module() -> Any:
+    helper_path = Path(__file__).resolve().parents[1] / "amp" / "agent-browser-lifecycle" / "process_identity.py"
+    spec = importlib.util.spec_from_file_location("agent_browser_lifecycle_process_identity", helper_path)
+    if spec is None or spec.loader is None:
+        raise LifecycleError(f"cannot load process identity helper: {helper_path}")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def profile_identity_record(path: Path) -> ProfileIdentityRecord:
+    module = load_process_identity_module()
+    try:
+        identity = module.profile_identity(path)
+    except Exception as exc:  # noqa: BLE001 - helper exceptions are user-facing here.
+        raise LifecycleError(str(exc)) from exc
+    return ProfileIdentityRecord(path=identity.path, device=identity.device, inode=identity.inode)
+
+
+def process_birth_identity_record(pid: int, identity_provider: IdentityProvider | None = None) -> ProcessBirthIdentityRecord:
+    provider = identity_provider
+    if provider is None:
+        module = load_process_identity_module()
+        provider = module.process_identity
+    try:
+        identity = provider(pid)
+    except Exception as exc:  # noqa: BLE001 - retain clear unsupported-OS errors.
+        raise LifecycleError(str(exc)) from exc
+    if identity is None:
+        raise LifecycleError(f"process is absent: {pid}")
+    return ProcessBirthIdentityRecord(
+        boot=BootIdentityRecord(
+            session_uuid=identity.boot.session_uuid,
+            boot_time_us=identity.boot.boot_time_us,
+        ),
+        pid=identity.pid,
+        start_time_us=identity.start_time_us,
+    )
+
+
+def optional_process_birth_identity_record(pid: int) -> ProcessBirthIdentityRecord | None:
+    module = load_process_identity_module()
+    try:
+        identity = module.process_identity(pid)
+    except Exception as exc:  # noqa: BLE001 - helper exceptions are user-facing here.
+        raise LifecycleError(str(exc)) from exc
+    if identity is None:
+        return None
+    return ProcessBirthIdentityRecord(
+        boot=BootIdentityRecord(
+            session_uuid=identity.boot.session_uuid,
+            boot_time_us=identity.boot.boot_time_us,
+        ),
+        pid=identity.pid,
+        start_time_us=identity.start_time_us,
+    )
+
+
+def managed_base_record(preparation: ManagedSessionPreparation, event: str) -> dict[str, Any]:
+    return {
+        "schema": MANAGED_HISTORY_SCHEMA,
+        "timestamp": timestamp(),
+        "event": event,
+        "session_id": preparation.session_id,
+        "generation": preparation.generation,
+        "owner_thread_id": preparation.owner_thread_id,
+        "workspace": preparation.workspace,
+        "namespace": preparation.namespace,
+        "short_daemon_name": preparation.short_daemon_name,
+        "runtime_path": preparation.runtime_path,
+        "launch_mode": preparation.launch_mode,
+        "cdp_host": preparation.cdp_host,
+        "cdp_port": preparation.cdp_port,
+        "user_data_dir": preparation.user_data_dir,
+        "build_digest": preparation.build_digest,
+        "config_digest": preparation.config_digest,
+    }
+
+
+def session_preparation_from_session(session: dict[str, Any]) -> ManagedSessionPreparation:
+    profile = session.get("profile_identity")
+    if profile is None:
+        profile_record = None
+    else:
+        profile_record = ProfileIdentityRecord(**profile)
+    return ManagedSessionPreparation(
+        session_id=session["session_id"],
+        generation=session["generation"],
+        owner_thread_id=session["owner_thread_id"],
+        workspace=session["workspace"],
+        namespace=session["namespace"],
+        short_daemon_name=session["short_daemon_name"],
+        runtime_path=session["runtime_path"],
+        launch_mode=session["launch_mode"],
+        cdp_host=session["cdp_host"],
+        cdp_port=session["cdp_port"],
+        user_data_dir=session["user_data_dir"],
+        profile_identity=profile_record,
+        build_digest=session["build_digest"],
+        config_digest=session["config_digest"],
+    )
+
+
+def prepare_managed_session(
+    *,
+    owner_thread_id: str,
+    workspace: str | os.PathLike[str],
+    namespace: str,
+    short_daemon_name: str,
+    runtime_path: str | os.PathLike[str],
+    launch_mode: str = "headless",
+    cdp_port: int,
+    build_digest: str,
+    config_digest: str,
+    state_dir: Path | None = None,
+    fail_after: str | None = None,
+) -> ManagedSessionPreparation:
+    """Prepare a stage-3 managed session without launching Chrome or daemon.
+
+    The managed intent is appended and fsynced before the profile directory is
+    created. This internal API is intentionally narrow for stage-4 integration;
+    it is not a public command runner and never persists argv, environment,
+    page content or secret-bearing values.
+    """
+
+    validate_thread_id(owner_thread_id, "owner_thread_id")
+    if not DAEMON_NAME_RE.fullmatch(namespace):
+        raise LifecycleError("namespace must be a short lowercase name")
+    if not DAEMON_NAME_RE.fullmatch(short_daemon_name):
+        raise LifecycleError("short_daemon_name must be a short lowercase name")
+    if launch_mode not in {"headless", "headed"}:
+        raise LifecycleError("launch_mode must be headless or headed")
+    if type(cdp_port) is not int or not 1 <= cdp_port <= 65535:
+        raise LifecycleError("cdp_port must be between 1 and 65535")
+    validate_digest(build_digest, "build_digest")
+    validate_digest(config_digest, "config_digest")
+
+    resolved_state_dir = lifecycle_dir() if state_dir is None else state_dir
+    history_path = resolved_state_dir / "lifecycle.jsonl"
+    current_path = resolved_state_dir / "current.json"
+    session_id = str(uuid.uuid4())
+    session_root = resolved_state_dir / "sessions" / session_id
+    user_data_dir = session_root / "chrome-data"
+    preparation = ManagedSessionPreparation(
+        session_id=session_id,
+        generation=1,
+        owner_thread_id=owner_thread_id,
+        workspace=str(Path(workspace).expanduser().resolve()),
+        namespace=namespace,
+        short_daemon_name=short_daemon_name,
+        runtime_path=str(Path(runtime_path).expanduser().resolve()),
+        launch_mode=launch_mode,
+        cdp_host="127.0.0.1",
+        cdp_port=cdp_port,
+        user_data_dir=str(user_data_dir),
+        profile_identity=None,
+        build_digest=build_digest,
+        config_digest=config_digest,
+    )
+
+    with lifecycle_lock(resolved_state_dir):
+        records = read_history(history_path)
+        state = replay_state(records)
+        sessions = state.active
+        if any(session["cdp_port"] == cdp_port for session in sessions.values()):
+            raise LifecycleError(f"CDP port {cdp_port} is already claimed")
+        if any(
+            (session.get("namespace"), session.get("short_daemon_name")) == (namespace, short_daemon_name)
+            or session.get("runtime_path") == preparation.runtime_path
+            for session in sessions.values()
+        ):
+            raise LifecycleError("daemon identity or runtime path is already claimed")
+        retired_conflicts = retired_artifact_conflicts(state.retired, preparation)
+        if retired_conflicts:
+            raise LifecycleError("; ".join(retired_conflicts))
+        if not port_is_available(cdp_port):
+            raise LifecycleError(f"CDP port {cdp_port} already has a live listener")
+        sessions_dir = resolved_state_dir / "sessions"
+        ensure_private_directory(sessions_dir)
+        if session_root.exists():
+            raise LifecycleError(f"fresh session directory already exists: {session_root}")
+        intent = managed_base_record(preparation, "managed_intent")
+        append_record(history_path, intent)
+        apply_record(sessions, intent)
+        write_current(current_path, sessions)
+        if fail_after == "intent":
+            raise LifecycleError("injected failure after managed intent")
+
+    with session_operation_lock(resolved_state_dir, session_id):
+        try:
+            session_root.mkdir(mode=0o700)
+            user_data_dir.mkdir(mode=0o700)
+            ensure_private_directory(Path(preparation.runtime_path))
+            fsync_directory(session_root)
+            fsync_directory(session_root.parent)
+            profile_record = profile_identity_record(user_data_dir)
+            preparation = dataclasses.replace(preparation, profile_identity=profile_record)
+            if fail_after == "profile-create":
+                raise LifecycleError("injected failure after profile creation")
+            profile_event = managed_base_record(preparation, "managed_profile_created")
+            profile_event["profile_identity"] = dataclasses.asdict(profile_record)
+            with lifecycle_lock(resolved_state_dir):
+                sessions = replay(read_history(history_path))
+                apply_record(sessions, profile_event)
+                append_record(history_path, profile_event)
+                write_current(current_path, sessions)
+            if fail_after == "profile-record":
+                raise LifecycleError("injected failure after profile identity record")
+        except Exception:
+            record_cleanup_pending(resolved_state_dir, session_id, "managed preparation uncertain failure")
+            raise
+    return preparation
+
+
+def record_cleanup_pending(state_dir: Path, session_id: str, reason: str) -> None:
+    history_path = state_dir / "lifecycle.jsonl"
+    current_path = state_dir / "current.json"
+    with lifecycle_lock(state_dir):
+        sessions = replay(read_history(history_path))
+        session = sessions.get(session_id)
+        if session is None or session.get("schema") != MANAGED_CURRENT_SCHEMA:
+            return
+        if session.get("cleanup_pending_reason") is not None:
+            return
+        preparation = session_preparation_from_session(session)
+        record = managed_base_record(preparation, "cleanup_pending")
+        record["reason"] = reason[:200]
+        apply_record(sessions, record)
+        append_record(history_path, record)
+        write_current(current_path, sessions)
+
+
+def launch_managed_role(
+    *,
+    session_id: str,
+    role: str,
+    argv: list[str],
+    state_dir: Path | None = None,
+    identity_provider: IdentityProvider | None = None,
+    env: dict[str, str] | None = None,
+    stdin: Any = subprocess.DEVNULL,
+    stdout: Any = subprocess.DEVNULL,
+    stderr: Any = subprocess.DEVNULL,
+    fail_after: str | None = None,
+) -> subprocess.Popen[Any]:
+    """Launch one gated managed role after durable identity and release records."""
+
+    if role not in MANAGED_ROLES:
+        raise LifecycleError("role must be chrome or daemon")
+    if not argv or not all(isinstance(arg, str) and "\0" not in arg for arg in argv):
+        raise LifecycleError("argv must contain non-null strings")
+    resolved_state_dir = lifecycle_dir() if state_dir is None else state_dir
+    history_path = resolved_state_dir / "lifecycle.jsonl"
+    current_path = resolved_state_dir / "current.json"
+    with session_operation_lock(resolved_state_dir, session_id):
+        with lifecycle_lock(resolved_state_dir):
+            sessions = replay(read_history(history_path))
+            session = sessions.get(session_id)
+            if session is None or session.get("schema") != MANAGED_CURRENT_SCHEMA:
+                raise LifecycleError(f"managed session is not active: {session_id}")
+            if session["state"] == "cleanup-pending":
+                raise LifecycleError("cleanup-pending sessions cannot resume launch")
+            role_state = session["roles"][role]
+            if role_state["birth_identity"] is not None or role_state["released"]:
+                raise LifecycleError(f"{role} has already been launched or released")
+            preparation = session_preparation_from_session(session)
+
+        if preparation.profile_identity is None:
+            raise LifecycleError("profile identity has not been recorded")
+        if profile_identity_record(Path(preparation.user_data_dir)) != preparation.profile_identity:
+            raise LifecycleError("profile identity changed before launch")
+        reader_fd, writer_fd = os.pipe()
+        os.set_inheritable(reader_fd, True)
+        os.set_inheritable(writer_fd, False)
+        process: subprocess.Popen[Any] | None = None
+        try:
+            process = subprocess.Popen(
+                [sys.executable, str(Path(__file__).resolve()), "_child-bootstrap", str(reader_fd), json.dumps(argv)],
+                pass_fds=(reader_fd,),
+                close_fds=True,
+                cwd=preparation.workspace,
+                env=env,
+                stdin=stdin,
+                stdout=stdout,
+                stderr=stderr,
+            )
+            os.close(reader_fd)
+            reader_fd = -1
+            birth = process_birth_identity_record(process.pid, identity_provider)
+            if fail_after == "identity-inspect":
+                raise LifecycleError("injected failure after role identity inspection")
+            identity_event = managed_base_record(preparation, "managed_role_identity")
+            identity_event["role"] = role
+            identity_event["birth_identity"] = dataclasses.asdict(birth)
+            release_event = managed_base_record(preparation, "managed_role_release")
+            release_event["role"] = role
+            with lifecycle_lock(resolved_state_dir):
+                sessions = replay(read_history(history_path))
+                apply_record(sessions, identity_event)
+                append_record(history_path, identity_event)
+                write_current(current_path, sessions)
+            if fail_after == "identity-record":
+                raise LifecycleError("injected failure after role identity record")
+            artifact_boot = process_birth_identity_record(os.getpid(), identity_provider).boot
+            with lifecycle_lock(resolved_state_dir):
+                sessions = replay(read_history(history_path))
+                session = sessions.get(session_id)
+                if session is None or session.get("schema") != MANAGED_CURRENT_SCHEMA:
+                    raise LifecycleError(f"managed session is not active: {session_id}")
+                if session.get("runtime_identity") is None or session.get("artifact_boot") is None:
+                    runtime_record = profile_identity_record(Path(preparation.runtime_path))
+                    artifacts_event = managed_base_record(preparation, "managed_artifacts_recorded")
+                    artifacts_event["profile_identity"] = dataclasses.asdict(preparation.profile_identity)
+                    artifacts_event["runtime_identity"] = dataclasses.asdict(runtime_record)
+                    artifacts_event["artifact_boot"] = dataclasses.asdict(artifact_boot)
+                    apply_record(sessions, artifacts_event)
+                    append_record(history_path, artifacts_event)
+                    write_current(current_path, sessions)
+            with lifecycle_lock(resolved_state_dir):
+                sessions = replay(read_history(history_path))
+                apply_record(sessions, release_event)
+                append_record(history_path, release_event)
+                write_current(current_path, sessions)
+            if fail_after == "release-record":
+                raise LifecycleError("injected failure after role release record")
+            if os.write(writer_fd, b"1") != 1:
+                raise LifecycleError("gate release failed")
+            return process
+        except Exception:
+            if writer_fd >= 0:
+                os.close(writer_fd)
+                writer_fd = -1
+            if process is not None:
+                try:
+                    process.wait(timeout=10)
+                except subprocess.TimeoutExpired:
+                    pass
+            if process is not None:
+                record_cleanup_pending(resolved_state_dir, session_id, f"{role} launch uncertain failure")
+            raise
+        finally:
+            if reader_fd >= 0:
+                os.close(reader_fd)
+            if writer_fd >= 0:
+                os.close(writer_fd)
 
 
 def port_is_available(port: int) -> bool:
@@ -343,6 +1220,1275 @@ def port_is_available(port: int) -> bool:
         except OSError:
             return False
     return True
+
+
+def sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return "sha256:" + digest.hexdigest()
+
+
+def repo_root() -> Path:
+    return Path(__file__).resolve().parents[1]
+
+
+def native_daemon_build_id(binary: Path) -> str:
+    try:
+        result = subprocess.run(
+            [str(binary), "--managed-build-id"],
+            text=True,
+            capture_output=True,
+            check=True,
+        )
+    except (OSError, subprocess.CalledProcessError) as exc:
+        raise LifecycleError("could not read managed agent-browser build identity from installed binary") from exc
+    build_id = result.stdout.strip()
+    if not build_id:
+        raise LifecycleError("installed managed agent-browser binary returned an empty build identity")
+    return build_id
+
+
+def verify_custom_runtime() -> ManagedRuntimeIdentity:
+    root = repo_root()
+    wrapper = root / "bin" / "agent-browser"
+    install_dir = Path(os.environ.get("AGENT_BROWSER_CUSTOM_INSTALL_DIR", Path.home() / ".local" / "libexec" / "agent-browser-rfc0011")).expanduser()
+    binary = install_dir / "agent-browser"
+    receipt = install_dir / "build-input.sha256"
+    fingerprint = root / "amp" / "agent-browser-custom" / "fingerprint"
+    if not binary.is_file() or not os.access(binary, os.X_OK) or not receipt.is_file():
+        raise LifecycleError("managed start requires the installed custom agent-browser binary; parent must build/install it first")
+    try:
+        expected = subprocess.run([str(fingerprint)], text=True, capture_output=True, check=True).stdout.strip()
+    except subprocess.CalledProcessError as exc:
+        raise LifecycleError("could not compute managed agent-browser build identity") from exc
+    actual = receipt.read_text(encoding="utf-8").strip()
+    if actual != expected:
+        raise LifecycleError("managed start requires the installed custom agent-browser build to match repository inputs")
+    build_id = native_daemon_build_id(binary)
+    return ManagedRuntimeIdentity(
+        wrapper_path=str(wrapper),
+        binary_path=str(binary),
+        install_dir=str(install_dir),
+        build_id=build_id,
+        build_digest="sha256:" + actual if re.fullmatch(r"[0-9a-f]{64}", actual) else sha256_file(receipt),
+    )
+
+
+def validate_and_snapshot_config(workspace: Path, runtime_path: Path) -> ManagedRuntimeConfig:
+    source = Path.home() / ".agent-browser" / "config.json"
+    if not source.is_file():
+        raise LifecycleError("managed start requires an existing approved ~/.agent-browser/config.json")
+    try:
+        data = json.loads(source.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise LifecycleError("agent-browser config is not valid JSON") from exc
+    if not isinstance(data, dict):
+        raise LifecycleError("agent-browser config must be a JSON object")
+    allowed = {"$schema", "maxOutput", "autoConnect", "plugins", "contentBoundaries", "headed"}
+    unknown = sorted(set(data) - allowed)
+    if unknown:
+        raise LifecycleError(f"managed start refuses unsupported config keys: {', '.join(unknown)}")
+    if "$schema" in data and not isinstance(data["$schema"], str):
+        raise LifecycleError("managed start requires $schema to be a string when present")
+    if type(data.get("maxOutput")) is not int or data["maxOutput"] < 0:
+        raise LifecycleError("managed start requires numeric maxOutput")
+    if data.get("autoConnect") is not False:
+        raise LifecycleError("managed start requires autoConnect=false")
+    if data.get("headed") is True:
+        raise LifecycleError("managed start refuses headed=true in config; use lifecycle start --headed")
+    if "headed" in data and data["headed"] is not False:
+        raise LifecycleError("managed start requires headed to be false when present")
+    if "contentBoundaries" in data and not isinstance(data["contentBoundaries"], bool):
+        raise LifecycleError("managed start requires boolean contentBoundaries")
+    plugins = data.get("plugins")
+    if not isinstance(plugins, list) or len(plugins) != 1 or not isinstance(plugins[0], dict):
+        raise LifecycleError("managed start currently permits only the approved onepassword plugin")
+    plugin = plugins[0]
+    if set(plugin) != {"name", "command", "capabilities"} or plugin.get("name") != "onepassword" or plugin.get("capabilities") != ["credential.read"] or not approved_onepassword_plugin_command(plugin.get("command")):
+        raise LifecycleError("managed start refuses unapproved agent-browser plugin configuration")
+    if not workspace.is_absolute():
+        raise LifecycleError("workspace must resolve to an absolute path")
+    snapshot = runtime_path / "config.snapshot.json"
+    ensure_private_directory(runtime_path)
+    encoded = json.dumps(data, indent=2, sort_keys=True).encode("utf-8") + b"\n"
+    with snapshot.open("wb") as handle:
+        os.fchmod(handle.fileno(), 0o600)
+        handle.write(encoded)
+        handle.flush()
+        os.fsync(handle.fileno())
+    return ManagedRuntimeConfig(
+        source_path=str(source),
+        snapshot_path=str(snapshot),
+        config_digest="sha256:" + hashlib.sha256(encoded).hexdigest(),
+        data=data,
+    )
+
+
+def approved_onepassword_plugin_command(command: Any) -> bool:
+    if not isinstance(command, str) or not command:
+        return False
+    expected = repo_root() / "bin" / "agent-browser-plugin-onepassword"
+    candidates = [expected]
+    amp_config_dir = os.environ.get("AMP_CONFIG_DIR")
+    if amp_config_dir:
+        candidates.append(Path(amp_config_dir).expanduser() / "bin" / "agent-browser-plugin-onepassword")
+    candidates.append(Path.home() / ".config" / "amp" / "bin" / "agent-browser-plugin-onepassword")
+    command_path = Path(command).expanduser()
+    for candidate in candidates:
+        if command == str(candidate):
+            return True
+        try:
+            if command_path.exists() and candidate.exists() and command_path.samefile(candidate):
+                return True
+        except OSError:
+            continue
+    return False
+
+
+def reject_dangerous_inherited_env() -> None:
+    dangerous = sorted(
+        name
+        for name in os.environ
+        if name.startswith("AGENT_BROWSER_") and name not in ALLOWED_INHERITED_AGENT_BROWSER_ENV
+    )
+    if dangerous:
+        raise LifecycleError(f"managed start refuses inherited Agent Browser environment: {', '.join(dangerous)}")
+
+
+def clean_runtime_env(
+    runtime: ManagedRuntimeIdentity,
+    session: str,
+    cdp_url: str,
+    socket_dir: Path,
+    *,
+    daemon: bool = False,
+) -> dict[str, str]:
+    env = {
+        "HOME": os.environ.get("HOME", str(Path.home())),
+        "PATH": os.environ.get("PATH", "/usr/bin:/bin:/usr/sbin:/sbin"),
+        "TMPDIR": os.environ.get("TMPDIR", "/tmp"),
+        "AGENT_BROWSER_SKILLS_DIR": str(Path(runtime.install_dir) / "skill-data"),
+        "AGENT_BROWSER_MANAGED": "1",
+        "AGENT_BROWSER_MANAGED_CDP": cdp_url,
+        "AGENT_BROWSER_SESSION": session,
+        "AGENT_BROWSER_SOCKET_DIR": str(socket_dir),
+    }
+    if daemon:
+        env["AGENT_BROWSER_DAEMON"] = "1"
+    if "AGENT_BROWSER_CUSTOM_INSTALL_DIR" in os.environ:
+        env["AGENT_BROWSER_CUSTOM_INSTALL_DIR"] = os.environ["AGENT_BROWSER_CUSTOM_INSTALL_DIR"]
+    return env
+
+
+def derive_names(workspace: Path) -> tuple[str, str]:
+    seed = hashlib.sha256(str(workspace).encode("utf-8") + uuid.uuid4().bytes).hexdigest()
+    return f"ab-{seed[:10]}", f"ab-{seed[10:20]}"
+
+
+def load_sessions(state_dir: Path | None = None) -> dict[str, dict[str, Any]]:
+    resolved_state_dir = lifecycle_dir() if state_dir is None else state_dir
+    with lifecycle_lock(resolved_state_dir):
+        return replay(read_history(resolved_state_dir / "lifecycle.jsonl"))
+
+
+def managed_preparation_for_session(session_id: str, state_dir: Path | None = None) -> ManagedSessionPreparation:
+    sessions = load_sessions(state_dir)
+    session = sessions.get(session_id)
+    if session is None or session.get("schema") != MANAGED_CURRENT_SCHEMA:
+        raise LifecycleError(f"managed session is not active: {session_id}")
+    return session_preparation_from_session(session)
+
+
+def socket_path_for(preparation: ManagedSessionPreparation) -> Path:
+    return Path(preparation.runtime_path) / f"{preparation.short_daemon_name}.sock"
+
+
+def runtime_socket_dir(preparation: ManagedSessionPreparation) -> Path:
+    return Path(preparation.runtime_path)
+
+
+def send_daemon_json(
+    preparation: ManagedSessionPreparation,
+    command: dict[str, Any],
+    timeout: float = 5.0,
+    expected_peer_pid: int | None = None,
+) -> dict[str, Any]:
+    sock_path = socket_path_for(preparation)
+    if not sock_path.exists():
+        raise LifecycleError("managed daemon socket is absent; recovery is required")
+    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
+        client.settimeout(timeout)
+        client.connect(str(sock_path))
+        peer_pid = getattr(socket, "LOCAL_PEERPID", 0x002 if sys.platform == "darwin" else None)
+        sol_local = getattr(socket, "SOL_LOCAL", 0 if sys.platform == "darwin" else None)
+        if expected_peer_pid is not None and (peer_pid is None or sol_local is None):
+            raise LifecycleError("managed daemon socket peer PID inspection is unavailable")
+        if peer_pid is not None and sol_local is not None:
+            try:
+                actual_peer_pid = client.getsockopt(sol_local, peer_pid)
+            except OSError as exc:
+                raise LifecycleError("could not inspect managed daemon socket peer PID") from exc
+            if expected_peer_pid is not None and actual_peer_pid != expected_peer_pid:
+                raise LifecycleError("managed daemon socket peer PID does not match the recorded daemon")
+        client.sendall((json.dumps(command, separators=(",", ":")) + "\n").encode("utf-8"))
+        response = b""
+        while not response.endswith(b"\n"):
+            chunk = client.recv(1024 * 1024)
+            if not chunk:
+                break
+            response += chunk
+    if not response:
+        raise LifecycleError("managed daemon returned no response; recovery is required")
+    decoded = json.loads(response.decode("utf-8"))
+    if not isinstance(decoded, dict):
+        raise LifecycleError("managed daemon returned an invalid response")
+    return decoded
+
+
+def assert_managed_ready(session_id: str, actor_thread_id: str, state_dir: Path | None = None) -> dict[str, Any]:
+    validate_thread_id(actor_thread_id, "actor_thread_id")
+    sessions = load_sessions(state_dir)
+    session = sessions.get(session_id)
+    if session is None or session.get("schema") != MANAGED_CURRENT_SCHEMA:
+        raise LifecycleError(f"managed session is not active: {session_id}")
+    if session["state"] not in {MANAGED_READY_STATE, MANAGED_DRAINING_STATE} or session["verification"] != "managed-ready":
+        raise LifecycleError("managed session is not ready; recovery is required")
+    if actor_thread_id == session["owner_thread_id"]:
+        if session["state"] == MANAGED_DRAINING_STATE:
+            raise LifecycleError("owner commands are refused while managed session is draining")
+    elif actor_thread_id not in session["attached_thread_ids"]:
+        raise LifecycleError("managed exec requires the actor to own or attach to the session")
+    return session
+
+
+def append_managed_thread_event(
+    state_dir: Path,
+    session_id: str,
+    event: str,
+    actor_thread_id: str,
+    *,
+    reconciled_thread_id: str | None = None,
+) -> dict[str, Any]:
+    history_path = state_dir / "lifecycle.jsonl"
+    current_path = state_dir / "current.json"
+    with lifecycle_lock(state_dir):
+        sessions = replay(read_history(history_path))
+        session = sessions.get(session_id)
+        if session is None or session.get("schema") != MANAGED_CURRENT_SCHEMA:
+            raise LifecycleError(f"managed session is not active: {session_id}")
+        preparation = session_preparation_from_session(session)
+        record = managed_base_record(preparation, event)
+        record["actor_thread_id"] = actor_thread_id
+        if reconciled_thread_id is not None:
+            record["reconciled_thread_id"] = reconciled_thread_id
+        apply_record(sessions, record)
+        append_record(history_path, record)
+        write_current(current_path, sessions)
+        return record
+
+
+def verify_session_owner(session: dict[str, Any], owner_thread_id: str, action: str) -> None:
+    validate_thread_id(owner_thread_id, "owner_thread_id")
+    if session["owner_thread_id"] != owner_thread_id:
+        raise LifecycleError(f"only the owner thread can {action} a managed session")
+
+
+def verify_managed_birth(session: dict[str, Any], role: str) -> None:
+    saved = session["roles"][role]["birth_identity"]
+    if saved is None:
+        raise LifecycleError(f"{role} identity is missing; recovery is required")
+    current = process_birth_identity_record(saved["pid"])
+    if dataclasses.asdict(current) != saved:
+        raise LifecycleError(f"{role} process identity changed; recovery is required")
+
+
+def verify_managed_process_identities(session: dict[str, Any]) -> None:
+    profile = session.get("profile_identity")
+    if profile is None or profile_identity_record(Path(session["user_data_dir"])) != ProfileIdentityRecord(**profile):
+        raise LifecycleError("managed profile identity no longer matches the session")
+    verify_managed_birth(session, "chrome")
+    verify_managed_birth(session, "daemon")
+
+
+def append_managed_ready(state_dir: Path, session_id: str, daemon_build_id: str) -> dict[str, Any]:
+    history_path = state_dir / "lifecycle.jsonl"
+    current_path = state_dir / "current.json"
+    with lifecycle_lock(state_dir):
+        sessions = replay(read_history(history_path))
+        session = sessions[session_id]
+        preparation = session_preparation_from_session(session)
+        record = managed_base_record(preparation, "managed_ready")
+        record["chrome_pid"] = session["roles"]["chrome"]["birth_identity"]["pid"]
+        record["daemon_pid"] = session["roles"]["daemon"]["birth_identity"]["pid"]
+        record["daemon_build_id"] = daemon_build_id
+        apply_record(sessions, record)
+        append_record(history_path, record)
+        write_current(current_path, sessions)
+        return record
+
+
+def lsof_daemon_tcp_listener_lines(pid: int) -> list[str]:
+    result = subprocess.run(
+        ["lsof", "-nP", "-a", "-p", str(pid), "-iTCP", "-sTCP:LISTEN"],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if result.returncode not in {0, 1}:
+        raise LifecycleError("could not inspect managed daemon TCP listeners")
+    return [line for line in result.stdout.splitlines()[1:] if line.strip()]
+
+
+def check_no_daemon_stream(preparation: ManagedSessionPreparation, daemon_pid: int | None = None) -> None:
+    base = Path(preparation.runtime_path)
+    if (base / f"{preparation.short_daemon_name}.stream").exists():
+        raise LifecycleError("managed daemon started a live stream; recovery is required")
+    if daemon_pid is not None and lsof_daemon_tcp_listener_lines(daemon_pid):
+        raise LifecycleError("managed daemon opened a TCP listener; recovery is required")
+
+
+def chrome_executable_path() -> str:
+    path = Path("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome")
+    if not path.is_file() or not os.access(path, os.X_OK):
+        raise LifecycleError("Google Chrome is not installed at the expected macOS path")
+    return str(path)
+
+
+def lsof_listener_pids(port: int) -> set[int]:
+    result = subprocess.run(
+        ["lsof", "-nP", f"-iTCP@127.0.0.1:{port}", "-sTCP:LISTEN", "-t"],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if result.returncode not in {0, 1}:
+        raise LifecycleError("could not inspect loopback listener ownership")
+    return {int(line) for line in result.stdout.splitlines() if line.strip().isdigit()}
+
+
+def wait_for_chrome(preparation: ManagedSessionPreparation, chrome_pid: int, timeout: float = 15.0) -> None:
+    deadline = time.monotonic() + timeout
+    url = f"http://127.0.0.1:{preparation.cdp_port}/json/version"
+    last_error = "Chrome did not expose CDP"
+    while time.monotonic() < deadline:
+        try:
+            with urllib.request.urlopen(url, timeout=1) as response:  # noqa: S310 - loopback only.
+                data = json.loads(response.read().decode("utf-8"))
+            websocket = data.get("webSocketDebuggerUrl", "")
+            if isinstance(websocket, str) and f"127.0.0.1:{preparation.cdp_port}" in websocket:
+                pids = lsof_listener_pids(preparation.cdp_port)
+                if pids == {chrome_pid}:
+                    return
+                last_error = "CDP listener is not owned only by the recorded Chrome PID"
+        except Exception as exc:  # noqa: BLE001 - retry bounded loopback startup checks.
+            last_error = str(exc)
+        time.sleep(0.1)
+    raise LifecycleError(f"managed Chrome failed readiness checks: {last_error}")
+
+
+def wait_for_daemon(
+    preparation: ManagedSessionPreparation,
+    expected_build: str,
+    expected_pid: int,
+    timeout: float = 15.0,
+    *,
+    require_connected: bool = False,
+) -> dict[str, Any]:
+    deadline = time.monotonic() + timeout
+    last_error = "daemon did not answer"
+    while time.monotonic() < deadline:
+        try:
+            status = send_daemon_json(
+                preparation,
+                {"id": "managed-status", "action": "managed_status"},
+                expected_peer_pid=expected_pid,
+            )
+            data = status.get("data")
+            if status.get("success") is True and isinstance(data, dict):
+                if data.get("managed") is not True:
+                    raise LifecycleError("daemon is not in managed mode")
+                if data.get("buildId") != expected_build:
+                    raise LifecycleError("managed daemon build identity does not match the launched runtime")
+                if data.get("daemonPid") != expected_pid:
+                    raise LifecycleError("managed daemon status PID does not match the launched runtime")
+                if data.get("cdpUrl") != f"http://127.0.0.1:{preparation.cdp_port}":
+                    raise LifecycleError("managed daemon CDP URL does not match the lifecycle session")
+                if data.get("streamEnabled") is not False:
+                    raise LifecycleError("managed daemon stream is enabled")
+                if require_connected and data.get("connected") is not True:
+                    raise LifecycleError("managed daemon is not connected to the recorded Chrome endpoint")
+                return data
+        except LifecycleError as exc:
+            last_error = str(exc)
+        except Exception as exc:  # noqa: BLE001 - retry bounded Unix-socket startup checks.
+            last_error = str(exc)
+        time.sleep(0.1)
+    raise LifecycleError(f"managed daemon failed readiness checks: {last_error}")
+
+
+def command_start(args: argparse.Namespace) -> dict[str, Any]:
+    if sys.platform != "darwin":
+        raise LifecycleError("managed start is currently supported only on macOS")
+    sweep_summary = sweep_retired_sessions()
+    reject_dangerous_inherited_env()
+    validate_thread_id(args.owner_thread_id, "owner_thread_id")
+    workspace = Path(args.workspace).expanduser().resolve()
+    if not workspace.is_dir():
+        raise LifecycleError("workspace must be an existing directory")
+    cdp_port = args.cdp_port if args.cdp_port is not None else find_free_port()
+    namespace, daemon_name = derive_names(workspace)
+    short = hashlib.sha256(uuid.uuid4().bytes).hexdigest()[:12]
+    runtime_root = Path(tempfile.gettempdir()) / f"ab-{short}"
+    ensure_private_directory(runtime_root)
+    runtime_path = runtime_root / "run"
+    ensure_private_directory(runtime_path)
+    runtime = verify_custom_runtime()
+    config = validate_and_snapshot_config(workspace, runtime_path)
+    preparation = prepare_managed_session(
+        owner_thread_id=args.owner_thread_id,
+        workspace=workspace,
+        namespace=namespace,
+        short_daemon_name=daemon_name,
+        runtime_path=runtime_path,
+        launch_mode="headed" if args.headed else "headless",
+        cdp_port=cdp_port,
+        build_digest=runtime.build_digest,
+        config_digest=config.config_digest,
+    )
+    cdp_url = f"http://127.0.0.1:{preparation.cdp_port}"
+    env = clean_runtime_env(runtime, preparation.short_daemon_name, cdp_url, runtime_socket_dir(preparation))
+    daemon_env = clean_runtime_env(runtime, preparation.short_daemon_name, cdp_url, runtime_socket_dir(preparation), daemon=True)
+    chrome_argv = [
+        chrome_executable_path(),
+        "--remote-debugging-address=127.0.0.1",
+        f"--remote-debugging-port={preparation.cdp_port}",
+        f"--user-data-dir={preparation.user_data_dir}",
+        "--no-first-run",
+        "--no-default-browser-check",
+    ]
+    if not args.headed:
+        chrome_argv.append("--headless=new")
+    try:
+        chrome = launch_managed_role(session_id=preparation.session_id, role="chrome", argv=chrome_argv, env=env)
+        wait_for_chrome(preparation, chrome.pid)
+        daemon = launch_managed_role(session_id=preparation.session_id, role="daemon", argv=[runtime.binary_path], env=daemon_env)
+        daemon_data = wait_for_daemon(preparation, runtime.build_id, daemon.pid)
+        init = send_daemon_json(
+            preparation,
+            {"id": "managed-init", "action": "managed_initialize", "cdpUrl": cdp_url},
+            expected_peer_pid=daemon.pid,
+        )
+        if init.get("success") is not True:
+            raise LifecycleError("managed daemon refused initialization")
+        daemon_data = wait_for_daemon(preparation, runtime.build_id, daemon.pid, require_connected=True)
+        verify_ready_integrity(preparation.session_id, runtime)
+        check_no_daemon_stream(preparation, daemon.pid)
+        ready = append_managed_ready(lifecycle_dir(), preparation.session_id, runtime.build_id)
+    except Exception:
+        record_cleanup_pending(lifecycle_dir(), preparation.session_id, "managed start uncertain failure")
+        raise
+    return {
+        "session_id": preparation.session_id,
+        "owner_thread_id": preparation.owner_thread_id,
+        "workspace": preparation.workspace,
+        "cdp_url": cdp_url,
+        "cdp_port": preparation.cdp_port,
+        "user_data_dir": preparation.user_data_dir,
+        "runtime_path": preparation.runtime_path,
+        "short_daemon_name": preparation.short_daemon_name,
+        "namespace": preparation.namespace,
+        "chrome_pid": chrome.pid,
+        "daemon_pid": daemon_data.get("daemonPid", daemon.pid),
+        "ready_event": ready,
+        "sweep_summary": sweep_summary,
+    }
+
+
+def find_free_port() -> int:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as listener:
+        listener.bind(("127.0.0.1", 0))
+        return int(listener.getsockname()[1])
+
+
+def validate_exec_argv(argv: list[str]) -> None:
+    if argv and argv[0] == "--":
+        del argv[0]
+    if not argv:
+        raise LifecycleError("exec requires an agent-browser command")
+    if "-p" in argv:
+        raise LifecycleError("managed exec refuses reserved flag -p (--provider)")
+    tokens = list(argv)
+    command_index = _consume_allowed_global_flags(tokens, 0)
+    if command_index >= len(tokens):
+        raise LifecycleError("exec requires an agent-browser command")
+    action = tokens[command_index]
+    if action in {"batch", "script"}:
+        raise LifecycleError(f"Action '{action}' is not supported in managed browser mode")
+    if action not in ALLOWED_MANAGED_ACTIONS:
+        raise LifecycleError("managed exec permits only ordinary browser actions")
+    _validate_action_args(action, tokens[command_index + 1 :])
+
+
+def validate_tab_id(tab_id: str) -> None:
+    if not isinstance(tab_id, str) or not STABLE_TARGET_ID_RE.fullmatch(tab_id):
+        raise LifecycleError("--tab-id must be a stable target ID, not a flag or tab index")
+
+
+def _flag_name(token: str) -> str:
+    return token.split("=", 1)[0]
+
+
+def _flag_value(tokens: list[str], index: int, usage: str) -> tuple[str, int]:
+    token = tokens[index]
+    if "=" in token:
+        return token.split("=", 1)[1], index + 1
+    if index + 1 >= len(tokens) or tokens[index + 1].startswith("--"):
+        raise LifecycleError(f"managed exec requires a value for {_flag_name(token)} in {usage}")
+    return tokens[index + 1], index + 2
+
+
+def _bool_flag_value(tokens: list[str], index: int) -> tuple[bool | None, int]:
+    token = tokens[index]
+    if "=" in token:
+        raw = token.split("=", 1)[1].lower()
+        if raw not in {"true", "false"}:
+            raise LifecycleError(f"managed exec requires boolean value for {_flag_name(token)}")
+        return raw == "true", index + 1
+    if index + 1 < len(tokens) and tokens[index + 1].lower() in {"true", "false"}:
+        return tokens[index + 1].lower() == "true", index + 2
+    return None, index + 1
+
+
+def _consume_allowed_global_flags(tokens: list[str], index: int) -> int:
+    while index < len(tokens) and tokens[index].startswith("--"):
+        flag = _flag_name(tokens[index])
+        if flag == "--headed":
+            value, index = _bool_flag_value(tokens, index)
+            if value is not False:
+                raise LifecycleError("managed exec refuses headed=true")
+            continue
+        if flag in MANAGED_RESERVED_FLAGS:
+            raise LifecycleError(f"managed exec refuses reserved flag {flag}")
+        if flag in ALLOWED_MANAGED_GLOBAL_BOOL_FLAGS:
+            _value, index = _bool_flag_value(tokens, index)
+            continue
+        if flag in ALLOWED_MANAGED_GLOBAL_FLAGS_WITH_VALUES:
+            _value, index = _flag_value(tokens, index, "global options")
+            continue
+        raise LifecycleError(f"managed exec refuses unsupported flag {flag}")
+    return index
+
+
+def _reject_flag(token: str, usage: str) -> None:
+    if token.startswith("--"):
+        raise LifecycleError(f"managed exec refuses unsupported flag {_flag_name(token)} in {usage}")
+
+
+def _validate_positionals(tokens: list[str], usage: str, *, minimum: int = 0, maximum: int | None = None) -> None:
+    for token in tokens:
+        _reject_flag(token, usage)
+    if len(tokens) < minimum:
+        raise LifecycleError(f"managed exec missing arguments for {usage}")
+    if maximum is not None and len(tokens) > maximum:
+        raise LifecycleError(f"managed exec has too many arguments for {usage}")
+
+
+def _validate_action_args(action: str, args: list[str]) -> None:
+    if action in {"open", "goto", "navigate", "read", "screenshot", "snapshot"}:
+        value_flags = {
+            "open": {"--wait"}, "goto": {"--wait"}, "navigate": {"--wait"},
+            "read": {"--llms", "--filter", "--timeout"},
+            "snapshot": {"--depth", "--selector"}, "screenshot": set(),
+        }[action]
+        boolean_flags = {
+            "read": {"--raw", "--require-md", "--outline"},
+            "snapshot": {"--interactive", "--compact", "--cursor"},
+            "screenshot": {"--full"},
+        }.get(action, set())
+        index = 0
+        while index < len(args):
+            flag = _flag_name(args[index])
+            if flag in value_flags:
+                _value, index = _flag_value(args, index, action)
+            elif flag in boolean_flags:
+                index += 1
+            elif args[index].startswith("--"):
+                index = _consume_allowed_global_flags(args, index)
+            else:
+                index += 1
+    elif action == "get":
+        _validate_positionals(args, action, minimum=1)
+    elif action in {"click", "fill"}:
+        allowed = {"--new-tab"} if action == "click" else set()
+        positionals: list[str] = []
+        index = 0
+        while index < len(args):
+            flag = _flag_name(args[index])
+            if args[index].startswith("--"):
+                if flag not in allowed:
+                    raise LifecycleError(f"managed exec refuses unsupported flag {flag} in {action}")
+                index += 1
+            else:
+                positionals.append(args[index])
+                index += 1
+        minimum = 1 if action == "click" else 2
+        _validate_positionals(positionals, action, minimum=minimum)
+    elif action == "eval":
+        _validate_positionals(args, action, minimum=1)
+    elif action == "press":
+        _validate_positionals(args, action, minimum=1, maximum=1)
+    elif action == "scroll":
+        positionals = []
+        index = 0
+        while index < len(args):
+            flag = _flag_name(args[index])
+            if args[index].startswith("--"):
+                if flag != "--selector":
+                    raise LifecycleError(f"managed exec refuses unsupported flag {flag} in scroll")
+                _value, index = _flag_value(args, index, "scroll")
+            else:
+                positionals.append(args[index])
+                index += 1
+        _validate_positionals(positionals, "scroll", minimum=1, maximum=2)
+    elif action == "wait":
+        allowed = {"--url", "--load", "--fn", "--text", "--download"}
+        positionals = []
+        index = 0
+        while index < len(args):
+            flag = _flag_name(args[index])
+            if args[index].startswith("--"):
+                if flag not in allowed:
+                    raise LifecycleError(f"managed exec refuses unsupported flag {flag} in wait")
+                if flag == "--download" and "=" not in args[index] and (
+                    index + 1 >= len(args) or args[index + 1].startswith("--")
+                ):
+                    index += 1
+                else:
+                    _value, index = _flag_value(args, index, "wait")
+            else:
+                positionals.append(args[index])
+                index += 1
+        _validate_positionals(positionals, "wait", maximum=1)
+    elif action == "tab":
+        if not args:
+            return
+        if len(args) == 1 and not args[0].startswith("--") and args[0] not in {"new", "list", "switch", "close"}:
+            return
+        if args[0] not in {"new", "list", "switch", "close"}:
+            raise LifecycleError("managed exec permits only tab [id], tab, or tab new/list/switch/close")
+        if args[0] == "new":
+            index = 1
+            positionals = []
+            while index < len(args):
+                flag = _flag_name(args[index])
+                if args[index].startswith("--"):
+                    if flag != "--label":
+                        raise LifecycleError(f"managed exec refuses unsupported flag {flag} in tab new")
+                    _value, index = _flag_value(args, index, "tab new")
+                else:
+                    positionals.append(args[index])
+                    index += 1
+            _validate_positionals(positionals, "tab new", maximum=1)
+        elif args[0] == "list":
+            if args[1:] not in ([], ["--json"]):
+                _validate_positionals(args[1:], "tab list", maximum=0)
+        else:
+            _validate_positionals(args[1:], f"tab {args[0]}", maximum=1)
+    elif action == "auth":
+        if len(args) < 2 or args[0] != "login" or args[1].startswith("--"):
+            raise LifecycleError("managed exec permits only auth login <name>")
+        allowed = {"--credential-provider", "--item", "--url", "--username-selector", "--password-selector", "--submit-selector"}
+        index = 2
+        while index < len(args):
+            flag = _flag_name(args[index])
+            if flag not in allowed:
+                raise LifecycleError(f"managed exec refuses unsupported flag {flag} in auth login")
+            _value, index = _flag_value(args, index, "auth login")
+    else:
+        # Native command parsing owns ordinary action grammar. Lifecycle only
+        # admits known command roots and excludes unapproved global overrides.
+        _validate_positionals(args, action)
+
+
+def verify_ready_integrity(session_id: str, runtime: ManagedRuntimeIdentity, state_dir: Path | None = None) -> dict[str, Any]:
+    resolved_state_dir = lifecycle_dir() if state_dir is None else state_dir
+    sessions = load_sessions(resolved_state_dir)
+    session = sessions.get(session_id)
+    if session is None or session.get("schema") != MANAGED_CURRENT_SCHEMA:
+        raise LifecycleError(f"managed session is not active: {session_id}")
+    if session["build_digest"] != runtime.build_digest:
+        raise LifecycleError("managed runtime build digest no longer matches the session")
+    snapshot = Path(session["runtime_path"]) / "config.snapshot.json"
+    if not snapshot.is_file():
+        raise LifecycleError("managed config snapshot is missing; recovery is required")
+    config_digest = "sha256:" + hashlib.sha256(snapshot.read_bytes()).hexdigest()
+    if session["config_digest"] != config_digest:
+        raise LifecycleError("managed config digest no longer matches the session")
+    verify_managed_process_identities(session)
+    if session.get("daemon_build_id") not in {None, runtime.build_id}:
+        raise LifecycleError("managed daemon build identity no longer matches the launched runtime")
+    return session
+
+
+def managed_session_from_history(records: list[dict[str, Any]], session_id: str) -> dict[str, Any] | None:
+    session_records = [record for record in records if record.get("schema") == MANAGED_HISTORY_SCHEMA and record.get("session_id") == session_id]
+    if not session_records:
+        return None
+    sessions: dict[str, dict[str, Any]] = {}
+    for record in session_records:
+        if record["event"] == "managed_closed":
+            break
+        apply_record(sessions, record)
+    return sessions.get(session_id)
+
+
+def append_managed_closed(state_dir: Path, session: dict[str, Any]) -> None:
+    history_path = state_dir / "lifecycle.jsonl"
+    current_path = state_dir / "current.json"
+    preparation = session_preparation_from_session(session)
+    record = managed_base_record(preparation, "managed_closed")
+    with lifecycle_lock(state_dir):
+        sessions = replay(read_history(history_path))
+        if session["session_id"] not in sessions:
+            return
+        apply_record(sessions, record)
+        append_record(history_path, record)
+        write_current(current_path, sessions)
+
+
+def load_retired_cleanup_module() -> Any:
+    helper_path = Path(__file__).resolve().parents[1] / "amp" / "agent-browser-lifecycle" / "retired_cleanup.py"
+    spec = importlib.util.spec_from_file_location("agent_browser_lifecycle_retired_cleanup", helper_path)
+    if spec is None or spec.loader is None:
+        raise LifecycleError(f"cannot load retired cleanup helper: {helper_path}")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def same_boot(left: dict[str, Any] | None, right: BootIdentityRecord) -> bool:
+    if not isinstance(left, dict):
+        return False
+    return left.get("session_uuid") == right.session_uuid and left.get("boot_time_us") == right.boot_time_us
+
+
+def paths_overlap(left: Any, right: Any) -> bool:
+    if not isinstance(left, str) or not isinstance(right, str):
+        return False
+    try:
+        left_path = Path(left)
+        right_path = Path(right)
+    except (TypeError, ValueError):
+        return False
+    if not left_path.is_absolute() or not right_path.is_absolute():
+        return False
+    return (
+        left_path == right_path
+        or _path_is_inside(left_path, right_path)
+        or _path_is_inside(right_path, left_path)
+    )
+
+
+def _path_is_inside(path: Path, parent: Path) -> bool:
+    try:
+        path.relative_to(parent)
+    except ValueError:
+        return False
+    return path != parent
+
+
+def artifact_paths(session: dict[str, Any]) -> dict[str, Any]:
+    paths = {"profile": session.get("user_data_dir")}
+    if session.get("schema") == MANAGED_CURRENT_SCHEMA:
+        paths["runtime"] = session.get("runtime_path")
+    return paths
+
+
+def active_artifact_conflicts(active: dict[str, dict[str, Any]], retired_session: dict[str, Any]) -> list[str]:
+    conflicts: list[str] = []
+    for session in active.values():
+        if session["session_id"] == retired_session["session_id"]:
+            conflicts.append("session is active again")
+        for active_label, active_path in artifact_paths(session).items():
+            for retired_label, retired_path in artifact_paths(retired_session).items():
+                if paths_overlap(active_path, retired_path):
+                    conflicts.append(
+                        f"{retired_label} path overlaps {active_label} path claimed by active session {session['session_id']}"
+                    )
+        if session.get("cdp_port") == retired_session.get("cdp_port"):
+            conflicts.append(f"CDP port is claimed by active session {session['session_id']}")
+        if session.get("schema") == MANAGED_CURRENT_SCHEMA and (session.get("namespace"), session.get("short_daemon_name")) == (
+            retired_session.get("namespace"),
+            retired_session.get("short_daemon_name"),
+        ):
+            conflicts.append(f"daemon namespace is claimed by active session {session['session_id']}")
+    return conflicts
+
+
+def retired_artifact_conflicts(
+    retired: dict[str, dict[str, Any]], preparation: ManagedSessionPreparation | dict[str, Any]
+) -> list[str]:
+    conflicts: list[str] = []
+    candidate = {
+        "schema": MANAGED_CURRENT_SCHEMA,
+        "session_id": preparation.session_id if isinstance(preparation, ManagedSessionPreparation) else preparation.get("session_id"),
+        "user_data_dir": preparation.user_data_dir if isinstance(preparation, ManagedSessionPreparation) else preparation.get("user_data_dir"),
+        "runtime_path": preparation.runtime_path if isinstance(preparation, ManagedSessionPreparation) else preparation.get("runtime_path"),
+    }
+    for session in retired.values():
+        if session.get("artifacts_removed") is True:
+            continue
+        if session.get("session_id") == candidate["session_id"]:
+            continue
+        for retired_label, retired_path in artifact_paths(session).items():
+            for candidate_label, candidate_path in artifact_paths(candidate).items():
+                if paths_overlap(retired_path, candidate_path):
+                    conflicts.append(
+                        f"{candidate_label} path overlaps unremoved retired session {session['session_id']}"
+                    )
+    return conflicts
+
+
+def retired_listener_blocked(session: dict[str, Any]) -> bool:
+    preparation = session_preparation_from_session(session)
+    if lsof_any_listener_pids(preparation.cdp_port):
+        return True
+    daemon_birth = session.get("roles", {}).get("daemon", {}).get("birth_identity")
+    expected_pid = daemon_birth.get("pid") if isinstance(daemon_birth, dict) else None
+    return daemon_socket_pending_reason(preparation, expected_pid) is not None
+
+
+def compact_blocked(session_id: str, reason: str) -> dict[str, str]:
+    return {"session_id": session_id, "reason": reason}
+
+
+def add_blocked_detail(summary: dict[str, Any], session_id: str, reason: str) -> None:
+    summary["blocked"] += 1
+    if len(summary["blocked_details"]) < 10:
+        summary["blocked_details"].append(compact_blocked(session_id, reason))
+
+
+def sweep_retired_sessions(state_dir: Path | None = None) -> dict[str, Any]:
+    resolved_state_dir = lifecycle_dir() if state_dir is None else state_dir
+    history_path = resolved_state_dir / "lifecycle.jsonl"
+    current_path = resolved_state_dir / "current.json"
+    cleanup = load_retired_cleanup_module()
+    current_boot = process_birth_identity_record(os.getpid()).boot
+    summary: dict[str, Any] = {"removed": 0, "awaiting_reboot": 0, "blocked": 0, "blocked_details": []}
+
+    with lifecycle_lock(resolved_state_dir):
+        state = replay_state(read_history(history_path))
+        retired_ids = []
+        for session_id, session in state.retired.items():
+            if session.get("artifacts_removed") is True:
+                continue
+            if same_boot(session.get("artifact_boot"), current_boot):
+                summary["awaiting_reboot"] += 1
+                continue
+            retired_ids.append(session_id)
+
+    for session_id in retired_ids:
+        try:
+            with session_operation_lock(resolved_state_dir, session_id):
+                with lifecycle_lock(resolved_state_dir):
+                    state = replay_state(read_history(history_path))
+                    session = state.retired.get(session_id)
+                    if session is None or session.get("artifacts_removed") is True:
+                        continue
+                    if same_boot(session.get("artifact_boot"), current_boot):
+                        summary["awaiting_reboot"] += 1
+                        continue
+                    conflicts = active_artifact_conflicts(state.active, session)
+                    if conflicts:
+                        raise cleanup.CleanupBlocked("; ".join(conflicts))
+                    session_for_cleanup = dict(session)
+                    result = cleanup.remove_retired_artifacts(
+                        session_for_cleanup,
+                        dataclasses.asdict(current_boot),
+                        retired_listener_blocked,
+                    )
+                    if result == "awaiting-reboot":
+                        summary["awaiting_reboot"] += 1
+                    else:
+                        preparation = session_preparation_from_session(session_for_cleanup)
+                        record = managed_base_record(preparation, "managed_artifacts_removed")
+                        apply_record(state.active, record, state.retired)
+                        append_record(history_path, record)
+                        write_current(current_path, state.active)
+                        summary["removed"] += 1
+        except cleanup.CleanupBlocked as exc:
+            add_blocked_detail(summary, session_id, str(exc))
+        except (LifecycleError, OSError) as exc:
+            add_blocked_detail(summary, session_id, str(exc))
+    return summary
+
+
+def owner_verified_closed_result(state_dir: Path, session_id: str, owner_thread_id: str) -> dict[str, Any] | None:
+    with lifecycle_lock(state_dir):
+        records = read_history(state_dir / "lifecycle.jsonl")
+        active = replay(records)
+    if session_id in active:
+        return None
+    historical = managed_session_from_history(records, session_id)
+    if historical is None:
+        raise LifecycleError(f"managed session is not active: {session_id}")
+    if historical["owner_thread_id"] != owner_thread_id:
+        raise LifecycleError("only the owner thread can close a managed session")
+    return {"session_id": session_id, "state": "closed", "shutdown_response": None, "shutdown_error": None, "pending_reasons": []}
+
+
+def recorded_process_status(saved: dict[str, Any] | None, role: str) -> str | None:
+    if saved is None:
+        return f"{role} identity is missing"
+    try:
+        current = optional_process_birth_identity_record(saved["pid"])
+    except LifecycleError as exc:
+        return f"{role} process inspection failed: {exc}"
+    if current is None:
+        return None
+    saved_record = ProcessBirthIdentityRecord(
+        boot=BootIdentityRecord(**saved["boot"]),
+        pid=saved["pid"],
+        start_time_us=saved["start_time_us"],
+    )
+    if current == saved_record:
+        return f"{role} process is still running"
+    return f"{role} PID was reused or identity changed"
+
+
+def lsof_any_listener_pids(port: int) -> set[int]:
+    result = subprocess.run(
+        ["lsof", "-nP", f"-iTCP:{port}", "-sTCP:LISTEN", "-t"],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        if result.returncode == 1 and not result.stdout.strip() and not result.stderr.strip():
+            return set()
+        raise LifecycleError("could not inspect TCP listener ownership")
+    pids: set[int] = set()
+    for line in result.stdout.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if not stripped.isdigit():
+            raise LifecycleError("could not inspect TCP listener ownership")
+        pids.add(int(stripped))
+    if result.stderr.strip():
+        raise LifecycleError("could not inspect TCP listener ownership")
+    return pids
+
+
+def daemon_socket_pending_reason(preparation: ManagedSessionPreparation, expected_pid: int | None) -> str | None:
+    sock_path = socket_path_for(preparation)
+    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
+        client.settimeout(0.5)
+        try:
+            client.connect(str(sock_path))
+        except OSError as exc:
+            if exc.errno in {errno.ENOENT, errno.ECONNREFUSED}:
+                return None
+            return f"daemon socket listener inspection failed: {exc}"
+        peer_pid = getattr(socket, "LOCAL_PEERPID", 0x002 if sys.platform == "darwin" else None)
+        sol_local = getattr(socket, "SOL_LOCAL", 0 if sys.platform == "darwin" else None)
+        if peer_pid is None or sol_local is None:
+            return "daemon socket listener is live but peer PID inspection is unavailable"
+        try:
+            actual_peer_pid = client.getsockopt(sol_local, peer_pid)
+        except OSError as exc:
+            return f"daemon socket listener inspection failed: {exc}"
+        if expected_pid is not None and actual_peer_pid == expected_pid:
+            return "daemon socket listener is still running"
+        return "daemon socket path has a live foreign listener"
+
+
+def managed_closure_pending_reasons(session: dict[str, Any]) -> list[str]:
+    preparation = session_preparation_from_session(session)
+    reasons: list[str] = []
+    profile = session.get("profile_identity")
+    if profile is not None:
+        try:
+            if profile_identity_record(Path(session["user_data_dir"])) != ProfileIdentityRecord(**profile):
+                reasons.append("profile identity no longer matches")
+        except LifecycleError as exc:
+            reasons.append(f"profile identity inspection failed: {exc}")
+    for role in ("chrome", "daemon"):
+        role_state = session["roles"][role]
+        saved_identity = role_state["birth_identity"]
+        if saved_identity is None and not role_state.get("released", False):
+            continue
+        reason = recorded_process_status(saved_identity, role)
+        if reason is not None:
+            reasons.append(reason)
+    try:
+        listener_pids = lsof_any_listener_pids(preparation.cdp_port)
+    except (LifecycleError, OSError) as exc:
+        reasons.append(str(exc))
+    else:
+        if listener_pids:
+            reasons.append("CDP TCP listener is still present")
+    daemon_pid = session["roles"]["daemon"]["birth_identity"]["pid"] if session["roles"]["daemon"]["birth_identity"] is not None else None
+    try:
+        socket_reason = daemon_socket_pending_reason(preparation, daemon_pid)
+    except OSError as exc:
+        socket_reason = f"daemon socket inspection failed: {exc}"
+    if socket_reason is not None:
+        reasons.append(socket_reason)
+    return reasons
+
+
+def verified_shutdown_allowed(session: dict[str, Any]) -> tuple[bool, str | None]:
+    profile = session.get("profile_identity")
+    if profile is None:
+        return False, "profile identity is missing"
+    try:
+        if profile_identity_record(Path(session["user_data_dir"])) != ProfileIdentityRecord(**profile):
+            return False, "profile identity no longer matches"
+    except LifecycleError as exc:
+        return False, f"profile identity inspection failed: {exc}"
+    chrome_reason = recorded_process_status(session["roles"]["chrome"]["birth_identity"], "chrome")
+    if chrome_reason not in {None, "chrome process is still running"}:
+        return False, chrome_reason
+    daemon_reason = recorded_process_status(session["roles"]["daemon"]["birth_identity"], "daemon")
+    if daemon_reason != "daemon process is still running":
+        return False, daemon_reason
+    return True, None
+
+
+def attempt_verified_shutdown(session: dict[str, Any], *, command_id: str) -> tuple[dict[str, Any] | None, str | None]:
+    allowed, reason = verified_shutdown_allowed(session)
+    if not allowed:
+        return None, reason
+    preparation = session_preparation_from_session(session)
+    try:
+        response = send_daemon_json(
+            preparation,
+            {"id": command_id, "action": "managed_shutdown"},
+            timeout=5.0,
+            expected_peer_pid=session["roles"]["daemon"]["birth_identity"]["pid"],
+        )
+        return response, None
+    except (LifecycleError, OSError, json.JSONDecodeError, UnicodeDecodeError) as exc:
+        return None, str(exc)
+
+
+def wait_for_managed_closure(session: dict[str, Any], timeout: float = 5.0) -> list[str]:
+    deadline = time.monotonic() + timeout
+    reasons = managed_closure_pending_reasons(session)
+    while reasons and time.monotonic() < deadline:
+        time.sleep(0.1)
+        reasons = managed_closure_pending_reasons(session)
+    return reasons
+
+
+def command_attach(args: argparse.Namespace) -> dict[str, Any]:
+    state_dir = lifecycle_dir()
+    validate_thread_id(args.actor_thread_id, "actor_thread_id")
+    validate_thread_id(args.owner_thread_id, "owner_thread_id")
+    if args.actor_thread_id == args.owner_thread_id:
+        raise LifecycleError("managed attach requires a child actor different from the owner")
+    with session_operation_lock(state_dir, args.session_id):
+        sessions = load_sessions(state_dir)
+        session = sessions.get(args.session_id)
+        if session is None or session.get("schema") != MANAGED_CURRENT_SCHEMA:
+            raise LifecycleError(f"managed session is not active: {args.session_id}")
+        verify_session_owner(session, args.owner_thread_id, "attach to")
+        if session["state"] != MANAGED_READY_STATE or session["verification"] != "managed-ready":
+            raise LifecycleError("a child can attach only to a ready managed session")
+        runtime = verify_custom_runtime()
+        session = verify_ready_integrity(args.session_id, runtime)
+        preparation = session_preparation_from_session(session)
+        daemon_pid = session["roles"]["daemon"]["birth_identity"]["pid"]
+        wait_for_daemon(preparation, runtime.build_id, daemon_pid, require_connected=True)
+        check_no_daemon_stream(preparation, daemon_pid)
+        record = append_managed_thread_event(state_dir, args.session_id, "managed_attachment", args.actor_thread_id)
+        return {
+            "session_id": args.session_id,
+            "state": MANAGED_READY_STATE,
+            "owner_thread_id": args.owner_thread_id,
+            "actor_thread_id": args.actor_thread_id,
+            "attached_thread_ids": [*session["attached_thread_ids"], args.actor_thread_id],
+            "attachment_event": record,
+        }
+
+
+def command_detach(args: argparse.Namespace) -> dict[str, Any]:
+    state_dir = lifecycle_dir()
+    validate_thread_id(args.actor_thread_id, "actor_thread_id")
+    with session_operation_lock(state_dir, args.session_id):
+        record = append_managed_thread_event(state_dir, args.session_id, "managed_detachment", args.actor_thread_id)
+        sessions = load_sessions(state_dir)
+        session = sessions.get(args.session_id)
+        return {
+            "session_id": args.session_id,
+            "actor_thread_id": args.actor_thread_id,
+            "state": session["state"] if session is not None else "closed",
+            "attached_thread_ids": [] if session is None else session["attached_thread_ids"],
+            "detachment_event": record,
+        }
+
+
+def command_reconcile_managed(args: argparse.Namespace) -> dict[str, Any]:
+    state_dir = lifecycle_dir()
+    validate_thread_id(args.actor_thread_id, "actor_thread_id")
+    validate_thread_id(args.owner_thread_id, "owner_thread_id")
+    if not args.confirm_worker_finished:
+        raise LifecycleError("managed reconcile requires --confirm-worker-finished")
+    with session_operation_lock(state_dir, args.session_id):
+        sessions = load_sessions(state_dir)
+        session = sessions.get(args.session_id)
+        if session is None or session.get("schema") != MANAGED_CURRENT_SCHEMA:
+            raise LifecycleError(f"managed session is not active: {args.session_id}")
+        verify_session_owner(session, args.owner_thread_id, "reconcile")
+        if args.actor_thread_id != args.owner_thread_id:
+            raise LifecycleError("managed reconcile must be performed by the owner actor")
+        record = append_managed_thread_event(
+            state_dir,
+            args.session_id,
+            "managed_attachment_reconciled",
+            args.actor_thread_id,
+            reconciled_thread_id=args.reconciled_thread_id,
+        )
+        session = load_sessions(state_dir)[args.session_id]
+        return {
+            "session_id": args.session_id,
+            "state": session["state"],
+            "owner_thread_id": args.owner_thread_id,
+            "reconciled_thread_id": args.reconciled_thread_id,
+            "attached_thread_ids": session["attached_thread_ids"],
+            "reconcile_event": record,
+        }
+
+
+def command_exec(args: argparse.Namespace) -> dict[str, Any]:
+    reject_dangerous_inherited_env()
+    validate_exec_argv(args.argv)
+    with session_operation_lock(lifecycle_dir(), args.session_id):
+        session = assert_managed_ready(args.session_id, args.actor_thread_id)
+        preparation = session_preparation_from_session(session)
+        runtime = verify_custom_runtime()
+        session = verify_ready_integrity(args.session_id, runtime)
+        daemon_pid = session["roles"]["daemon"]["birth_identity"]["pid"]
+        wait_for_daemon(preparation, runtime.build_id, daemon_pid, require_connected=True)
+        check_no_daemon_stream(preparation, daemon_pid)
+        env = clean_runtime_env(runtime, preparation.short_daemon_name, f"http://127.0.0.1:{preparation.cdp_port}", runtime_socket_dir(preparation))
+        command_base = [runtime.wrapper_path, "--config", str(Path(preparation.runtime_path) / "config.snapshot.json"), "--session", preparation.short_daemon_name]
+        tab_id = getattr(args, "tab_id", None)
+        if tab_id is not None:
+            validate_tab_id(tab_id)
+            tab_result = subprocess.run([*command_base, "tab", tab_id], text=True, capture_output=True, env=env, cwd=preparation.workspace, check=False)
+            if tab_result.returncode != 0:
+                record_cleanup_pending(lifecycle_dir(), args.session_id, "managed exec tab selection failed; recovery required")
+                raise LifecycleError(f"managed exec tab selection failed with exit code {tab_result.returncode}; recovery is required")
+        command = [*command_base, *args.argv]
+        result = subprocess.run(command, text=True, capture_output=True, env=env, cwd=preparation.workspace, check=False)
+        if result.returncode != 0:
+            record_cleanup_pending(lifecycle_dir(), args.session_id, "managed exec failed; recovery required")
+            raise LifecycleError(f"managed exec failed with exit code {result.returncode}; recovery is required")
+        return {"session_id": args.session_id, "stdout": result.stdout, "stderr": result.stderr}
+
+
+def command_stop(args: argparse.Namespace) -> dict[str, Any]:
+    state_dir = lifecycle_dir()
+    validate_thread_id(args.owner_thread_id, "owner_thread_id")
+    with session_operation_lock(state_dir, args.session_id):
+        closed = owner_verified_closed_result(state_dir, args.session_id, args.owner_thread_id)
+        if closed is not None:
+            return closed
+        sessions = load_sessions(state_dir)
+        session = sessions.get(args.session_id)
+        if session is None or session.get("schema") != MANAGED_CURRENT_SCHEMA:
+            raise LifecycleError(f"managed session is not active: {args.session_id}")
+        if session["owner_thread_id"] != args.owner_thread_id:
+            raise LifecycleError("only the owner thread can close a managed session")
+        if session["state"] not in {MANAGED_READY_STATE, MANAGED_DRAINING_STATE, "cleanup-pending"}:
+            raise LifecycleError("managed session is not ready; recovery is required")
+        if session["attached_thread_ids"]:
+            if session["state"] == MANAGED_READY_STATE:
+                append_managed_thread_event(state_dir, args.session_id, "managed_draining", args.owner_thread_id)
+                session = load_sessions(state_dir)[args.session_id]
+            return {
+                "session_id": args.session_id,
+                "shutdown_response": None,
+                "shutdown_error": None,
+                "state": session["state"],
+                "attached_thread_ids": session["attached_thread_ids"],
+                "pending_reasons": [],
+            }
+        record_cleanup_pending(state_dir, args.session_id, "managed stop verifying closure")
+        response, shutdown_error = attempt_verified_shutdown(session, command_id="managed-stop")
+        pending_reasons = wait_for_managed_closure(session, timeout=5.0)
+        if not pending_reasons:
+            append_managed_closed(state_dir, session)
+            return {
+                "session_id": args.session_id,
+                "shutdown_response": response,
+                "shutdown_error": shutdown_error,
+                "state": "closed",
+                "attached_thread_ids": [],
+                "pending_reasons": [],
+            }
+        return {
+            "session_id": args.session_id,
+            "shutdown_response": response,
+            "shutdown_error": shutdown_error,
+            "state": "cleanup-pending",
+            "attached_thread_ids": [],
+            "pending_reasons": pending_reasons,
+        }
+
+
+def command_recover_managed(args: argparse.Namespace) -> dict[str, Any]:
+    state_dir = lifecycle_dir()
+    validate_thread_id(args.owner_thread_id, "owner_thread_id")
+    with session_operation_lock(state_dir, args.session_id):
+        closed = owner_verified_closed_result(state_dir, args.session_id, args.owner_thread_id)
+        if closed is not None:
+            closed["attempted_verified_shutdown"] = False
+            return closed
+        sessions = load_sessions(state_dir)
+        session = sessions.get(args.session_id)
+        if session is None or session.get("schema") != MANAGED_CURRENT_SCHEMA:
+            raise LifecycleError(f"managed session is not active: {args.session_id}")
+        if session["owner_thread_id"] != args.owner_thread_id:
+            raise LifecycleError("only the owner thread can recover a managed session")
+        if session["attached_thread_ids"]:
+            if session["state"] == MANAGED_READY_STATE:
+                append_managed_thread_event(state_dir, args.session_id, "managed_draining", args.owner_thread_id)
+                session = load_sessions(state_dir)[args.session_id]
+            return {
+                "session_id": args.session_id,
+                "attempted_verified_shutdown": False,
+                "shutdown_error": None,
+                "state": session["state"],
+                "attached_thread_ids": session["attached_thread_ids"],
+                "pending_reasons": [],
+            }
+        record_cleanup_pending(state_dir, args.session_id, "managed recovery verifying closure")
+        response, shutdown_error = attempt_verified_shutdown(session, command_id="managed-recover")
+        pending_reasons = wait_for_managed_closure(session, timeout=5.0)
+        if not pending_reasons:
+            append_managed_closed(state_dir, session)
+            return {
+                "session_id": args.session_id,
+                "attempted_verified_shutdown": response is not None,
+                "shutdown_error": shutdown_error,
+                "state": "closed",
+                "attached_thread_ids": [],
+                "pending_reasons": [],
+            }
+        return {
+            "session_id": args.session_id,
+            "attempted_verified_shutdown": response is not None,
+            "shutdown_error": shutdown_error,
+            "state": "cleanup-pending",
+            "attached_thread_ids": [],
+            "pending_reasons": pending_reasons,
+        }
 
 
 def command_claim(args: argparse.Namespace) -> dict[str, Any]:
@@ -360,9 +2506,18 @@ def command_claim(args: argparse.Namespace) -> dict[str, Any]:
 
     with lifecycle_lock(state_dir):
         records = read_history(history_path)
-        sessions = replay(records)
+        state = replay_state(records)
+        sessions = state.active
         if any(session["cdp_port"] == args.cdp_port for session in sessions.values()):
             raise LifecycleError(f"CDP port {args.cdp_port} is already claimed")
+        legacy_candidate = {
+            "schema": CURRENT_SCHEMA,
+            "session_id": session_id,
+            "user_data_dir": str(user_data_dir),
+        }
+        retired_conflicts = retired_artifact_conflicts(state.retired, legacy_candidate)
+        if retired_conflicts:
+            raise LifecycleError("; ".join(retired_conflicts))
         if not port_is_available(args.cdp_port):
             raise LifecycleError(
                 f"CDP port {args.cdp_port} already has a live listener"
@@ -406,6 +2561,8 @@ def command_record(args: argparse.Namespace) -> dict[str, Any]:
         session = sessions.get(args.session_id)
         if session is None:
             raise LifecycleError(f"session is not active: {args.session_id}")
+        if session.get("schema") == MANAGED_CURRENT_SCHEMA:
+            raise LifecycleError("managed sessions do not accept legacy record commands")
         if args.event != "ready" and args.browser_pid is not None:
             raise LifecycleError("--browser-pid is valid only for the ready event")
         browser_pid = (
@@ -439,8 +2596,33 @@ def command_rebuild() -> dict[str, Any]:
         return write_current(current_path, sessions)
 
 
-def command_show() -> dict[str, Any]:
-    return command_rebuild()
+def command_show(args: argparse.Namespace | None = None) -> dict[str, Any]:
+    view = command_rebuild()
+    session_id = getattr(args, "session_id", None)
+    if session_id is not None:
+        view["sessions"] = [session for session in view["sessions"] if session["session_id"] == session_id]
+    return view
+
+
+def child_bootstrap(gate_fd: int, encoded_argv: str) -> int:
+    """Wait for parent release, then exec argv; EOF exits without exec."""
+
+    try:
+        argv = json.loads(encoded_argv)
+    except json.JSONDecodeError:
+        os.close(gate_fd)
+        return 125
+    if not isinstance(argv, list) or not argv or not all(isinstance(item, str) for item in argv):
+        os.close(gate_fd)
+        return 125
+    try:
+        release = os.read(gate_fd, 1)
+    finally:
+        os.close(gate_fd)
+    if release != b"1":
+        return 0
+    os.execvp(argv[0], argv)
+    return 127
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -452,7 +2634,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     claim.add_argument("--owner-thread-id", required=True)
     claim.add_argument("--cdp-port", required=True, type=int)
-    claim.add_argument("--workspace", default=os.getcwd())
+    claim.add_argument("--workspace", default=".")
 
     record = subparsers.add_parser(
         "record", help="record an event for an active session"
@@ -462,13 +2644,58 @@ def build_parser() -> argparse.ArgumentParser:
     record.add_argument("--actor-thread-id", required=True)
     record.add_argument("--browser-pid", type=int)
 
-    subparsers.add_parser("show", help="display current.json")
+    show = subparsers.add_parser("show", help="display current.json")
+    show.add_argument("--session-id")
     subparsers.add_parser("rebuild", help="rebuild current.json from lifecycle.jsonl")
+
+    start = subparsers.add_parser("start", help="start a bounded managed browser session")
+    start.add_argument("--owner-thread-id", required=True)
+    start.add_argument("--workspace", required=True)
+    start.add_argument("--cdp-port", type=int)
+    start.add_argument("--headed", action="store_true")
+
+    execute = subparsers.add_parser("exec", help="execute an allowed command against a managed session")
+    execute.add_argument("--session-id", required=True)
+    execute.add_argument("--actor-thread-id", required=True)
+    execute.add_argument("--tab-id")
+    execute.add_argument("argv", nargs=argparse.REMAINDER)
+
+    attach = subparsers.add_parser("attach", help="attach a child thread to a managed session")
+    attach.add_argument("--session-id", required=True)
+    attach.add_argument("--actor-thread-id", required=True)
+    attach.add_argument("--owner-thread-id", required=True)
+
+    detach = subparsers.add_parser("detach", help="detach the actor thread from a managed session")
+    detach.add_argument("--session-id", required=True)
+    detach.add_argument("--actor-thread-id", required=True)
+
+    stop = subparsers.add_parser("stop", help="drain attachments and close after verified root/listener shutdown")
+    stop.add_argument("--session-id", required=True)
+    stop.add_argument("--owner-thread-id", required=True)
+
+    recover = subparsers.add_parser("recover", help="resume conservative managed recovery without final deletion")
+    recover.add_argument("--session-id", required=True)
+    recover.add_argument("--owner-thread-id", required=True)
+
+    subparsers.add_parser("sweep", help="remove safely retired managed artifacts after reboot")
+
+    reconcile = subparsers.add_parser("reconcile", help="drop an owner-confirmed stale managed attachment")
+    reconcile.add_argument("--session-id", required=True)
+    reconcile.add_argument("--owner-thread-id", required=True)
+    reconcile.add_argument("--actor-thread-id", required=True)
+    reconcile.add_argument("--reconciled-thread-id", required=True)
+    reconcile.add_argument("--confirm-worker-finished", action="store_true")
+
+    child = subparsers.add_parser("_child-bootstrap", help=argparse.SUPPRESS)
+    child.add_argument("gate_fd", type=int)
+    child.add_argument("encoded_argv")
     return parser
 
 
 def main() -> int:
     args = build_parser().parse_args()
+    if args.command == "_child-bootstrap":
+        return child_bootstrap(args.gate_fd, args.encoded_argv)
     try:
         if args.command == "claim":
             result = command_claim(args)
@@ -476,8 +2703,26 @@ def main() -> int:
             result = command_record(args)
         elif args.command == "rebuild":
             result = command_rebuild()
+        elif args.command == "show":
+            result = command_show(args)
+        elif args.command == "start":
+            result = command_start(args)
+        elif args.command == "exec":
+            result = command_exec(args)
+        elif args.command == "attach":
+            result = command_attach(args)
+        elif args.command == "detach":
+            result = command_detach(args)
+        elif args.command == "stop":
+            result = command_stop(args)
+        elif args.command == "recover":
+            result = command_recover_managed(args)
+        elif args.command == "sweep":
+            result = sweep_retired_sessions()
+        elif args.command == "reconcile":
+            result = command_reconcile_managed(args)
         else:
-            result = command_show()
+            raise LifecycleError(f"unsupported command: {args.command}")
     except LifecycleError as exc:
         print(f"agent-browser-lifecycle: {exc}", file=sys.stderr)
         return 2

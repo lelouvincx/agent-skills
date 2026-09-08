@@ -42,9 +42,18 @@ jobs:
             agent_browser:
               - "amp/agent-browser-custom/**"
               - "bin/agent-browser"
+              - "scripts/check-agent-browser-custom"
+              - "scripts/check-agent-browser-config"
+              - "amp/scripts/merge-agent-browser-plugin.py"
+              - "amp/scripts/test_merge_agent_browser_config.py"
               - ".github/workflows/ci.yml"
             amp:
               - "amp/agent-secrets/**"
+              - "amp/agent-browser-lifecycle/**"
+              - "bin/agent-browser-lifecycle"
+              - "scripts/test_agent_browser_lifecycle*.py"
+              - "scripts/test_agent_browser_process_identity.py"
+              - "scripts/test_agent_browser_retired_cleanup.py"
               - "amp/github-thread-events/**"
               - "amp/docs/**"
               - "amp/mcp-servers/**"
@@ -156,6 +165,9 @@ jobs:
       - name: Validate agent secret capability policy
         run: python amp/scripts/validate-agent-secrets.py
 
+      - name: Test lifecycle replay and gated launch
+        run: python -B -m unittest scripts/test_agent_browser_lifecycle.py scripts/test_agent_browser_lifecycle_managed.py scripts/test_agent_browser_process_identity.py scripts/test_agent_browser_lifecycle_sharing.py scripts/test_agent_browser_retired_cleanup.py scripts/test_agent_browser_lifecycle_sweep.py
+
       - name: Test Amp documentation validator
         run: python -m unittest amp/scripts/test_validate_plugin_docs.py
 
@@ -174,6 +186,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: astral-sh/setup-uv@v10.0.1
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          activate-environment: true
+
+      - name: Test isolated skill packaging
+        run: scripts/check-agent-browser-custom
+
+      - name: Test configuration merge
+        run: uv run --no-project python -m unittest amp/scripts/test_merge_agent_browser_config.py
+
       - name: Install nightly Rust
         run: rustup toolchain install nightly --profile minimal --component rustfmt
 
@@ -188,13 +211,21 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-agent-browser-
 
-      - name: Verify Chrome
-        run: google-chrome --version
-
       - name: Build and test the pinned native patch
         env:
           AGENT_BROWSER_RUN_TESTS: "1"
         run: amp/agent-browser-custom/build
+
+      - name: Verify installed native skill commands
+        env:
+          AGENT_BROWSER_SKILLS_DIR: /nonexistent-unrelated-skills
+        run: |
+          bin/agent-browser skills list
+          bin/agent-browser skills get core > /dev/null
+          bin/agent-browser skills get core --full > /dev/null
+
+      - name: Verify installed config precedence without Chrome
+        run: scripts/check-agent-browser-config
 
   validate-project-registry:
     name: Validate project registry

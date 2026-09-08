@@ -6,16 +6,22 @@ source_dir="${AGENT_BROWSER_SOURCE_DIR:-$repo_root/.amp/vendor/agent-browser}"
 build_root="$repo_root/.amp/build"
 target_dir="${AGENT_BROWSER_TARGET_DIR:-$build_root/agent-browser-target}"
 install_dir="${AGENT_BROWSER_CUSTOM_INSTALL_DIR:-$HOME/.local/libexec/agent-browser-rfc0011}"
+install_parent="$(dirname "$install_dir")"
+install_base="$(basename "$install_dir")"
 cargo_home="${CARGO_HOME:-$HOME/.cargo}"
 rustup_home="${RUSTUP_HOME:-$HOME/.rustup}"
 commit="$(tr -d '[:space:]' <"$repo_root/amp/agent-browser-custom/upstream-commit")"
 patch="$repo_root/amp/agent-browser-custom/rfc0011.patch"
+managed_patch="$repo_root/amp/agent-browser-custom/rfc0012.patch"
 fingerprint="$repo_root/amp/agent-browser-custom/fingerprint"
-build_fingerprint="$($fingerprint)"
+pinned_manifest="$repo_root/amp/agent-browser-custom/skill-data.sha256"
+source "$repo_root/amp/agent-browser-custom/lib.sh"
+build_fingerprint=""
 lock_dir="$repo_root/.amp/build/agent-browser-rfc0011.lock"
-tmp_binary="$install_dir/.agent-browser.$$"
-tmp_receipt="$install_dir/.build-input.sha256.$$"
+staging_dir=""
+backup_dir=""
 test_root=""
+actual_manifest=""
 
 mkdir -p "$build_root"
 if ! mkdir "$lock_dir" 2>/dev/null; then
@@ -23,17 +29,34 @@ if ! mkdir "$lock_dir" 2>/dev/null; then
   exit 1
 fi
 build_dir="$(mktemp -d /tmp/agent-browser-r11-build.XXXXXX)"
-trap 'rm -rf "$lock_dir" "$build_dir" "$test_root"; rm -f "$tmp_binary" "$tmp_receipt"' EXIT
+trap 'if [ -n "$backup_dir" ] && [ ! -e "$install_dir" ] && [ -e "$backup_dir" ]; then mv "$backup_dir" "$install_dir"; fi; rm -f "$actual_manifest"; rm -rf "$lock_dir" "$build_dir" "$test_root" "$staging_dir" "$backup_dir"' EXIT
 
 if [ ! -d "$source_dir/.git" ]; then
   mkdir -p "$(dirname "$source_dir")"
   git clone https://github.com/vercel-labs/agent-browser.git "$source_dir"
 fi
 git -C "$source_dir" cat-file -e "$commit^{commit}"
+if [ ! -f "$pinned_manifest" ]; then
+  echo "agent-browser pinned skill-data manifest is missing: $pinned_manifest" >&2
+  exit 1
+fi
+build_fingerprint="$($fingerprint)"
 
 git -C "$source_dir" archive "$commit" | tar -x -C "$build_dir"
 git -C "$build_dir" init -q
 git -C "$build_dir" apply "$patch"
+git -C "$build_dir" apply "$managed_patch"
+actual_manifest="$(mktemp)"
+if ! agent_browser_custom_skill_manifest "$build_dir/skill-data" > "$actual_manifest"; then
+  echo "agent-browser patched skill-data contains unsupported files; rebuild aborted" >&2
+  exit 1
+fi
+if ! cmp -s "$pinned_manifest" "$actual_manifest"; then
+  echo "agent-browser patched skill-data does not match tracked pinned manifest; regenerate amp/agent-browser-custom/skill-data.sha256 only after explicitly updating the pinned upstream payload" >&2
+  exit 1
+fi
+rm -f "$actual_manifest"
+actual_manifest=""
 
 if [ "${AGENT_BROWSER_RUN_TESTS:-0}" = 1 ]; then
   test_root="$(mktemp -d /tmp/agent-browser-r11.XXXXXX)"
@@ -46,6 +69,7 @@ if [ "${AGENT_BROWSER_RUN_TESTS:-0}" = 1 ]; then
     TMPDIR=/tmp
     XDG_CONFIG_HOME="$test_home/.config"
     XDG_RUNTIME_DIR="$test_runtime"
+    AGENT_BROWSER_EXECUTABLE_PATH="$test_root/no-browser"
     CARGO_HOME="$cargo_home"
     RUSTUP_HOME="$rustup_home"
     CARGO_TARGET_DIR="$target_dir"
@@ -53,8 +77,6 @@ if [ "${AGENT_BROWSER_RUN_TESTS:-0}" = 1 ]; then
   "${test_env[@]}" cargo +nightly fmt --manifest-path "$build_dir/cli/Cargo.toml" -- --check
   "${test_env[@]}" cargo +nightly test --manifest-path "$build_dir/cli/Cargo.toml" \
     -- --test-threads=1
-  "${test_env[@]}" cargo +nightly test --manifest-path "$build_dir/cli/Cargo.toml" \
-      e2e_provider_login -- --ignored --test-threads=1
 fi
 
 CARGO_PROFILE_RELEASE_LTO=false \
@@ -65,11 +87,34 @@ if [ "$($fingerprint)" != "$build_fingerprint" ]; then
   echo "agent-browser build inputs changed during build; retry" >&2
   exit 1
 fi
-mkdir -p "$install_dir"
-install -m 0755 "$target_dir/release/agent-browser" "$tmp_binary"
-printf '%s\n' "$build_fingerprint" >"$tmp_receipt"
-mv "$tmp_binary" "$install_dir/agent-browser"
-mv "$tmp_receipt" "$install_dir/build-input.sha256"
-chmod 0644 "$install_dir/build-input.sha256"
+mkdir -p "$install_parent"
+staging_dir="$(mktemp -d "$install_parent/.${install_base}.install.XXXXXX")"
+install -m 0755 "$target_dir/release/agent-browser" "$staging_dir/agent-browser"
+mkdir -p "$staging_dir/skill-data"
+(cd "$build_dir/skill-data" && tar -cf - .) | (cd "$staging_dir/skill-data" && tar -xf -)
+actual_manifest="$(mktemp)"
+if ! agent_browser_custom_skill_manifest "$staging_dir/skill-data" > "$actual_manifest"; then
+  echo "agent-browser staged skill-data contains unsupported files; install aborted" >&2
+  exit 1
+fi
+if ! cmp -s "$pinned_manifest" "$actual_manifest"; then
+  echo "agent-browser staged skill-data does not match tracked pinned manifest; install aborted" >&2
+  exit 1
+fi
+cp "$actual_manifest" "$staging_dir/skill-data.sha256"
+rm -f "$actual_manifest"
+actual_manifest=""
+printf '%s\n' "$build_fingerprint" > "$staging_dir/build-input.sha256"
+chmod 0644 "$staging_dir/build-input.sha256" "$staging_dir/skill-data.sha256"
+
+if [ -e "$install_dir" ]; then
+  backup_dir="$(mktemp -d "$install_parent/.${install_base}.backup.XXXXXX")"
+  rmdir "$backup_dir"
+  mv "$install_dir" "$backup_dir"
+fi
+mv "$staging_dir" "$install_dir"
+staging_dir=""
+rm -rf "$backup_dir"
+backup_dir=""
 
 echo "installed: $install_dir/agent-browser"

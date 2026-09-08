@@ -1,68 +1,41 @@
 ---
 name: delegating-subagents
-description: "Routes delegation to direct work, specialist tools, Task, or create_thread. Use before delegating, splitting independent work, or handling side questions introduced with 'btw' or '|btw'."
+description: "Routes delegated work and verifies its outcome. Use before delegation or expert consultation, and for /subagent, |subagent, btw or |btw requests."
 ---
 
-# Delegating Subagents
+# Delegating subagents
 
-Choose the smallest mechanism that gives the parent the result and lifecycle it needs.
+Choose the smallest mechanism that fits the work. Keep synthesis, integration and final verification in the parent.
 
-Before calling `create_thread`, read and follow the [artifact document's “Use create_thread for addressable work” section](../../amp/docs/tools/delegating-subagents.md#use-create_thread-for-addressable-work). That section is the source of truth for runner placement and native child-thread lifecycle.
+## Route the request
 
-## Route the work
+Honor explicit triggers first:
 
-1. Work directly when delegation overhead exceeds the task. Keep simple reads, exact searches, one localized edit, overlapping work, and unresolved product or design decisions in the parent.
-2. Use a specialist tool when it owns the task. Prefer `finder` for codebase discovery and `librarian` for external repository understanding.
-3. If the user explicitly requests Claude or Claude Code, use `claude_code_subagent`. If they explicitly request Claude Design, use `claude_design_subagent`. If they explicitly request Pi, pi.dev, or Pi Coding Agent, use `pi_code_subagent`. Do not infer a named specialist from generic agent wording or substitute one named specialist for another.
-4. Use `oracle` only for one specific unresolved high-impact judgment after direct investigation.
-5. Use built-in `Task` for bounded work whose result is needed in the current parent turn. This includes independent concurrent workstreams.
-6. Use built-in `create_thread` for addressable cross-turn work or later follow-up.
-
-| Choice | Boundary |
+| Request | Route |
 | --- | --- |
-| Ultra | A mode, not a lifecycle. Reserve it for hard independent review of completed parent work. Use a read-only brief with intended behavior and exact change-set evidence. Request high-confidence findings and do not assume model routing stays fixed. |
-| Claude Code or Pi | Read-only advice. Amp applies and verifies local changes. |
-| Claude Design | May modify a cloud-hosted design project, but cannot edit local files. |
+| “Spawn a subagent”, `/subagent` or `\|subagent` | `create_thread`; use the remaining request as the brief |
+| “Ask an agent”, “use a subagent” or “run this in parallel” | `Task` for bounded current-turn work |
+| `btw` or `\|btw` | Delegate the side question without displacing the parent task; `Task` unless cross-turn reporting or follow-up needs `create_thread` |
+| Claude, Claude Code, Claude Design, Pi or pi.dev | Use only the matching named specialist; read [its boundary](../../amp/docs/tools/delegating-subagents.md#use-named-specialists-only-when-requested) first |
 
-## Brief every delegated task
+Prefer `|subagent` in prompts because `/` is reserved for the command palette. Generic agent wording does not select a named specialist or a model. Use Ultra only when explicitly requested; read the [review constraints](../../amp/docs/tools/delegating-subagents.md#behavior) first.
 
-Include:
+Otherwise route by the work:
 
-- the outcome and why it matters
-- bounded scope and useful starting evidence
-- constraints and non-goals
-- success criteria
-- validation to run
-- a done report with evidence, or a blocked report naming the smallest parent input needed
+1. Keep simple reads, exact searches, localized edits, overlapping work and unresolved product decisions in the parent.
+2. Use `finder` for local code discovery and `librarian` for external repository understanding.
+3. Use `oracle` only when direct investigation leaves one specific, unresolved high-impact judgment.
+4. Use `Task` for independent concurrent work or a bounded unit whose intermediate detail would crowd the parent context.
+5. Use `create_thread` when work needs its own addressable thread, cross-turn reporting or later follow-up.
 
-Ask the user when the child or parent needs input only the user can provide. The parent owns synthesis, integration, and final verification.
+Before creating or managing a native child thread, read the [native-thread contract](../../amp/docs/tools/delegating-subagents.md#use-create_thread-for-addressable-work). It owns runner placement, reply-versus-wait selection, follow-up and archive rules.
 
-### Browser session handoff
+## Brief and verify
 
-When a child needs an existing agent-browser session:
+1. Define the outcome, why it matters, bounded scope and starting evidence. Include constraints, non-goals, checkable success criteria and validation to run. Parallel write targets must be disjoint and independent of each other's uncommitted changes.
+2. Require either a done report with evidence or a blocked report naming the smallest missing input. Tell the child to surface uncertainty; ask the human when only they can provide the answer.
+3. Inspect the returned evidence or diff against every success criterion. Integrate the result and run combined validation. Resolve gaps directly or with a focused follow-up before reporting completion to the user.
 
-1. The owner passes the lifecycle session and owner thread IDs, namespace, mapped short daemon name, claimed CDP endpoint, profile and Chrome PID.
-2. The child verifies that lifecycle reports the session ready and that the live PID, profile and listener match. It records its attachment and continues when lifecycle confirms it.
-3. The child opens its own tab and uses the [explicit browser identity](../../amp/conventions/agent-browser.md#explicit-agent-browser-identity) for every command.
-4. Before returning, the child closes its tab, records detachment and waits for lifecycle confirmation. The owner retains shutdown responsibility.
+## Browser session handoff
 
-## Manage native child threads
-
-For `create_thread`, choose exactly one result path:
-
-- **Asynchronous reply:** ask the child in its initial prompt to reply to the source thread when finished. `create_thread` attaches the source-thread ID and reply route automatically; the child must use that route instead of leaving the report only in its own final answer. Continue useful parent work. Do not also call `wait_for_threads`.
-- **Blocking join:** omit the reply request, call `wait_for_threads` only when the parent cannot progress without the result, then use `read_thread` for the complete outcome.
-
-Use `thread_interact` for follow-up messages and metadata. Use `read_thread`, not message previews, when the result, rationale, evidence, or error matters.
-
-Set `archive_when_done` only for a disposable one-off task that needs no review or follow-up. Follow the native user-approval rules for later archive operations.
-
-Native `thread_interact` does not currently expose active-turn cancellation. Archive changes visibility; it does not prove an active turn stopped. If cancellation becomes a recurring need, request a native cancellation action from Amp rather than adding another wrapper.
-
-## Handle explicit triggers and side questions
-
-- “Spawn a subagent”, `/subagent`, or `|subagent` → use native `create_thread` with the remaining request as the bounded brief. Prefer `|subagent` because `/` is reserved for the command palette.
-- “Ask an agent”, “use a subagent”, or “run this in parallel” → use `Task` when bounded work is needed in the current turn. Generic wording alone does not require an addressable thread.
-- `btw` or `|btw` → remove the trigger and delegate the side question so it does not displace the parent task. Use `Task` by default; use `create_thread` when it should report across turns or may need follow-up.
-
-Do not parallelize workers that would edit the same files or depend on each other's uncommitted changes.
+When a child needs an existing browser session, read the [browser conventions](../../amp/conventions/agent-browser.md) and [subagent-sharing workflow](../../amp/conventions/agent-browser-lifecycle.md#subagent-sharing) before dispatch. Include those references and the session coordinates in the brief. That workflow owns attachment, tab isolation, detachment and owner shutdown; a child's done message alone is not proof of detachment.

@@ -4,5 +4,13 @@ set -euo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 commit="$(tr -d '[:space:]' <"$root/amp/agent-browser-custom/upstream-commit")"
 patch_sha="$(shasum -a 256 "$root/amp/agent-browser-custom/rfc0011.patch" | awk '{print $1}')"
+managed_patch_sha="$(shasum -a 256 "$root/amp/agent-browser-custom/rfc0012.patch" | awk '{print $1}')"
+manifest_sha="$(shasum -a 256 "$root/amp/agent-browser-custom/skill-data.sha256" | awk '{print $1}')"
+build_sha="$(shasum -a 256 "$root/amp/agent-browser-custom/build" | awk '{print $1}')"
+fingerprint_sha="$(shasum -a 256 "$root/amp/agent-browser-custom/fingerprint" | awk '{print $1}')"
+lib_sha="$(shasum -a 256 "$root/amp/agent-browser-custom/lib.sh" | awk '{print $1}')"
+wrapper_sha="$(shasum -a 256 "$root/bin/agent-browser" | awk '{print $1}')"
 
-printf 'upstream=%s\npatch=%s\n' "$commit" "$patch_sha" | shasum -a 256 | awk '{print $1}'
+printf 'upstream=%s\npatch=%s\nmanaged-patch=%s\nskill-data-manifest=%s\nbuild=%s\nfingerprint=%s\nlib=%s\nwrapper=%s\n' \
+	"$commit" "$patch_sha" "$managed_patch_sha" "$manifest_sha" "$build_sha" "$fingerprint_sha" "$lib_sha" "$wrapper_sha" \
+	| shasum -a 256 | awk '{print $1}'

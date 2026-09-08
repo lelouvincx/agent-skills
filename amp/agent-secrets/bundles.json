@@ -2,9 +2,7 @@
   "version": 1,
   "command_classes": {
     "amp": {
-      "executablePaths": [
-        "/Users/lelouvincx/.amp/bin/amp"
-      ]
+      "executablePaths": ["/Users/lelouvincx/.amp/bin/amp"]
     },
     "claude-code": {
       "executablePaths": [
@@ -17,13 +15,16 @@
       ]
     },
     "amp-runner-rclone": {
-      "executablePaths": [
-        "/opt/homebrew/bin/rclone"
-      ]
+      "executablePaths": ["/opt/homebrew/bin/rclone"]
     },
     "smartclass-wrangler-dev": {
       "executablePaths": [
         "/Users/lelouvincx/Developer/agent-skills/bin/smartclass-wrangler-dev"
+      ]
+    },
+    "smartclass-openrouter-poc": {
+      "executablePaths": [
+        "/Users/lelouvincx/.local/share/mise/installs/python/3.11.10/bin/python3"
       ]
     },
     "logseq-agent-preflight": {
@@ -37,9 +38,7 @@
       ]
     },
     "github-cli": {
-      "executablePaths": [
-        "/opt/homebrew/bin/gh"
-      ]
+      "executablePaths": ["/opt/homebrew/bin/gh"]
     },
     "agent-browser-credential-handler": {
       "executablePaths": [
@@ -51,16 +50,9 @@
     "amp-runtime": {
       "audience": "agent",
       "owner": "lelouvincx/agent-skills",
-      "variables": [
-        "AMP_API_KEY"
-      ],
-      "compatibleBundles": [
-        "work"
-      ],
-      "allowedCommandClasses": [
-        "amp",
-        "logseq-agent-preflight"
-      ]
+      "variables": ["AMP_API_KEY"],
+      "compatibleBundles": ["work"],
+      "allowedCommandClasses": ["amp", "logseq-agent-preflight"]
     },
     "work": {
       "audience": "agent",
@@ -75,9 +67,7 @@
         "HOLISTICS_TESTING4_PASSWORD",
         "HOLISTICS_TESTING4_API_KEY"
       ],
-      "compatibleBundles": [
-        "amp-runtime"
-      ],
+      "compatibleBundles": ["amp-runtime"],
       "allowedCommandClasses": [
         "amp",
         "claude-code",
@@ -118,37 +108,30 @@
     "lelouvincx-bot": {
       "audience": "publisher",
       "owner": "lelouvincx/second-brain-logseq",
-      "variables": [
-        "GH_TOKEN"
-      ],
+      "variables": ["GH_TOKEN"],
       "compatibleBundles": [],
-      "allowedCommandClasses": [
-        "github-cli",
-        "logseq-publisher"
-      ]
+      "allowedCommandClasses": ["github-cli", "logseq-publisher"]
     },
     "amp-runner-r2": {
       "audience": "publisher",
       "owner": "lelouvincx/agent-skills",
-      "variables": [
-        "AWS_ACCESS_KEY_ID",
-        "AWS_SECRET_ACCESS_KEY"
-      ],
+      "variables": ["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"],
       "compatibleBundles": [],
-      "allowedCommandClasses": [
-        "amp-runner-rclone"
-      ]
+      "allowedCommandClasses": ["amp-runner-rclone"]
     },
     "smartclass-cohere": {
       "audience": "agent",
       "owner": "lelouvincx/smartclass",
-      "variables": [
-        "COHERE_API_KEY"
-      ],
+      "variables": ["COHERE_API_KEY"],
       "compatibleBundles": [],
-      "allowedCommandClasses": [
-        "smartclass-wrangler-dev"
-      ]
+      "allowedCommandClasses": ["smartclass-wrangler-dev"]
+    },
+    "openrouter": {
+      "audience": "agent",
+      "owner": "lelouvincx/smartclass",
+      "variables": ["OPENROUTER_API_KEY"],
+      "compatibleBundles": [],
+      "allowedCommandClasses": ["smartclass-openrouter-poc"]
     }
   }
 }

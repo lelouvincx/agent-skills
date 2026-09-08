@@ -61,7 +61,7 @@ The service-account bootstrap file is separate and is never projected from this 
 The resolver provides only `run` and `doctor`.
 It does not print, export, evaluate or copy resolved values to the clipboard.
 
-RFC-0011 browser login uses a temporary pinned native `agent-browser` patch. Build and install it with `amp/agent-browser-custom/build`; the projected `agent-browser` wrapper refuses missing or stale builds. Remove `amp/agent-browser-custom` when an official agent-browser release supports destination-checked credential login.
+RFC-0011 browser login uses a temporary pinned native `agent-browser` patch. Build and install it with `amp/agent-browser-custom/build`; the projected wrapper refuses missing or stale builds and mismatched skill content. The [custom-build guide](amp/agent-browser-custom/README.md) covers the bundled version-matched skills and rebuild procedure. Remove `amp/agent-browser-custom` when an official agent-browser release supports destination-checked credential login.
 
 ## Run a background Amp runner
 
@@ -187,6 +187,10 @@ Run the relevant repository command directly:
 | Validate Amp RFCs | `python3 amp/scripts/validate-rfcs.py` |
 | Test the agent secret resolver and browser credential plugin | `uvx --with jsonschema==4.25.1 python -m unittest amp/scripts/test_validate_agent_secrets.py amp/scripts/test_agent_secrets.py amp/scripts/test_agent_browser_plugin_onepassword.py` |
 | Validate agent secret policy | `uvx --with jsonschema==4.25.1 python amp/scripts/validate-agent-secrets.py` |
+| Test pinned Agent Browser skill packaging without Chrome | `scripts/check-agent-browser-custom` |
+| Test Agent Browser configuration merge | `python3 -m unittest amp/scripts/test_merge_agent_browser_config.py` |
+| Test installed Agent Browser config precedence without Chrome | `scripts/check-agent-browser-config` |
+| Test lifecycle replay, sharing, gated launch and retired cleanup without Chrome | `uvx --with jsonschema==4.25.1 python -B -m unittest scripts/test_agent_browser_lifecycle.py scripts/test_agent_browser_lifecycle_managed.py scripts/test_agent_browser_process_identity.py scripts/test_agent_browser_lifecycle_sharing.py scripts/test_agent_browser_retired_cleanup.py scripts/test_agent_browser_lifecycle_sweep.py` |
 | Build and test the destination-safe agent-browser | `AGENT_BROWSER_RUN_TESTS=1 amp/agent-browser-custom/build` |
 | Test the GitHub thread event validator | `python3 -m unittest amp/scripts/test_validate_github_thread_events.py` |
 | Validate GitHub thread event configuration | `python3 amp/scripts/validate-github-thread-events.py` |

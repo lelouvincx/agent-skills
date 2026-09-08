@@ -13,13 +13,12 @@
 ## Delegation
 
 - Before non-trivial work, consider whether it contains independent, bounded workstreams. Keep simple reads, exact searches, localized edits, and unresolved product or design decisions in the parent.
-- Before delegating or requesting hard expert review, load and follow `delegating-subagents`; it owns mechanism selection, brief contents, lifecycle, and completion handling.
-- Treat `/subagent`, `|subagent`, `btw`, and `|btw` according to the explicit-trigger rules in that skill.
+- Delegation, expert consultation, `/subagent`, `|subagent`, `btw` or `|btw`: load `delegating-subagents` before acting; it routes the work and discloses handoff rules.
 
 ## Conventions
 
 - Before working with dbx, dbdiagram, dbdocs, or runsql, read `{AMP_CONFIG_DIR:~/.config/amp}/conventions/dbdiagram.md`.
-- Before using `agent-browser` or timing a browser workflow, read `{AMP_CONFIG_DIR:~/.config/amp}/conventions/agent-browser.md` and `{AMP_CONFIG_DIR:~/.config/amp}/conventions/agent-browser-lifecycle.md`.
+- Browser automation, browser testing or workflow timing: read `{AMP_CONFIG_DIR:~/.config/amp}/conventions/agent-browser.md` before acting; it routes session work to the lifecycle guide.
 - Before working with `.aml` files or interpreting Holistics query results, read `{AMP_CONFIG_DIR:~/.config/amp}/conventions/holistics.md`.
 - Before Python tasks, read `{AMP_CONFIG_DIR:~/.config/amp}/conventions/python.md`.
 - Before writing or editing SQL, read `{AMP_CONFIG_DIR:~/.config/amp}/conventions/sql.md`.

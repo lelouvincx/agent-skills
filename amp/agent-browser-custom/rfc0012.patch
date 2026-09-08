@@ -1,0 +1,1002 @@
+diff --git a/cli/src/connection.rs b/cli/src/connection.rs
+index 67989ab..1faebee 100644
+--- a/cli/src/connection.rs
++++ b/cli/src/connection.rs
+@@ -24,6 +24,10 @@ use windows_sys::Win32::System::Threading::{OpenProcess, PROCESS_QUERY_LIMITED_I
+ pub(crate) const DAEMON_BUILD_ID: &str = env!("AGENT_BROWSER_BUILD_ID");
+ pub(crate) const INTERNAL_DAEMON_SHUTDOWN_ACTION: &str = "__agent_browser_internal_shutdown";
+ 
++pub(crate) fn managed_mode_enabled() -> bool {
++    matches!(env::var("AGENT_BROWSER_MANAGED").as_deref(), Ok("1"))
++}
++
+ #[derive(Serialize)]
+ #[allow(dead_code)]
+ pub struct Request {
+@@ -33,7 +37,7 @@ pub struct Request {
+     pub extra: Value,
+ }
+ 
+-#[derive(Deserialize, Serialize, Default)]
++#[derive(Debug, Deserialize, Serialize, Default)]
+ pub struct Response {
+     pub success: bool,
+     pub data: Option<Value>,
+@@ -156,6 +160,10 @@ fn get_version_path(session: &str) -> PathBuf {
+     get_socket_dir().join(format!("{}.version", session))
+ }
+ 
++fn get_managed_path(session: &str) -> PathBuf {
++    get_socket_dir().join(format!("{}.managed", session))
++}
++
+ fn get_config_path(session: &str) -> PathBuf {
+     get_socket_dir().join(format!("{}.config", session))
+ }
+@@ -168,6 +176,8 @@ pub fn cleanup_stale_files(session: &str) {
+     let _ = fs::remove_file(&version_path);
+     let config_path = get_config_path(session);
+     let _ = fs::remove_file(&config_path);
++    let managed_path = get_managed_path(session);
++    let _ = fs::remove_file(&managed_path);
+     let stream_path = get_socket_dir().join(format!("{}.stream", session));
+     let _ = fs::remove_file(&stream_path);
+ 
+@@ -422,6 +432,7 @@ pub fn daemon_ready(session: &str) -> bool {
+ }
+ 
+ /// Result of ensure_daemon indicating whether a new daemon was started
++#[derive(Debug)]
+ pub struct DaemonResult {
+     /// True if we connected to an existing daemon, false if we started a new one
+     pub already_running: bool,
+@@ -478,6 +489,13 @@ fn apply_daemon_env(cmd: &mut Command, session: &str, opts: &DaemonOptions) {
+     cmd.env("AGENT_BROWSER_DAEMON", "1")
+         .env("AGENT_BROWSER_SESSION", session);
+ 
++    if managed_mode_enabled() {
++        cmd.env("AGENT_BROWSER_MANAGED", "1");
++        if let Ok(cdp) = env::var("AGENT_BROWSER_MANAGED_CDP") {
++            cmd.env("AGENT_BROWSER_MANAGED_CDP", cdp);
++        }
++    }
++
+     if opts.headed {
+         cmd.env("AGENT_BROWSER_HEADED", "1");
+     }
+@@ -715,6 +733,13 @@ fn daemon_version_matches(session: &str) -> bool {
+     }
+ }
+ 
++fn daemon_managed_matches(session: &str) -> bool {
++    fs::read_to_string(get_managed_path(session))
++        .ok()
++        .map(|value| value.trim() == "1")
++        .unwrap_or(false)
++}
++
+ /// Kill a running daemon by reading its PID file and sending a kill signal.
+ fn kill_stale_daemon(session: &str) {
+     // Remove the socket first so no new connections reach the old daemon
+@@ -795,6 +820,39 @@ fn stop_existing_daemon_for_restart(session: &str) {
+ pub fn ensure_daemon(session: &str, opts: &DaemonOptions) -> Result<DaemonResult, String> {
+     let mut restarted = false;
+ 
++    if managed_mode_enabled() {
++        if !daemon_ready(session) {
++            return Err(format!(
++                "Managed agent-browser mode requires an already-running managed daemon for session '{}'; refusing to spawn or clean up daemon metadata",
++                session
++            ));
++        }
++        if !daemon_managed_matches(session) {
++            return Err(format!(
++                "Managed agent-browser mode requires session '{}' to be served by a managed daemon",
++                session
++            ));
++        }
++        if !daemon_version_matches(session) {
++            return Err(format!(
++                "Managed agent-browser daemon for session '{}' was built from a different binary; refusing to restart it",
++                session
++            ));
++        }
++        let _ = opts;
++        return Ok(DaemonResult {
++            already_running: true,
++            restarted: false,
++        });
++    }
++
++    if daemon_managed_matches(session) {
++        return Err(format!(
++            "Session '{}' is marked as managed by agent-browser; use the lifecycle controller instead of an unmanaged CLI invocation",
++            session
++        ));
++    }
++
+     // Socket connectivity is the sole liveness check — no PID check — so
+     // callers in a different PID namespace (e.g. unshare) can still reuse
+     // an existing daemon they can reach over the socket.
+@@ -1014,6 +1072,10 @@ fn connect(session: &str) -> Result<Connection, String> {
+ }
+ 
+ pub fn send_command(cmd: Value, session: &str) -> Result<Response, String> {
++    if managed_mode_enabled() {
++        return send_command_once(&cmd, session);
++    }
++
+     // Retry logic for transient errors (EAGAIN/EWOULDBLOCK/connection issues)
+     const MAX_RETRIES: u32 = 5;
+     const RETRY_DELAY_MS: u64 = 200;
+@@ -1339,6 +1401,104 @@ mod tests {
+         );
+     }
+ 
++    #[test]
++    fn managed_ensure_daemon_refuses_spawn_and_preserves_metadata() {
++        let dir = tempfile::tempdir().unwrap();
++        let guard = EnvGuard::new(&[
++            "AGENT_BROWSER_MANAGED",
++            "AGENT_BROWSER_MANAGED_CDP",
++            "AGENT_BROWSER_SOCKET_DIR",
++        ]);
++        guard.set("AGENT_BROWSER_MANAGED", "1");
++        guard.set("AGENT_BROWSER_MANAGED_CDP", "http://127.0.0.1:9222");
++        guard.set("AGENT_BROWSER_SOCKET_DIR", dir.path().to_str().unwrap());
++        let session = "managed-missing";
++        let stale_pid = get_pid_path(session);
++        fs::write(&stale_pid, "12345").unwrap();
++
++        let err = ensure_daemon(session, &test_daemon_options(None, false, None)).unwrap_err();
++
++        assert!(err.contains("requires an already-running managed daemon"));
++        assert!(
++            stale_pid.exists(),
++            "managed mode must not clean stale metadata"
++        );
++    }
++
++    #[cfg(unix)]
++    #[test]
++    fn unmanaged_ensure_daemon_refuses_managed_daemon() {
++        use std::os::unix::net::UnixListener;
++
++        let dir = tempfile::tempdir().unwrap();
++        let guard = EnvGuard::new(&[
++            "AGENT_BROWSER_MANAGED",
++            "AGENT_BROWSER_MANAGED_CDP",
++            "AGENT_BROWSER_SOCKET_DIR",
++        ]);
++        guard.remove("AGENT_BROWSER_MANAGED");
++        guard.remove("AGENT_BROWSER_MANAGED_CDP");
++        guard.set("AGENT_BROWSER_SOCKET_DIR", dir.path().to_str().unwrap());
++        let session = "managed-existing";
++        let _listener = UnixListener::bind(get_socket_path(session)).unwrap();
++        fs::write(get_managed_path(session), "1\n").unwrap();
++        fs::write(get_version_path(session), DAEMON_BUILD_ID).unwrap();
++
++        let err = ensure_daemon(session, &test_daemon_options(None, false, None)).unwrap_err();
++
++        assert!(err.contains("marked as managed"));
++    }
++
++    #[test]
++    fn unmanaged_ensure_daemon_refuses_absent_managed_daemon_marker() {
++        let dir = tempfile::tempdir().unwrap();
++        let guard = EnvGuard::new(&[
++            "AGENT_BROWSER_MANAGED",
++            "AGENT_BROWSER_MANAGED_CDP",
++            "AGENT_BROWSER_SOCKET_DIR",
++        ]);
++        guard.remove("AGENT_BROWSER_MANAGED");
++        guard.remove("AGENT_BROWSER_MANAGED_CDP");
++        guard.set("AGENT_BROWSER_SOCKET_DIR", dir.path().to_str().unwrap());
++        let session = "managed-marker-no-daemon";
++        fs::write(get_managed_path(session), "1\n").unwrap();
++
++        let err = ensure_daemon(session, &test_daemon_options(None, false, None)).unwrap_err();
++
++        assert!(err.contains("marked as managed"));
++        assert!(
++            get_managed_path(session).exists(),
++            "unmanaged ensure_daemon must not clean up or replace a managed marker"
++        );
++    }
++
++    #[cfg(unix)]
++    #[test]
++    fn managed_send_command_does_not_retry_after_socket_reset() {
++        use std::os::unix::net::UnixListener;
++
++        let dir = tempfile::tempdir().unwrap();
++        let guard = EnvGuard::new(&["AGENT_BROWSER_MANAGED", "AGENT_BROWSER_SOCKET_DIR"]);
++        guard.set("AGENT_BROWSER_MANAGED", "1");
++        guard.set("AGENT_BROWSER_SOCKET_DIR", dir.path().to_str().unwrap());
++        let session = "managed-reset";
++        let socket = get_socket_path(session);
++        let listener = UnixListener::bind(&socket).unwrap();
++        let accepted = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
++        let accepted_thread = accepted.clone();
++        let handle = std::thread::spawn(move || {
++            if listener.accept().is_ok() {
++                accepted_thread.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
++            }
++        });
++
++        let err = send_command(json!({ "id": "one", "action": "url" }), session).unwrap_err();
++        handle.join().unwrap();
++
++        assert_eq!(accepted.load(std::sync::atomic::Ordering::SeqCst), 1);
++        assert!(!err.contains("after 5 retries"));
++    }
++
+     #[test]
+     fn test_spawn_race_loser_does_not_overwrite_winner_config() {
+         let guard = EnvGuard::new(&["AGENT_BROWSER_SOCKET_DIR", "AGENT_BROWSER_NAMESPACE"]);
+diff --git a/cli/src/main.rs b/cli/src/main.rs
+index 2a0d82f..02b8fda 100644
+--- a/cli/src/main.rs
++++ b/cli/src/main.rs
+@@ -34,7 +34,7 @@ use windows_sys::Win32::System::Threading::OpenProcess;
+ use commands::{attach_ca_cert_to_launch_command, gen_id, parse_command, ParseError};
+ use connection::{
+     cleanup_stale_files, daemon_unreachable, ensure_daemon, get_socket_dir, is_pid_alive,
+-    send_command, walk_daemons, DaemonOptions, Response,
++    managed_mode_enabled, send_command, walk_daemons, DaemonOptions, Response, DAEMON_BUILD_ID,
+ };
+ use flags::{clean_args, parse_flags, Flags};
+ use install::run_install;
+@@ -1337,6 +1337,12 @@ fn main() {
+         env::set_var("MSYS2_ARG_CONV_EXCL", "*");
+     }
+ 
++    let args: Vec<String> = env::args().skip(1).collect();
++    if managed_build_id_requested(&args) {
++        println!("{}", DAEMON_BUILD_ID);
++        return;
++    }
++
+     // Native daemon mode: when AGENT_BROWSER_DAEMON is set, run as the daemon process
+     if env::var("AGENT_BROWSER_DAEMON").is_ok() {
+         // Ignore SIGPIPE so the daemon isn't killed when the parent drops
+@@ -1362,7 +1368,6 @@ fn main() {
+         return;
+     }
+ 
+-    let args: Vec<String> = env::args().skip(1).collect();
+     let mut flags = parse_flags(&args);
+     if flags.restore_uses_session {
+         flags.restore = Some(flags.session.clone());
+@@ -2058,6 +2063,15 @@ fn main() {
+ 
+     // Handle batch command: from args or stdin
+     if cmd.get("action").and_then(|v| v.as_str()) == Some("batch") {
++        if managed_mode_enabled() {
++            let error = "Action 'batch' is not supported in managed browser mode".to_string();
++            if flags.json {
++                print_json_error(error);
++            } else {
++                eprintln!("{} {}", color::error_indicator(), error);
++            }
++            exit(1);
++        }
+         let bail = cmd.get("bail").and_then(|v| v.as_bool()).unwrap_or(false);
+         let arg_commands = cmd.get("commands").and_then(|v| v.as_array()).map(|arr| {
+             arr.iter()
+@@ -2115,6 +2129,9 @@ fn send_command_with_respawn(
+     daemon_opts: &DaemonOptions,
+ ) -> Result<connection::Response, String> {
+     let first_attempt = send_command(cmd.clone(), session);
++    if managed_mode_enabled() {
++        return first_attempt;
++    }
+     match first_attempt {
+         Err(ref e) if daemon_unreachable(e) => match ensure_daemon(session, daemon_opts) {
+             Ok(_) => send_command(cmd, session),
+@@ -2124,6 +2141,10 @@ fn send_command_with_respawn(
+     }
+ }
+ 
++fn managed_build_id_requested(args: &[String]) -> bool {
++    matches!(args, [flag] if flag == "--managed-build-id")
++}
++
+ fn run_batch(
+     flags: &Flags,
+     daemon_opts: &DaemonOptions,
+@@ -2294,6 +2315,18 @@ fn run_batch(
+ mod tests {
+     use super::*;
+ 
++    #[test]
++    fn managed_build_id_flag_is_internal_single_arg_mode() {
++        assert!(managed_build_id_requested(&[
++            "--managed-build-id".to_string()
++        ]));
++        assert!(!managed_build_id_requested(&[
++            "--managed-build-id".to_string(),
++            "url".to_string(),
++        ]));
++        assert!(!managed_build_id_requested(&["--version".to_string()]));
++    }
++
+     #[test]
+     fn dashboard_config_comparison_rejects_unknown_or_changed_settings() {
+         let requested = DashboardConfig::new(
+diff --git a/cli/src/mcp.rs b/cli/src/mcp.rs
+index 60b3ced..9d980ff 100644
+--- a/cli/src/mcp.rs
++++ b/cli/src/mcp.rs
+@@ -5,6 +5,11 @@
+ //! so MCP behavior stays aligned with the normal CLI command surface. Daemon
+ //! lifecycle settings, including the default idle timeout, use the same CLI
+ //! parser and daemon as direct commands.
++//!
++//! Managed browser lifecycle control is intentionally not exposed as MCP tools:
++//! the lifecycle controller owns that private protocol. If the MCP server is
++//! accidentally started inside managed mode, tool calls fail closed instead of
++//! bypassing the controller and reaching normal CLI launch/reconnect paths.
+ 
+ use base64::{engine::general_purpose::STANDARD, Engine};
+ use serde_json::{json, Value};
+@@ -2140,6 +2145,12 @@ fn call_tool(params: Option<&Value>, config: &McpConfig) -> Result<Value, Protoc
+         .ok_or_else(|| ProtocolError::invalid_params("tools/call params.name must be a string"))?;
+     let arguments = params.get("arguments").unwrap_or(&Value::Null);
+ 
++    if matches!(env::var("AGENT_BROWSER_MANAGED").as_deref(), Ok("1")) {
++        return Err(ProtocolError::invalid_params(
++            "agent-browser MCP tools are not available in managed browser mode; lifecycle control is private to the lifecycle controller",
++        ));
++    }
++
+     if !is_known_tool(name) {
+         return Err(ProtocolError::invalid_params(format!(
+             "Unknown tool: {}",
+@@ -3970,6 +3981,7 @@ fn write_json_line(stdout: &mut io::Stdout, value: &Value) -> io::Result<()> {
+ #[cfg(test)]
+ mod tests {
+     use super::*;
++    use crate::test_utils::EnvGuard;
+ 
+     #[test]
+     fn tools_list_contains_typed_tools() {
+@@ -4229,6 +4241,26 @@ mod tests {
+         assert!(err.message.contains("not enabled"));
+     }
+ 
++    #[test]
++    fn call_tool_fails_closed_in_managed_mode() {
++        let guard = EnvGuard::new(&["AGENT_BROWSER_MANAGED"]);
++        guard.set("AGENT_BROWSER_MANAGED", "1");
++
++        let err = call_tool(
++            Some(&json!({
++                "name": TOOL_READ,
++                "arguments": {}
++            })),
++            &McpConfig::default(),
++        )
++        .unwrap_err();
++
++        assert_eq!(err.code, -32602);
++        assert!(err
++            .message
++            .contains("not available in managed browser mode"));
++    }
++
+     #[test]
+     fn tools_profiles_tool_lists_startup_profiles() {
+         let result = call_tool(
+diff --git a/cli/src/native/actions.rs b/cli/src/native/actions.rs
+index cd1cca3..2f22986 100644
+--- a/cli/src/native/actions.rs
++++ b/cli/src/native/actions.rs
+@@ -9,7 +9,9 @@ use std::sync::Arc;
+ use time::{format_description::well_known::Rfc3339, OffsetDateTime};
+ use tokio::sync::{broadcast, oneshot, RwLock};
+ 
+-use crate::connection::{get_socket_dir, INTERNAL_DAEMON_SHUTDOWN_ACTION};
++use crate::connection::{
++    get_socket_dir, managed_mode_enabled, DAEMON_BUILD_ID, INTERNAL_DAEMON_SHUTDOWN_ACTION,
++};
+ use crate::validation::{is_valid_session_name, session_name_error};
+ 
+ use super::a11y;
+@@ -561,6 +563,8 @@ pub struct DaemonState {
+     pub pin_tab: bool,
+     /// Last binding written to disk, so persistence is write-on-change.
+     last_persisted_binding: Option<tab_binding::TabBinding>,
++    managed: bool,
++    managed_initialized: bool,
+ }
+ 
+ fn default_idle_shutdown_is_blocked(
+@@ -668,6 +672,8 @@ impl DaemonState {
+             confirmed_policy_actions: HashSet::new(),
+             pin_tab,
+             last_persisted_binding: None,
++            managed: managed_mode_enabled(),
++            managed_initialized: false,
+         }
+     }
+ 
+@@ -2477,6 +2483,176 @@ fn policy_actions_for_command(
+     actions
+ }
+ 
++fn managed_restricted_action(action: &str) -> bool {
++    if action == INTERNAL_DAEMON_SHUTDOWN_ACTION {
++        return true;
++    }
++
++    matches!(
++        action,
++        "" | "launch"
++            | "close"
++            | "stream_enable"
++            | "stream_disable"
++            | "confirm"
++            | "deny"
++            | "batch"
++            | "script"
++            | "state_load"
++            | "state_clear"
++            | "state_clean"
++            | "state_rename"
++    )
++}
++
++fn managed_identity_changing_fields(cmd: &Value) -> Option<&'static str> {
++    for field in [
++        "cdpUrl",
++        "cdpPort",
++        "autoConnect",
++        "provider",
++        "profile",
++        "executablePath",
++        "extensions",
++        "args",
++        "storageState",
++        "restoreKey",
++        "restoreSave",
++        "restoreCheckUrl",
++        "restoreCheckText",
++        "restoreCheckFn",
++    ] {
++        if cmd.get(field).is_some() {
++            return Some(field);
++        }
++    }
++    None
++}
++
++async fn managed_status(state: &mut DaemonState) -> Value {
++    let connected = if let Some(ref mut mgr) = state.browser {
++        !mgr.has_process_exited() && mgr.is_connection_alive().await
++    } else {
++        false
++    };
++
++    json!({
++        "managed": true,
++        "buildId": DAEMON_BUILD_ID,
++        "daemonPid": std::process::id(),
++        "cdpUrl": env::var("AGENT_BROWSER_MANAGED_CDP").ok(),
++        "streamEnabled": false,
++        "connected": connected,
++    })
++}
++
++async fn handle_managed_initialize(cmd: &Value, state: &mut DaemonState) -> Result<Value, String> {
++    if state.managed_initialized || state.browser.is_some() {
++        return Err("Managed browser is already initialized".to_string());
++    }
++    let expected = env::var("AGENT_BROWSER_MANAGED_CDP")
++        .map_err(|_| "AGENT_BROWSER_MANAGED_CDP is required in managed mode".to_string())?;
++    let requested = cmd
++        .get("cdpUrl")
++        .and_then(|value| value.as_str())
++        .ok_or("managed_initialize requires cdpUrl")?;
++    if requested != expected {
++        return Err("managed_initialize cdpUrl must match AGENT_BROWSER_MANAGED_CDP".to_string());
++    }
++
++    let launch_cmd = json!({
++        "id": cmd.get("id").cloned().unwrap_or_else(|| json!("managed-initialize")),
++        "action": "launch",
++        "cdpUrl": expected,
++    });
++    state.managed_initialized = true;
++    let result = handle_launch(&launch_cmd, state).await?;
++    Ok(result)
++}
++
++async fn handle_managed_shutdown(state: &mut DaemonState) -> Result<Value, String> {
++    if let Some(ref mgr) = state.browser {
++        mgr.request_browser_close().await?;
++    }
++    close_current_browser(state).await?;
++    Ok(json!({ "shutdown": true, "closed": true }))
++}
++
++async fn managed_preflight(cmd: &Value, action: &str, state: &mut DaemonState) -> Option<Value> {
++    if !state.managed {
++        return None;
++    }
++
++    let id = cmd.get("id").and_then(|v| v.as_str()).unwrap_or("");
++    match action {
++        "managed_status" => return Some(success_response(id, managed_status(state).await)),
++        "managed_initialize" => {
++            return Some(match handle_managed_initialize(cmd, state).await {
++                Ok(data) => success_response(id, data),
++                Err(err) => error_response(id, &err),
++            });
++        }
++        "managed_shutdown" => {
++            return Some(match handle_managed_shutdown(state).await {
++                Ok(data) => success_response(id, data),
++                Err(err) => error_response(id, &err),
++            });
++        }
++        _ => {}
++    }
++
++    if managed_restricted_action(action) {
++        return Some(error_response(
++            id,
++            &format!(
++                "Action '{}' is not supported in managed browser mode",
++                action
++            ),
++        ));
++    }
++    if action == "auth_login"
++        && cmd
++            .get("credentialProvider")
++            .and_then(|v| v.as_str())
++            .is_none()
++    {
++        return Some(error_response(
++            id,
++            "Managed browser mode supports auth_login only with an approved credential provider",
++        ));
++    }
++    if let Some(field) = managed_identity_changing_fields(cmd) {
++        return Some(error_response(
++            id,
++            &format!(
++                "Field '{}' is not supported in managed browser mode because browser identity is fixed by the lifecycle controller",
++                field
++            ),
++        ));
++    }
++    let Some(ref mut mgr) = state.browser else {
++        return Some(error_response(
++            id,
++            "Managed browser is not initialized; the lifecycle controller must call managed_initialize first",
++        ));
++    };
++    if mgr.has_process_exited() || !mgr.is_connection_alive().await {
++        return Some(error_response(
++            id,
++            "Managed browser connection is unavailable; refusing to auto-launch or reconnect",
++        ));
++    }
++    None
++}
++
++fn managed_autolaunch_error(state: &DaemonState, needs_launch: bool) -> Option<&'static str> {
++    if state.managed && needs_launch {
++        Some("Managed browser connection is unavailable; refusing to auto-launch or reconnect")
++    } else {
++        None
++    }
++}
++
+ pub async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Value {
+     let action = cmd.get("action").and_then(|v| v.as_str()).unwrap_or("");
+     let id = cmd
+@@ -2487,6 +2663,10 @@ pub async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Value {
+ 
+     let cmd_start = std::time::Instant::now();
+ 
++    if let Some(resp) = managed_preflight(cmd, action, state).await {
++        return resp;
++    }
++
+     if let Err(err) = validate_restore_config_from_command(cmd) {
+         return error_response(&id, &err);
+     }
+@@ -2610,6 +2790,9 @@ pub async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Value {
+     } else {
+         false
+     };
++    if let Some(err) = managed_autolaunch_error(state, needs_launch) {
++        return error_response(&id, err);
++    }
+     let mut lifecycle_reused = false;
+     let mut lifecycle_launched = false;
+     let mut lifecycle_relaunched_browser = false;
+@@ -2690,6 +2873,9 @@ pub async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Value {
+ 
+     if !skip_launch {
+         if needs_launch {
++            if let Some(err) = managed_autolaunch_error(state, needs_launch) {
++                return error_response(&id, err);
++            }
+             lifecycle_relaunched_browser = restore_transition_closed_browser
+                 || state.browser.is_some()
+                 || state.active_provider_session.is_some();
+@@ -8412,6 +8598,10 @@ async fn current_stream_status(state: &DaemonState) -> Value {
+ }
+ 
+ async fn handle_stream_enable(cmd: &Value, state: &mut DaemonState) -> Result<Value, String> {
++    if state.managed {
++        return Err("Streaming cannot be enabled in managed browser mode".to_string());
++    }
++
+     if state.stream_server.is_some() {
+         return Err("Streaming is already enabled for this session".to_string());
+     }
+@@ -14388,6 +14578,230 @@ printf '%s' '{"protocol":"agent-browser.plugin.v1","success":true,"data":{}}'
+         assert_eq!(state.mouse_state.buttons, 0);
+     }
+ 
++    #[tokio::test]
++    async fn managed_status_reports_no_stream_and_not_connected_before_initialize() {
++        let guard = EnvGuard::new(&[
++            "AGENT_BROWSER_MANAGED",
++            "AGENT_BROWSER_MANAGED_CDP",
++            "AGENT_BROWSER_SESSION",
++        ]);
++        guard.set("AGENT_BROWSER_MANAGED", "1");
++        guard.set("AGENT_BROWSER_MANAGED_CDP", "http://127.0.0.1:9222");
++        guard.set("AGENT_BROWSER_SESSION", "managed-test");
++
++        let mut state = DaemonState::new();
++        let resp = execute_command(
++            &json!({ "id": "m1", "action": "managed_status" }),
++            &mut state,
++        )
++        .await;
++
++        assert_eq!(resp["success"], true);
++        assert_eq!(resp["data"]["managed"], true);
++        assert_eq!(resp["data"]["streamEnabled"], false);
++        assert_eq!(resp["data"]["connected"], false);
++        assert_eq!(resp["data"]["cdpUrl"], "http://127.0.0.1:9222");
++    }
++
++    #[tokio::test]
++    async fn managed_mode_rejects_identity_changes_and_autolaunch() {
++        let guard = EnvGuard::new(&["AGENT_BROWSER_MANAGED", "AGENT_BROWSER_MANAGED_CDP"]);
++        guard.set("AGENT_BROWSER_MANAGED", "1");
++        guard.set("AGENT_BROWSER_MANAGED_CDP", "http://127.0.0.1:9222");
++        let mut state = DaemonState::new();
++
++        let launch = execute_command(&json!({ "id": "m2", "action": "launch" }), &mut state).await;
++        assert_eq!(launch["success"], false);
++        assert!(launch["error"]
++            .as_str()
++            .unwrap()
++            .contains("managed browser mode"));
++
++        let navigate = execute_command(
++            &json!({ "id": "m3", "action": "navigate", "url": "https://example.com" }),
++            &mut state,
++        )
++        .await;
++        assert_eq!(navigate["success"], false);
++        assert!(navigate["error"]
++            .as_str()
++            .unwrap()
++            .contains("managed_initialize"));
++
++        let cdp_change = execute_command(
++            &json!({ "id": "m4", "action": "url", "cdpUrl": "http://127.0.0.1:9333" }),
++            &mut state,
++        )
++        .await;
++        assert_eq!(cdp_change["success"], false);
++        assert!(cdp_change["error"].as_str().unwrap().contains("cdpUrl"));
++    }
++
++    #[tokio::test]
++    async fn managed_mode_rejects_internal_daemon_shutdown_action() {
++        let guard = EnvGuard::new(&["AGENT_BROWSER_MANAGED", "AGENT_BROWSER_MANAGED_CDP"]);
++        guard.set("AGENT_BROWSER_MANAGED", "1");
++        guard.set("AGENT_BROWSER_MANAGED_CDP", "http://127.0.0.1:9222");
++        let mut state = DaemonState::new();
++
++        let response = execute_command(
++            &json!({ "id": "m4b", "action": INTERNAL_DAEMON_SHUTDOWN_ACTION }),
++            &mut state,
++        )
++        .await;
++
++        assert_eq!(response["success"], false);
++        assert!(response["error"]
++            .as_str()
++            .unwrap()
++            .contains("not supported in managed browser mode"));
++    }
++
++    #[test]
++    fn managed_autolaunch_guard_fails_closed_at_needs_launch_boundary() {
++        let guard = EnvGuard::new(&["AGENT_BROWSER_MANAGED", "AGENT_BROWSER_MANAGED_CDP"]);
++        guard.set("AGENT_BROWSER_MANAGED", "1");
++        guard.set("AGENT_BROWSER_MANAGED_CDP", "http://127.0.0.1:9222");
++        let state = DaemonState::new();
++
++        assert_eq!(
++            managed_autolaunch_error(&state, true),
++            Some("Managed browser connection is unavailable; refusing to auto-launch or reconnect")
++        );
++        assert_eq!(managed_autolaunch_error(&state, false), None);
++    }
++
++    #[tokio::test]
++    async fn managed_auth_login_preserves_credential_provider_path_only() {
++        let guard = EnvGuard::new(&["AGENT_BROWSER_MANAGED", "AGENT_BROWSER_MANAGED_CDP"]);
++        guard.set("AGENT_BROWSER_MANAGED", "1");
++        guard.set("AGENT_BROWSER_MANAGED_CDP", "http://127.0.0.1:9222");
++        let mut state = DaemonState::new();
++
++        let credential_login = execute_command(
++            &json!({
++                "id": "m5",
++                "action": "auth_login",
++                "name": "approved-login",
++                "credentialProvider": "onepassword"
++            }),
++            &mut state,
++        )
++        .await;
++        assert_eq!(credential_login["success"], false);
++        assert!(credential_login["error"]
++            .as_str()
++            .unwrap()
++            .contains("managed_initialize"));
++
++        let unmanaged_login = execute_command(
++            &json!({ "id": "m6", "action": "auth_login", "name": "saved-login" }),
++            &mut state,
++        )
++        .await;
++        assert_eq!(unmanaged_login["success"], false);
++        assert!(unmanaged_login["error"]
++            .as_str()
++            .unwrap()
++            .contains("approved credential provider"));
++    }
++
++    #[tokio::test]
++    async fn managed_initialize_records_attempt_before_connecting() {
++        let guard = EnvGuard::new(&["AGENT_BROWSER_MANAGED", "AGENT_BROWSER_MANAGED_CDP"]);
++        guard.set("AGENT_BROWSER_MANAGED", "1");
++        guard.set("AGENT_BROWSER_MANAGED_CDP", "http://127.0.0.1:1");
++        let mut state = DaemonState::new();
++
++        let first = execute_command(
++            &json!({
++                "id": "m7",
++                "action": "managed_initialize",
++                "cdpUrl": "http://127.0.0.1:1"
++            }),
++            &mut state,
++        )
++        .await;
++        assert_eq!(first["success"], false);
++
++        let second = execute_command(
++            &json!({
++                "id": "m8",
++                "action": "managed_initialize",
++                "cdpUrl": "http://127.0.0.1:1"
++            }),
++            &mut state,
++        )
++        .await;
++        assert_eq!(second["success"], false);
++        assert!(second["error"]
++            .as_str()
++            .unwrap()
++            .contains("already initialized"));
++    }
++
++    #[tokio::test]
++    async fn managed_shutdown_succeeds_after_failed_initialize() {
++        let guard = EnvGuard::new(&["AGENT_BROWSER_MANAGED", "AGENT_BROWSER_MANAGED_CDP"]);
++        guard.set("AGENT_BROWSER_MANAGED", "1");
++        guard.set("AGENT_BROWSER_MANAGED_CDP", "http://127.0.0.1:1");
++        let mut state = DaemonState::new();
++
++        let initialize = execute_command(
++            &json!({
++                "id": "m8a",
++                "action": "managed_initialize",
++                "cdpUrl": "http://127.0.0.1:1"
++            }),
++            &mut state,
++        )
++        .await;
++        assert_eq!(initialize["success"], false);
++        assert!(state.managed_initialized);
++        assert!(state.browser.is_none());
++
++        let shutdown = execute_command(
++            &json!({ "id": "m8b", "action": "managed_shutdown" }),
++            &mut state,
++        )
++        .await;
++
++        assert_eq!(shutdown["success"], true);
++        assert_eq!(shutdown["data"]["shutdown"], true);
++        assert_eq!(shutdown["data"]["closed"], true);
++    }
++
++    #[tokio::test]
++    async fn managed_shutdown_reports_closed_for_daemon_exit_detection() {
++        let guard = EnvGuard::new(&["AGENT_BROWSER_MANAGED"]);
++        guard.set("AGENT_BROWSER_MANAGED", "1");
++        let mut state = DaemonState::new();
++
++        let response = execute_command(
++            &json!({ "id": "m9", "action": "managed_shutdown" }),
++            &mut state,
++        )
++        .await;
++
++        assert_eq!(response["success"], true);
++        assert_eq!(response["data"]["shutdown"], true);
++        assert_eq!(response["data"]["closed"], true);
++    }
++
++    #[tokio::test]
++    async fn managed_stream_enable_is_rejected_even_by_direct_handler() {
++        let guard = EnvGuard::new(&["AGENT_BROWSER_MANAGED"]);
++        guard.set("AGENT_BROWSER_MANAGED", "1");
++        let mut state = DaemonState::new();
++
++        let err = handle_stream_enable(&json!({ "port": 0 }), &mut state)
++            .await
++            .unwrap_err();
++
++        assert!(err.contains("managed browser mode"));
++        assert!(state.stream_server.is_none());
++    }
++
+     #[test]
+     fn test_mouse_event_params_preserve_position_and_buttons() {
+         let mut mouse_state = MouseState::default();
+diff --git a/cli/src/native/browser.rs b/cli/src/native/browser.rs
+index 798ee5c..a4056b0 100644
+--- a/cli/src/native/browser.rs
++++ b/cli/src/native/browser.rs
+@@ -1305,6 +1305,17 @@ impl BrowserManager {
+         Ok(())
+     }
+ 
++    /// Request a graceful browser shutdown over the existing CDP connection
++    /// even when this manager did not spawn the process. Managed lifecycle
++    /// controllers use this for their own Chrome child; ordinary `close` keeps
++    /// external CDP connections disconnect-only.
++    pub async fn request_browser_close(&self) -> Result<(), String> {
++        self.client
++            .send_command_no_params("Browser.close", None)
++            .await?;
++        Ok(())
++    }
++
+     pub fn has_pages(&self) -> bool {
+         !self.pages.is_empty()
+     }
+diff --git a/cli/src/native/daemon.rs b/cli/src/native/daemon.rs
+index deae896..553af20 100644
+--- a/cli/src/native/daemon.rs
++++ b/cli/src/native/daemon.rs
+@@ -18,7 +18,7 @@ use super::actions::{
+ use super::cdp::client::CdpClient;
+ use super::state;
+ use super::stream::{IdleActivity, StreamServer};
+-use crate::connection::{DAEMON_BUILD_ID, INTERNAL_DAEMON_SHUTDOWN_ACTION};
++use crate::connection::{managed_mode_enabled, DAEMON_BUILD_ID, INTERNAL_DAEMON_SHUTDOWN_ACTION};
+ 
+ pub async fn run_daemon(session: &str) {
+     let socket_dir = get_daemon_socket_dir();
+@@ -69,6 +69,14 @@ pub async fn run_daemon(session: &str) {
+     let version_path = socket_dir.join(format!("{}.version", session));
+     let _ = fs::write(&version_path, DAEMON_BUILD_ID);
+ 
++    let managed = managed_mode_enabled();
++    let managed_path = socket_dir.join(format!("{}.managed", session));
++    if managed {
++        let _ = fs::write(&managed_path, "1\n");
++    } else {
++        let _ = fs::remove_file(&managed_path);
++    }
++
+     // On Unix the daemon listens on a Unix domain socket; on Windows it uses
+     // TCP, so there is no .sock file — only a .port file written by the server.
+     let socket_path = socket_dir.join(format!("{}.sock", session));
+@@ -104,23 +112,25 @@ pub async fn run_daemon(session: &str) {
+         .ok()
+         .and_then(|s| s.parse::<u16>().ok())
+         .unwrap_or(0);
+-    match StreamServer::start_without_client(
+-        preferred_port,
+-        session.to_string(),
+-        true,
+-        idle_activity.clone(),
+-    )
+-    .await
+-    {
+-        Ok((stream_server, client_slot)) => {
+-            stream_client = Some(client_slot.clone());
+-            if let Err(e) = fs::write(&stream_path, stream_server.port().to_string()) {
+-                let _ = writeln!(std::io::stderr(), "Failed to write .stream file: {}", e);
++    if !managed {
++        match StreamServer::start_without_client(
++            preferred_port,
++            session.to_string(),
++            true,
++            idle_activity.clone(),
++        )
++        .await
++        {
++            Ok((stream_server, client_slot)) => {
++                stream_client = Some(client_slot.clone());
++                if let Err(e) = fs::write(&stream_path, stream_server.port().to_string()) {
++                    let _ = writeln!(std::io::stderr(), "Failed to write .stream file: {}", e);
++                }
++                stream_server_instance = Some(Arc::new(stream_server));
++            }
++            Err(e) => {
++                let _ = writeln!(std::io::stderr(), "Stream server failed to start: {}", e);
+             }
+-            stream_server_instance = Some(Arc::new(stream_server));
+-        }
+-        Err(e) => {
+-            let _ = writeln!(std::io::stderr(), "Stream server failed to start: {}", e);
+         }
+     }
+ 
+@@ -153,6 +163,7 @@ pub async fn run_daemon(session: &str) {
+     }
+     let _ = fs::remove_file(&pid_path);
+     let _ = fs::remove_file(&version_path);
++    let _ = fs::remove_file(&managed_path);
+     let _ = fs::remove_file(&stream_path);
+     let _ = fs::remove_file(socket_dir.join(format!("{}.engine", session)));
+     let _ = fs::remove_file(socket_dir.join(format!("{}.provider", session)));
+@@ -592,7 +603,7 @@ fn looks_like_http(line: &str) -> bool {
+ fn close_completed_response(action: &str, response: &Value) -> bool {
+     if !matches!(
+         action,
+-        "close" | "confirm" | INTERNAL_DAEMON_SHUTDOWN_ACTION
++        "close" | "confirm" | "managed_shutdown" | INTERNAL_DAEMON_SHUTDOWN_ACTION
+     ) {
+         return false;
+     }
+@@ -813,6 +824,7 @@ mod tests {
+             crate::connection::INTERNAL_DAEMON_SHUTDOWN_ACTION,
+             &direct
+         ));
++        assert!(close_completed_response("managed_shutdown", &direct));
+         assert!(close_completed_response("confirm", &confirmed));
+     }
+ 
+diff --git a/cli/src/flags.rs b/cli/src/flags.rs
+--- a/cli/src/flags.rs
++++ b/cli/src/flags.rs
+@@ -1431,6 +1431,8 @@
+     #[test]
+     fn test_parse_executable_path_flag_no_value() {
++        let guard = EnvGuard::new(&["AGENT_BROWSER_EXECUTABLE_PATH"]);
++        guard.remove("AGENT_BROWSER_EXECUTABLE_PATH");
+         let flags = parse_flags(&args("--executable-path"));
+         assert_eq!(flags.executable_path, None);
+     }
+ 

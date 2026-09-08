@@ -39,9 +39,17 @@ HOME="$tmp_home" \
 	AMP_CONFIG_DIR="$tmp_home/.config/amp" \
 	"$REPO_DIR/sync-skills.sh"
 
+agent_browser_config_once="$tmp_home/agent-browser-config.once"
+cp "$tmp_home/.agent-browser/config.json" "$agent_browser_config_once"
+
 HOME="$tmp_home" \
 	AMP_CONFIG_DIR="$tmp_home/.config/amp" \
 	"$REPO_DIR/sync-skills.sh" >/dev/null
+
+if ! cmp -s "$agent_browser_config_once" "$tmp_home/.agent-browser/config.json"; then
+	echo "error: projection changed serialized agent-browser configuration on repeated sync" >&2
+	exit 1
+fi
 
 for path in \
 	".config/amp/AGENTS.md" \
@@ -158,16 +166,12 @@ if [ ! -L "$agent_browser" ] || [ "$(readlink "$agent_browser")" != "$REPO_DIR/b
 	exit 1
 fi
 
-custom_install="$tmp_home/.local/libexec/agent-browser-rfc0011"
-mkdir -p "$custom_install"
-cat > "$custom_install/agent-browser" <<'SH'
-#!/usr/bin/env sh
-printf '%s\n' "agent-browser projection test $*"
-SH
-chmod +x "$custom_install/agent-browser"
-"$REPO_DIR/amp/agent-browser-custom/fingerprint" > "$custom_install/build-input.sha256"
-if [ "$(HOME="$tmp_home" "$agent_browser" --version)" != "agent-browser projection test --version" ]; then
-	echo "error: projected agent-browser wrapper could not locate its source patch" >&2
+if HOME="$tmp_home" AGENT_BROWSER_SKILLS_DIR=/tmp/unrelated "$agent_browser" --version >"$tmp_home/agent-browser.stdout" 2>"$tmp_home/agent-browser.stderr"; then
+	echo "error: projected agent-browser wrapper accepted a missing custom install" >&2
+	exit 1
+fi
+if ! grep -q 'run amp/agent-browser-custom/build' "$tmp_home/agent-browser.stderr"; then
+	echo "error: projected agent-browser wrapper missing-install failure did not include rebuild action" >&2
 	exit 1
 fi
 
@@ -189,6 +193,10 @@ import sys
 
 config = json.load(open(sys.argv[1]))
 assert config["headed"] is False
+assert config["$schema"] == "https://agent-browser.dev/schema.json"
+assert config["contentBoundaries"] is True
+assert config["maxOutput"] == 50000
+assert config["autoConnect"] is False
 assert [plugin["name"] for plugin in config["plugins"]] == ["unrelated", "onepassword"]
 assert config["plugins"][1] == {
     "name": "onepassword",
@@ -196,6 +204,30 @@ assert config["plugins"][1] == {
     "capabilities": ["credential.read"],
 }
 PY
+
+preferences_home="$tmp_home/preferences-home"
+mkdir -p "$preferences_home/.agent-browser"
+cat > "$preferences_home/.agent-browser/config.json" <<'JSON'
+{
+  "$schema": "https://example.invalid/custom-agent-browser.schema.json",
+  "contentBoundaries": false,
+  "maxOutput": 0,
+  "autoConnect": true,
+  "plugins": []
+}
+JSON
+HOME="$preferences_home" AMP_CONFIG_DIR="$preferences_home/.config/amp" "$REPO_DIR/sync-skills.sh" >/dev/null
+python3 - "$preferences_home/.agent-browser/config.json" <<'PY'
+import json
+import sys
+
+config = json.load(open(sys.argv[1]))
+assert config["$schema"] == "https://example.invalid/custom-agent-browser.schema.json"
+assert config["contentBoundaries"] is False
+assert config["maxOutput"] == 0
+assert config["autoConnect"] is True
+PY
+rm -rf "$preferences_home"
 
 conflict_home="$(mktemp -d)"
 mkdir -p "$conflict_home/.agent-browser"

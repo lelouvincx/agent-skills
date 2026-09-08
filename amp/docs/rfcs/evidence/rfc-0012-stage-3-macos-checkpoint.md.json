@@ -1,0 +1,959 @@
+{
+  "chrome": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+  "fixture_root_left_for_review": "/Users/lelouvincx/Developer/agent-skills/.amp/in/artifacts/rfc0012-stage3-private-nti069oc",
+  "inspection_uncertainty_refusal": {
+    "decision": "refuse",
+    "reason": "process inspection is uncertain"
+  },
+  "leftover_private_fixture_root_not_deleted": "/Users/lelouvincx/Developer/agent-skills/.amp/in/artifacts/rfc0012-stage3-private-nti069oc",
+  "real_chrome_normal_shutdown": {
+    "limitation": "direct rechecks cover only helpers observed before close; they cannot prove no unobserved or reparented helper remains",
+    "survivor_browser_close_response": {
+      "id": 253187611,
+      "result": {}
+    },
+    "survivor_identity": {
+      "boot_session_uuid": "CC4CBF50-C9DB-44E1-9263-BA93A32AA7B0",
+      "boot_time_us": 1788692227780758,
+      "name": "Google Chrome",
+      "pid": 33337,
+      "ppid": 33299,
+      "start_time_us": 1788767248220038,
+      "uid": 501
+    },
+    "survivor_main_state_after_close": {
+      "absent": [
+        {
+          "reason": "process is absent",
+          "saved": {
+            "boot_session_uuid": "CC4CBF50-C9DB-44E1-9263-BA93A32AA7B0",
+            "boot_time_us": 1788692227780758,
+            "name": "Google Chrome",
+            "pid": 33337,
+            "ppid": 33299,
+            "start_time_us": 1788767248220038,
+            "uid": 501
+          }
+        }
+      ],
+      "counts": {
+        "absent": 1,
+        "matching_alive": 0,
+        "reused": 0,
+        "unavailable": 0
+      },
+      "matching_alive": [],
+      "reused": [],
+      "unavailable": []
+    },
+    "survivor_observed_descendant_limitations": [
+      "observed descendants are not a complete ownership inventory and cannot authorize cleanup success"
+    ],
+    "survivor_observed_helper_states_after_close": {
+      "absent": [
+        {
+          "reason": "process is absent",
+          "saved": {
+            "boot_session_uuid": "CC4CBF50-C9DB-44E1-9263-BA93A32AA7B0",
+            "boot_time_us": 1788692227780758,
+            "name": "Google Chrome Helper",
+            "pid": 33342,
+            "ppid": 33337,
+            "start_time_us": 1788767248957020,
+            "uid": 501
+          }
+        },
+        {
+          "reason": "process is absent",
+          "saved": {
+            "boot_session_uuid": "CC4CBF50-C9DB-44E1-9263-BA93A32AA7B0",
+            "boot_time_us": 1788692227780758,
+            "name": "Google Chrome Helper",
+            "pid": 33343,
+            "ppid": 33337,
+            "start_time_us": 1788767248965592,
+            "uid": 501
+          }
+        },
+        {
+          "reason": "process is absent",
+          "saved": {
+            "boot_session_uuid": "CC4CBF50-C9DB-44E1-9263-BA93A32AA7B0",
+            "boot_time_us": 1788692227780758,
+            "name": "Google Chrome Helper",
+            "pid": 33354,
+            "ppid": 33337,
+            "start_time_us": 1788767249225092,
+            "uid": 501
+          }
+        },
+        {
+          "reason": "process is absent",
+          "saved": {
+            "boot_session_uuid": "CC4CBF50-C9DB-44E1-9263-BA93A32AA7B0",
+            "boot_time_us": 1788692227780758,
+            "name": "Google Chrome Helper (Renderer)",
+            "pid": 33356,
+            "ppid": 33337,
+            "start_time_us": 1788767249620030,
+            "uid": 501
+          }
+        },
+        {
+          "reason": "process is absent",
+          "saved": {
+            "boot_session_uuid": "CC4CBF50-C9DB-44E1-9263-BA93A32AA7B0",
+            "boot_time_us": 1788692227780758,
+            "name": "Google Chrome Helper (Renderer)",
+            "pid": 33358,
+            "ppid": 33337,
+            "start_time_us": 1788767249698986,
+            "uid": 501
+          }
+        },
+        {
+          "reason": "process is absent",
+          "saved": {
+            "boot_session_uuid": "CC4CBF50-C9DB-44E1-9263-BA93A32AA7B0",
+            "boot_time_us": 1788692227780758,
+            "name": "Google Chrome Helper (Renderer)",
+            "pid": 33366,
+            "ppid": 33337,
+            "start_time_us": 1788767250068449,
+            "uid": 501
+          }
+        },
+        {
+          "reason": "process is absent",
+          "saved": {
+            "boot_session_uuid": "CC4CBF50-C9DB-44E1-9263-BA93A32AA7B0",
+            "boot_time_us": 1788692227780758,
+            "name": "Google Chrome Helper (Renderer)",
+            "pid": 33368,
+            "ppid": 33337,
+            "start_time_us": 1788767250077785,
+            "uid": 501
+          }
+        },
+        {
+          "reason": "process is absent",
+          "saved": {
+            "boot_session_uuid": "CC4CBF50-C9DB-44E1-9263-BA93A32AA7B0",
+            "boot_time_us": 1788692227780758,
+            "name": "Google Chrome Helper (Renderer)",
+            "pid": 33371,
+            "ppid": 33337,
+            "start_time_us": 1788767250491353,
+            "uid": 501
+          }
+        }
+      ],
+      "counts": {
+        "absent": 8,
+        "matching_alive": 0,
+        "reused": 0,
+        "unavailable": 0
+      },
+      "matching_alive": [],
+      "reused": [],
+      "unavailable": []
+    },
+    "survivor_observed_helper_states_while_survivor_alive": {
+      "absent": [],
+      "counts": {
+        "absent": 0,
+        "matching_alive": 8,
+        "reused": 0,
+        "unavailable": 0
+      },
+      "matching_alive": [
+        {
+          "current": {
+            "boot_session_uuid": "CC4CBF50-C9DB-44E1-9263-BA93A32AA7B0",
+            "boot_time_us": 1788692227780758,
+            "name": "Google Chrome Helper",
+            "pid": 33342,
+            "ppid": 33337,
+            "start_time_us": 1788767248957020,
+            "uid": 501
+          },
+          "saved": {
+            "boot_session_uuid": "CC4CBF50-C9DB-44E1-9263-BA93A32AA7B0",
+            "boot_time_us": 1788692227780758,
+            "name": "Google Chrome Helper",
+            "pid": 33342,
+            "ppid": 33337,
+            "start_time_us": 1788767248957020,
+            "uid": 501
+          }
+        },
+        {
+          "current": {
+            "boot_session_uuid": "CC4CBF50-C9DB-44E1-9263-BA93A32AA7B0",
+            "boot_time_us": 1788692227780758,
+            "name": "Google Chrome Helper",
+            "pid": 33343,
+            "ppid": 33337,
+            "start_time_us": 1788767248965592,
+            "uid": 501
+          },
+          "saved": {
+            "boot_session_uuid": "CC4CBF50-C9DB-44E1-9263-BA93A32AA7B0",
+            "boot_time_us": 1788692227780758,
+            "name": "Google Chrome Helper",
+            "pid": 33343,
+            "ppid": 33337,
+            "start_time_us": 1788767248965592,
+            "uid": 501
+          }
+        },
+        {
+          "current": {
+            "boot_session_uuid": "CC4CBF50-C9DB-44E1-9263-BA93A32AA7B0",
+            "boot_time_us": 1788692227780758,
+            "name": "Google Chrome Helper",
+            "pid": 33354,
+            "ppid": 33337,
+            "start_time_us": 1788767249225092,
+            "uid": 501
+          },
+          "saved": {
+            "boot_session_uuid": "CC4CBF50-C9DB-44E1-9263-BA93A32AA7B0",
+            "boot_time_us": 1788692227780758,
+            "name": "Google Chrome Helper",
+            "pid": 33354,
+            "ppid": 33337,
+            "start_time_us": 1788767249225092,
+            "uid": 501
+          }
+        },
+        {
+          "current": {
+            "boot_session_uuid": "CC4CBF50-C9DB-44E1-9263-BA93A32AA7B0",
+            "boot_time_us": 1788692227780758,
+            "name": "Google Chrome Helper (Renderer)",
+            "pid": 33356,
+            "ppid": 33337,
+            "start_time_us": 1788767249620030,
+            "uid": 501
+          },
+          "saved": {
+            "boot_session_uuid": "CC4CBF50-C9DB-44E1-9263-BA93A32AA7B0",
+            "boot_time_us": 1788692227780758,
+            "name": "Google Chrome Helper (Renderer)",
+            "pid": 33356,
+            "ppid": 33337,
+            "start_time_us": 1788767249620030,
+            "uid": 501
+          }
+        },
+        {
+          "current": {
+            "boot_session_uuid": "CC4CBF50-C9DB-44E1-9263-BA93A32AA7B0",
+            "boot_time_us": 1788692227780758,
+            "name": "Google Chrome Helper (Renderer)",
+            "pid": 33358,
+            "ppid": 33337,
+            "start_time_us": 1788767249698986,
+            "uid": 501
+          },
+          "saved": {
+            "boot_session_uuid": "CC4CBF50-C9DB-44E1-9263-BA93A32AA7B0",
+            "boot_time_us": 1788692227780758,
+            "name": "Google Chrome Helper (Renderer)",
+            "pid": 33358,
+            "ppid": 33337,
+            "start_time_us": 1788767249698986,
+            "uid": 501
+          }
+        },
+        {
+          "current": {
+            "boot_session_uuid": "CC4CBF50-C9DB-44E1-9263-BA93A32AA7B0",
+            "boot_time_us": 1788692227780758,
+            "name": "Google Chrome Helper (Renderer)",
+            "pid": 33366,
+            "ppid": 33337,
+            "start_time_us": 1788767250068449,
+            "uid": 501
+          },
+          "saved": {
+            "boot_session_uuid": "CC4CBF50-C9DB-44E1-9263-BA93A32AA7B0",
+            "boot_time_us": 1788692227780758,
+            "name": "Google Chrome Helper (Renderer)",
+            "pid": 33366,
+            "ppid": 33337,
+            "start_time_us": 1788767250068449,
+            "uid": 501
+          }
+        },
+        {
+          "current": {
+            "boot_session_uuid": "CC4CBF50-C9DB-44E1-9263-BA93A32AA7B0",
+            "boot_time_us": 1788692227780758,
+            "name": "Google Chrome Helper (Renderer)",
+            "pid": 33368,
+            "ppid": 33337,
+            "start_time_us": 1788767250077785,
+            "uid": 501
+          },
+          "saved": {
+            "boot_session_uuid": "CC4CBF50-C9DB-44E1-9263-BA93A32AA7B0",
+            "boot_time_us": 1788692227780758,
+            "name": "Google Chrome Helper (Renderer)",
+            "pid": 33368,
+            "ppid": 33337,
+            "start_time_us": 1788767250077785,
+            "uid": 501
+          }
+        },
+        {
+          "current": {
+            "boot_session_uuid": "CC4CBF50-C9DB-44E1-9263-BA93A32AA7B0",
+            "boot_time_us": 1788692227780758,
+            "name": "Google Chrome Helper (Renderer)",
+            "pid": 33371,
+            "ppid": 33337,
+            "start_time_us": 1788767250491353,
+            "uid": 501
+          },
+          "saved": {
+            "boot_session_uuid": "CC4CBF50-C9DB-44E1-9263-BA93A32AA7B0",
+            "boot_time_us": 1788692227780758,
+            "name": "Google Chrome Helper (Renderer)",
+            "pid": 33371,
+            "ppid": 33337,
+            "start_time_us": 1788767250491353,
+            "uid": 501
+          }
+        }
+      ],
+      "reused": [],
+      "unavailable": []
+    },
+    "survivor_observed_helpers_before": [
+      {
+        "boot_session_uuid": "CC4CBF50-C9DB-44E1-9263-BA93A32AA7B0",
+        "boot_time_us": 1788692227780758,
+        "name": "Google Chrome Helper",
+        "pid": 33342,
+        "ppid": 33337,
+        "start_time_us": 1788767248957020,
+        "uid": 501
+      },
+      {
+        "boot_session_uuid": "CC4CBF50-C9DB-44E1-9263-BA93A32AA7B0",
+        "boot_time_us": 1788692227780758,
+        "name": "Google Chrome Helper",
+        "pid": 33343,
+        "ppid": 33337,
+        "start_time_us": 1788767248965592,
+        "uid": 501
+      },
+      {
+        "boot_session_uuid": "CC4CBF50-C9DB-44E1-9263-BA93A32AA7B0",
+        "boot_time_us": 1788692227780758,
+        "name": "Google Chrome Helper",
+        "pid": 33354,
+        "ppid": 33337,
+        "start_time_us": 1788767249225092,
+        "uid": 501
+      },
+      {
+        "boot_session_uuid": "CC4CBF50-C9DB-44E1-9263-BA93A32AA7B0",
+        "boot_time_us": 1788692227780758,
+        "name": "Google Chrome Helper (Renderer)",
+        "pid": 33356,
+        "ppid": 33337,
+        "start_time_us": 1788767249620030,
+        "uid": 501
+      },
+      {
+        "boot_session_uuid": "CC4CBF50-C9DB-44E1-9263-BA93A32AA7B0",
+        "boot_time_us": 1788692227780758,
+        "name": "Google Chrome Helper (Renderer)",
+        "pid": 33358,
+        "ppid": 33337,
+        "start_time_us": 1788767249698986,
+        "uid": 501
+      },
+      {
+        "boot_session_uuid": "CC4CBF50-C9DB-44E1-9263-BA93A32AA7B0",
+        "boot_time_us": 1788692227780758,
+        "name": "Google Chrome Helper (Renderer)",
+        "pid": 33366,
+        "ppid": 33337,
+        "start_time_us": 1788767250068449,
+        "uid": 501
+      },
+      {
+        "boot_session_uuid": "CC4CBF50-C9DB-44E1-9263-BA93A32AA7B0",
+        "boot_time_us": 1788692227780758,
+        "name": "Google Chrome Helper (Renderer)",
+        "pid": 33368,
+        "ppid": 33337,
+        "start_time_us": 1788767250077785,
+        "uid": 501
+      },
+      {
+        "boot_session_uuid": "CC4CBF50-C9DB-44E1-9263-BA93A32AA7B0",
+        "boot_time_us": 1788692227780758,
+        "name": "Google Chrome Helper (Renderer)",
+        "pid": 33371,
+        "ppid": 33337,
+        "start_time_us": 1788767250491353,
+        "uid": 501
+      }
+    ],
+    "survivor_profile_identity": {
+      "device": 16777232,
+      "inode": 83482967,
+      "path": "/Users/lelouvincx/Developer/agent-skills/.amp/in/artifacts/rfc0012-stage3-private-nti069oc/survivor-profile"
+    },
+    "survivor_usable_after_target_close": true,
+    "target_browser_close_response": {
+      "id": 252865887,
+      "result": {}
+    },
+    "target_identity": {
+      "boot_session_uuid": "CC4CBF50-C9DB-44E1-9263-BA93A32AA7B0",
+      "boot_time_us": 1788692227780758,
+      "name": "Google Chrome",
+      "pid": 33302,
+      "ppid": 33299,
+      "start_time_us": 1788767245923342,
+      "uid": 501
+    },
+    "target_main_state_after_close": {
+      "absent": [
+        {
+          "reason": "process is absent",
+          "saved": {
+            "boot_session_uuid": "CC4CBF50-C9DB-44E1-9263-BA93A32AA7B0",
+            "boot_time_us": 1788692227780758,
+            "name": "Google Chrome",
+            "pid": 33302,
+            "ppid": 33299,
+            "start_time_us": 1788767245923342,
+            "uid": 501
+          }
+        }
+      ],
+      "counts": {
+        "absent": 1,
+        "matching_alive": 0,
+        "reused": 0,
+        "unavailable": 0
+      },
+      "matching_alive": [],
+      "reused": [],
+      "unavailable": []
+    },
+    "target_observed_descendant_limitations": [
+      "observed descendants are not a complete ownership inventory and cannot authorize cleanup success"
+    ],
+    "target_observed_helper_states_after_close": {
+      "absent": [
+        {
+          "reason": "process is absent",
+          "saved": {
+            "boot_session_uuid": "CC4CBF50-C9DB-44E1-9263-BA93A32AA7B0",
+            "boot_time_us": 1788692227780758,
+            "name": "Google Chrome Helper",
+            "pid": 33308,
+            "ppid": 33302,
+            "start_time_us": 1788767246747793,
+            "uid": 501
+          }
+        },
+        {
+          "reason": "process is absent",
+          "saved": {
+            "boot_session_uuid": "CC4CBF50-C9DB-44E1-9263-BA93A32AA7B0",
+            "boot_time_us": 1788692227780758,
+            "name": "Google Chrome Helper",
+            "pid": 33309,
+            "ppid": 33302,
+            "start_time_us": 1788767246776469,
+            "uid": 501
+          }
+        },
+        {
+          "reason": "process is absent",
+          "saved": {
+            "boot_session_uuid": "CC4CBF50-C9DB-44E1-9263-BA93A32AA7B0",
+            "boot_time_us": 1788692227780758,
+            "name": "Google Chrome Helper",
+            "pid": 33322,
+            "ppid": 33302,
+            "start_time_us": 1788767247089091,
+            "uid": 501
+          }
+        },
+        {
+          "reason": "process is absent",
+          "saved": {
+            "boot_session_uuid": "CC4CBF50-C9DB-44E1-9263-BA93A32AA7B0",
+            "boot_time_us": 1788692227780758,
+            "name": "Google Chrome Helper (Renderer)",
+            "pid": 33329,
+            "ppid": 33302,
+            "start_time_us": 1788767247585729,
+            "uid": 501
+          }
+        },
+        {
+          "reason": "process is absent",
+          "saved": {
+            "boot_session_uuid": "CC4CBF50-C9DB-44E1-9263-BA93A32AA7B0",
+            "boot_time_us": 1788692227780758,
+            "name": "Google Chrome Helper (Renderer)",
+            "pid": 33331,
+            "ppid": 33302,
+            "start_time_us": 1788767247669767,
+            "uid": 501
+          }
+        },
+        {
+          "reason": "process is absent",
+          "saved": {
+            "boot_session_uuid": "CC4CBF50-C9DB-44E1-9263-BA93A32AA7B0",
+            "boot_time_us": 1788692227780758,
+            "name": "Google Chrome Helper (Renderer)",
+            "pid": 33333,
+            "ppid": 33302,
+            "start_time_us": 1788767247879476,
+            "uid": 501
+          }
+        },
+        {
+          "reason": "process is absent",
+          "saved": {
+            "boot_session_uuid": "CC4CBF50-C9DB-44E1-9263-BA93A32AA7B0",
+            "boot_time_us": 1788692227780758,
+            "name": "Google Chrome Helper (Renderer)",
+            "pid": 33334,
+            "ppid": 33302,
+            "start_time_us": 1788767247905518,
+            "uid": 501
+          }
+        },
+        {
+          "reason": "process is absent",
+          "saved": {
+            "boot_session_uuid": "CC4CBF50-C9DB-44E1-9263-BA93A32AA7B0",
+            "boot_time_us": 1788692227780758,
+            "name": "Google Chrome Helper (Renderer)",
+            "pid": 33338,
+            "ppid": 33302,
+            "start_time_us": 1788767248482015,
+            "uid": 501
+          }
+        }
+      ],
+      "counts": {
+        "absent": 8,
+        "matching_alive": 0,
+        "reused": 0,
+        "unavailable": 0
+      },
+      "matching_alive": [],
+      "reused": [],
+      "unavailable": []
+    },
+    "target_observed_helpers_before": [
+      {
+        "boot_session_uuid": "CC4CBF50-C9DB-44E1-9263-BA93A32AA7B0",
+        "boot_time_us": 1788692227780758,
+        "name": "Google Chrome Helper",
+        "pid": 33308,
+        "ppid": 33302,
+        "start_time_us": 1788767246747793,
+        "uid": 501
+      },
+      {
+        "boot_session_uuid": "CC4CBF50-C9DB-44E1-9263-BA93A32AA7B0",
+        "boot_time_us": 1788692227780758,
+        "name": "Google Chrome Helper",
+        "pid": 33309,
+        "ppid": 33302,
+        "start_time_us": 1788767246776469,
+        "uid": 501
+      },
+      {
+        "boot_session_uuid": "CC4CBF50-C9DB-44E1-9263-BA93A32AA7B0",
+        "boot_time_us": 1788692227780758,
+        "name": "Google Chrome Helper",
+        "pid": 33322,
+        "ppid": 33302,
+        "start_time_us": 1788767247089091,
+        "uid": 501
+      },
+      {
+        "boot_session_uuid": "CC4CBF50-C9DB-44E1-9263-BA93A32AA7B0",
+        "boot_time_us": 1788692227780758,
+        "name": "Google Chrome Helper (Renderer)",
+        "pid": 33329,
+        "ppid": 33302,
+        "start_time_us": 1788767247585729,
+        "uid": 501
+      },
+      {
+        "boot_session_uuid": "CC4CBF50-C9DB-44E1-9263-BA93A32AA7B0",
+        "boot_time_us": 1788692227780758,
+        "name": "Google Chrome Helper (Renderer)",
+        "pid": 33331,
+        "ppid": 33302,
+        "start_time_us": 1788767247669767,
+        "uid": 501
+      },
+      {
+        "boot_session_uuid": "CC4CBF50-C9DB-44E1-9263-BA93A32AA7B0",
+        "boot_time_us": 1788692227780758,
+        "name": "Google Chrome Helper (Renderer)",
+        "pid": 33333,
+        "ppid": 33302,
+        "start_time_us": 1788767247879476,
+        "uid": 501
+      },
+      {
+        "boot_session_uuid": "CC4CBF50-C9DB-44E1-9263-BA93A32AA7B0",
+        "boot_time_us": 1788692227780758,
+        "name": "Google Chrome Helper (Renderer)",
+        "pid": 33334,
+        "ppid": 33302,
+        "start_time_us": 1788767247905518,
+        "uid": 501
+      },
+      {
+        "boot_session_uuid": "CC4CBF50-C9DB-44E1-9263-BA93A32AA7B0",
+        "boot_time_us": 1788692227780758,
+        "name": "Google Chrome Helper (Renderer)",
+        "pid": 33338,
+        "ppid": 33302,
+        "start_time_us": 1788767248482015,
+        "uid": 501
+      }
+    ],
+    "target_profile_identity": {
+      "device": 16777232,
+      "inode": 83482966,
+      "path": "/Users/lelouvincx/Developer/agent-skills/.amp/in/artifacts/rfc0012-stage3-private-nti069oc/target-profile"
+    }
+  },
+  "remaining_owned_main_processes_after_finally": [],
+  "saved_observed_helper_states_after_finally": {
+    "absent": [
+      {
+        "reason": "process is absent",
+        "saved": {
+          "boot_session_uuid": "CC4CBF50-C9DB-44E1-9263-BA93A32AA7B0",
+          "boot_time_us": 1788692227780758,
+          "name": "Google Chrome Helper",
+          "pid": 33308,
+          "ppid": 33302,
+          "start_time_us": 1788767246747793,
+          "uid": 501
+        }
+      },
+      {
+        "reason": "process is absent",
+        "saved": {
+          "boot_session_uuid": "CC4CBF50-C9DB-44E1-9263-BA93A32AA7B0",
+          "boot_time_us": 1788692227780758,
+          "name": "Google Chrome Helper",
+          "pid": 33309,
+          "ppid": 33302,
+          "start_time_us": 1788767246776469,
+          "uid": 501
+        }
+      },
+      {
+        "reason": "process is absent",
+        "saved": {
+          "boot_session_uuid": "CC4CBF50-C9DB-44E1-9263-BA93A32AA7B0",
+          "boot_time_us": 1788692227780758,
+          "name": "Google Chrome Helper",
+          "pid": 33322,
+          "ppid": 33302,
+          "start_time_us": 1788767247089091,
+          "uid": 501
+        }
+      },
+      {
+        "reason": "process is absent",
+        "saved": {
+          "boot_session_uuid": "CC4CBF50-C9DB-44E1-9263-BA93A32AA7B0",
+          "boot_time_us": 1788692227780758,
+          "name": "Google Chrome Helper (Renderer)",
+          "pid": 33329,
+          "ppid": 33302,
+          "start_time_us": 1788767247585729,
+          "uid": 501
+        }
+      },
+      {
+        "reason": "process is absent",
+        "saved": {
+          "boot_session_uuid": "CC4CBF50-C9DB-44E1-9263-BA93A32AA7B0",
+          "boot_time_us": 1788692227780758,
+          "name": "Google Chrome Helper (Renderer)",
+          "pid": 33331,
+          "ppid": 33302,
+          "start_time_us": 1788767247669767,
+          "uid": 501
+        }
+      },
+      {
+        "reason": "process is absent",
+        "saved": {
+          "boot_session_uuid": "CC4CBF50-C9DB-44E1-9263-BA93A32AA7B0",
+          "boot_time_us": 1788692227780758,
+          "name": "Google Chrome Helper (Renderer)",
+          "pid": 33333,
+          "ppid": 33302,
+          "start_time_us": 1788767247879476,
+          "uid": 501
+        }
+      },
+      {
+        "reason": "process is absent",
+        "saved": {
+          "boot_session_uuid": "CC4CBF50-C9DB-44E1-9263-BA93A32AA7B0",
+          "boot_time_us": 1788692227780758,
+          "name": "Google Chrome Helper (Renderer)",
+          "pid": 33334,
+          "ppid": 33302,
+          "start_time_us": 1788767247905518,
+          "uid": 501
+        }
+      },
+      {
+        "reason": "process is absent",
+        "saved": {
+          "boot_session_uuid": "CC4CBF50-C9DB-44E1-9263-BA93A32AA7B0",
+          "boot_time_us": 1788692227780758,
+          "name": "Google Chrome Helper (Renderer)",
+          "pid": 33338,
+          "ppid": 33302,
+          "start_time_us": 1788767248482015,
+          "uid": 501
+        }
+      },
+      {
+        "reason": "process is absent",
+        "saved": {
+          "boot_session_uuid": "CC4CBF50-C9DB-44E1-9263-BA93A32AA7B0",
+          "boot_time_us": 1788692227780758,
+          "name": "Google Chrome Helper",
+          "pid": 33342,
+          "ppid": 33337,
+          "start_time_us": 1788767248957020,
+          "uid": 501
+        }
+      },
+      {
+        "reason": "process is absent",
+        "saved": {
+          "boot_session_uuid": "CC4CBF50-C9DB-44E1-9263-BA93A32AA7B0",
+          "boot_time_us": 1788692227780758,
+          "name": "Google Chrome Helper",
+          "pid": 33343,
+          "ppid": 33337,
+          "start_time_us": 1788767248965592,
+          "uid": 501
+        }
+      },
+      {
+        "reason": "process is absent",
+        "saved": {
+          "boot_session_uuid": "CC4CBF50-C9DB-44E1-9263-BA93A32AA7B0",
+          "boot_time_us": 1788692227780758,
+          "name": "Google Chrome Helper",
+          "pid": 33354,
+          "ppid": 33337,
+          "start_time_us": 1788767249225092,
+          "uid": 501
+        }
+      },
+      {
+        "reason": "process is absent",
+        "saved": {
+          "boot_session_uuid": "CC4CBF50-C9DB-44E1-9263-BA93A32AA7B0",
+          "boot_time_us": 1788692227780758,
+          "name": "Google Chrome Helper (Renderer)",
+          "pid": 33356,
+          "ppid": 33337,
+          "start_time_us": 1788767249620030,
+          "uid": 501
+        }
+      },
+      {
+        "reason": "process is absent",
+        "saved": {
+          "boot_session_uuid": "CC4CBF50-C9DB-44E1-9263-BA93A32AA7B0",
+          "boot_time_us": 1788692227780758,
+          "name": "Google Chrome Helper (Renderer)",
+          "pid": 33358,
+          "ppid": 33337,
+          "start_time_us": 1788767249698986,
+          "uid": 501
+        }
+      },
+      {
+        "reason": "process is absent",
+        "saved": {
+          "boot_session_uuid": "CC4CBF50-C9DB-44E1-9263-BA93A32AA7B0",
+          "boot_time_us": 1788692227780758,
+          "name": "Google Chrome Helper (Renderer)",
+          "pid": 33366,
+          "ppid": 33337,
+          "start_time_us": 1788767250068449,
+          "uid": 501
+        }
+      },
+      {
+        "reason": "process is absent",
+        "saved": {
+          "boot_session_uuid": "CC4CBF50-C9DB-44E1-9263-BA93A32AA7B0",
+          "boot_time_us": 1788692227780758,
+          "name": "Google Chrome Helper (Renderer)",
+          "pid": 33368,
+          "ppid": 33337,
+          "start_time_us": 1788767250077785,
+          "uid": 501
+        }
+      },
+      {
+        "reason": "process is absent",
+        "saved": {
+          "boot_session_uuid": "CC4CBF50-C9DB-44E1-9263-BA93A32AA7B0",
+          "boot_time_us": 1788692227780758,
+          "name": "Google Chrome Helper (Renderer)",
+          "pid": 33371,
+          "ppid": 33337,
+          "start_time_us": 1788767250491353,
+          "uid": 501
+        }
+      }
+    ],
+    "counts": {
+      "absent": 16,
+      "matching_alive": 0,
+      "reused": 0,
+      "unavailable": 0
+    },
+    "matching_alive": [],
+    "reused": [],
+    "unavailable": []
+  },
+  "simulated_main_first_failure": {
+    "child_identity": {
+      "boot_session_uuid": "CC4CBF50-C9DB-44E1-9263-BA93A32AA7B0",
+      "boot_time_us": 1788692227780758,
+      "name": "python3.11",
+      "pid": 33435,
+      "ppid": 33434,
+      "start_time_us": 1788767253647657,
+      "uid": 501
+    },
+    "decision_after_parent_exit": {
+      "decision": "refuse",
+      "reason": "process is absent"
+    },
+    "helper_alive_before_explicit_pipe_cleanup": true,
+    "helper_state_after_explicit_pipe_cleanup": {
+      "absent": [
+        {
+          "reason": "process is absent",
+          "saved": {
+            "boot_session_uuid": "CC4CBF50-C9DB-44E1-9263-BA93A32AA7B0",
+            "boot_time_us": 1788692227780758,
+            "name": "python3.11",
+            "pid": 33435,
+            "ppid": 33434,
+            "start_time_us": 1788767253647657,
+            "uid": 501
+          }
+        }
+      ],
+      "counts": {
+        "absent": 1,
+        "matching_alive": 0,
+        "reused": 0,
+        "unavailable": 0
+      },
+      "matching_alive": [],
+      "reused": [],
+      "unavailable": []
+    },
+    "helper_state_after_parent_exit": {
+      "absent": [],
+      "counts": {
+        "absent": 0,
+        "matching_alive": 1,
+        "reused": 0,
+        "unavailable": 0
+      },
+      "matching_alive": [
+        {
+          "current": {
+            "boot_session_uuid": "CC4CBF50-C9DB-44E1-9263-BA93A32AA7B0",
+            "boot_time_us": 1788692227780758,
+            "name": "python3.11",
+            "pid": 33435,
+            "ppid": 1,
+            "start_time_us": 1788767253647657,
+            "uid": 501
+          },
+          "saved": {
+            "boot_session_uuid": "CC4CBF50-C9DB-44E1-9263-BA93A32AA7B0",
+            "boot_time_us": 1788692227780758,
+            "name": "python3.11",
+            "pid": 33435,
+            "ppid": 33434,
+            "start_time_us": 1788767253647657,
+            "uid": 501
+          }
+        }
+      ],
+      "reused": [],
+      "unavailable": []
+    },
+    "parent_identity": {
+      "boot_session_uuid": "CC4CBF50-C9DB-44E1-9263-BA93A32AA7B0",
+      "boot_time_us": 1788692227780758,
+      "name": "python3.11",
+      "pid": 33434,
+      "ppid": 33299,
+      "start_time_us": 1788767253553063,
+      "uid": 501
+    }
+  },
+  "simulated_pid_reuse_refusal": {
+    "decision": "refuse",
+    "reason": "process birth identity does not match"
+  },
+  "stage3_gate": "NOT PASSED",
+  "stage3_gate_reason": "normal Chrome close was observed, but complete helper cleanup cannot be proven and real Chrome main-first crash was not tested",
+  "started_at": "2026-09-07 14:47:25 +07",
+  "status": 2,
+  "status_meaning": "inconclusive completeness gate; assertions passed but stage3 gate is NOT PASSED",
+  "unrelated_listener_refusal": {
+    "decision": {
+      "decision": "refuse",
+      "reason": "unrelated listener occupies 127.0.0.1:60964"
+    },
+    "listener_process_identity": {
+      "boot_session_uuid": "CC4CBF50-C9DB-44E1-9263-BA93A32AA7B0",
+      "boot_time_us": 1788692227780758,
+      "name": "python3.11",
+      "pid": 33299,
+      "ppid": 33297,
+      "start_time_us": 1788767245793084,
+      "uid": 501
+    },
+    "listener_socket_open_after_refusal": true,
+    "port": 60964
+  }
+}

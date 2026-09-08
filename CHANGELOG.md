@@ -9,6 +9,7 @@ and this project does not currently use versioned releases.
 
 ### Added
 
+- Implement RFC-0012 with pinned browser skills, validated defaults, managed session ownership, subagent draining and verified post-reboot cleanup. Include the scoped OpenRouter bundle and browser-free testing policy. [#227](https://github.com/lelouvincx/agent-skills/pull/227)
 - Add service-account token export for local Amp runners without storing the token in LaunchAgent plists. [#224](https://github.com/lelouvincx/agent-skills/pull/224)
 - Add pause and resume controls to `amp-chatgpt-subscription-selector` to stop and restart background checks without removing configuration. [#220](https://github.com/lelouvincx/agent-skills/pull/220)
 - Implement RFC-0011 with quiet isolated browser sessions, strict `agent-secrets` browser credentials, and a pinned destination-safe `agent-browser` build. [#218](https://github.com/lelouvincx/agent-skills/pull/218)
