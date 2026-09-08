@@ -1,10 +1,10 @@
 # Agent Browser lifecycle
 
-This directory owns the lifecycle JSON schema. The executable lives in [bin/agent-browser-lifecycle](../../bin/agent-browser-lifecycle). The [lifecycle contract](../conventions/agent-browser-lifecycle.md) describes the event history and current-state files.
+This directory owns the lifecycle JSON schema. The executable lives in [bin/agent-browser-lifecycle](../../bin/agent-browser-lifecycle). Use the [lifecycle rules](../conventions/agent-browser-lifecycle.md) for routine work; consult the [state contract](reference.md#state-contract) when inspecting event history or current-state files.
 
 The public CLI supports legacy claims and managed sessions on macOS. Stage 3 supplied durable preparation and gated launches; stage 4 added checked `start`, `exec`, `stop` and `recover`; stage 5 adds child attachment, draining shutdown, safe retired-artifact sweep and routine instruction cutover.
 
-Stage 5 switches routine macOS instructions to managed lifecycle commands. Managed launches persist intent, profile identity, process identity and release permission in that order. Replay accepts old history and labels legacy sessions unverified. Managed sessions cannot use legacy `record` commands to claim readiness or completed cleanup. See the [managed launch contract](../conventions/agent-browser-lifecycle.md#managed-launch-foundation).
+Stage 5 switches routine macOS instructions to managed lifecycle commands. Managed launches persist intent, profile identity, process identity and release permission in that order. Replay accepts old history and labels legacy sessions unverified. Managed sessions cannot use legacy `record` commands to claim readiness or completed cleanup. See the [managed launch contract](reference.md#managed-launch-foundation).
 
 Stop and recovery report `closed` once the recorded Chrome process, daemon and session listeners are gone. Untracked helpers may remain until weekly reboot. Closed sessions release their active claims but retain private profile/runtime files until `sweep` can remove safely recorded retired artifacts. No process signals, implicit replacement, command replay or background supervisor are introduced.
 
