@@ -275,6 +275,7 @@ class ManagedLifecycleTest(unittest.TestCase):
                 self.lifecycle.launch_managed_role(session_id=prepared.session_id, role="chrome", argv=[sys.executable, "-c", "pass"], state_dir=self.state_dir, identity_provider=self.fake_identity)
         spawn.assert_not_called()
 
+    @unittest.skipUnless(sys.platform == "darwin", "real process birth identity requires macOS")
     def test_real_birth_identity_survives_exec_and_gate_reader_is_closed(self) -> None:
         prepared = self.prepare()
         marker = self.root / "real-child"
