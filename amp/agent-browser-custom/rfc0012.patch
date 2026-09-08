@@ -988,3 +988,15 @@ index deae896..553af20 100644
          assert!(close_completed_response("confirm", &confirmed));
      }
  
+diff --git a/cli/src/flags.rs b/cli/src/flags.rs
+--- a/cli/src/flags.rs
++++ b/cli/src/flags.rs
+@@ -1431,6 +1431,8 @@
+     #[test]
+     fn test_parse_executable_path_flag_no_value() {
++        let guard = EnvGuard::new(&["AGENT_BROWSER_EXECUTABLE_PATH"]);
++        guard.remove("AGENT_BROWSER_EXECUTABLE_PATH");
+         let flags = parse_flags(&args("--executable-path"));
+         assert_eq!(flags.executable_path, None);
+     }
+ 
