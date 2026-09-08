@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Install the repository-owned agent-browser plugin registration without clobbering config."""
+"""Merge validated agent-browser defaults and the owned plugin without clobbering config."""
 
 import json
 import os
@@ -10,6 +10,22 @@ from pathlib import Path
 
 
 PLUGIN_NAME = "onepassword"
+DEFAULTS = {
+    "$schema": "https://agent-browser.dev/schema.json",
+    "contentBoundaries": True,
+    "maxOutput": 50000,
+    "autoConnect": False,
+}
+
+# Pinned agent-browser eb05921bad874cd2a1b4fa5d1149f1ed26576cae supports these
+# config keys in cli/src/flags.rs and agent-browser.schema.json. Keep this list
+# deliberately small so repository-owned default typos fail during projection.
+PINNED_DEFAULT_KEYS = {
+    "$schema": "string",
+    "contentBoundaries": "boolean",
+    "maxOutput": "unsigned-integer",
+    "autoConnect": "boolean",
+}
 
 
 class MergeError(ValueError):
@@ -25,6 +41,10 @@ def reject_duplicate_keys(pairs):
     return value
 
 
+def reject_nonstandard_number(value):
+    raise MergeError(f"agent-browser config contains nonstandard JSON number: {value}")
+
+
 def read_config(path):
     try:
         metadata = path.lstat()
@@ -33,7 +53,11 @@ def read_config(path):
     if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISREG(metadata.st_mode):
         raise MergeError("agent-browser config must be a regular file")
     try:
-        value = json.loads(path.read_text(), object_pairs_hook=reject_duplicate_keys)
+        value = json.loads(
+            path.read_text(),
+            object_pairs_hook=reject_duplicate_keys,
+            parse_constant=reject_nonstandard_number,
+        )
     except MergeError:
         raise
     except (OSError, json.JSONDecodeError) as error:
@@ -43,7 +67,43 @@ def read_config(path):
     return value
 
 
+def validate_preference(name, value):
+    expected = PINNED_DEFAULT_KEYS[name]
+    if expected == "string":
+        if not isinstance(value, str):
+            raise MergeError(f"agent-browser {name} must be a string")
+    elif expected == "boolean":
+        if not isinstance(value, bool):
+            raise MergeError(f"agent-browser {name} must be a boolean")
+    elif expected == "unsigned-integer":
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise MergeError(f"agent-browser {name} must be an unsigned integer")
+        if value < 0 or value > 2**64 - 1:
+            raise MergeError(f"agent-browser {name} must be an unsigned integer")
+    else:
+        raise MergeError(f"agent-browser default {name} has unsupported validator")
+
+
+def validate_repository_defaults(defaults=None):
+    defaults = DEFAULTS if defaults is None else defaults
+    for name, value in defaults.items():
+        if name not in PINNED_DEFAULT_KEYS:
+            raise MergeError(f"agent-browser repository default is not pinned: {name}")
+        validate_preference(name, value)
+
+
+def merge_defaults(config):
+    validate_repository_defaults()
+    for name in PINNED_DEFAULT_KEYS:
+        if name in config:
+            validate_preference(name, config[name])
+    for name, value in DEFAULTS.items():
+        config.setdefault(name, value)
+    return config
+
+
 def merge_config(config, command):
+    merge_defaults(config)
     plugins = config.get("plugins")
     if plugins is None:
         plugins = []

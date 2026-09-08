@@ -18,11 +18,13 @@ repos:
         stages: [pre-commit]
       - id: end-of-file-fixer
         stages: [pre-commit]
+        exclude: \.patch$
       - id: mixed-line-ending
         args: [--fix=lf]
         stages: [pre-commit]
       - id: trailing-whitespace
         stages: [pre-commit]
+        exclude: \.patch$
 
   - repo: local
     hooks:
@@ -86,6 +88,28 @@ repos:
         entry: bash -n
         language: system
         types: [shell]
+
+      - id: check-agent-browser-custom
+        name: Test pinned Agent Browser skill packaging
+        entry: scripts/check-agent-browser-custom
+        language: system
+        pass_filenames: false
+        files: ^(?:amp/agent-browser-custom/|bin/agent-browser$|scripts/check-agent-browser-custom$|\.pre-commit-config\.yaml$)
+
+      - id: test-agent-browser-config
+        name: Test Agent Browser configuration merge
+        entry: python3 -m unittest amp/scripts/test_merge_agent_browser_config.py
+        language: system
+        pass_filenames: false
+        files: ^(?:amp/scripts/(?:merge-agent-browser-plugin|test_merge_agent_browser_config)\.py$|scripts/check-projection$|\.github/workflows/ci\.yml$|\.pre-commit-config\.yaml$)
+
+      - id: test-agent-browser-lifecycle
+        name: Test Agent Browser lifecycle and gated launch
+        entry: python -B -m unittest scripts/test_agent_browser_lifecycle.py scripts/test_agent_browser_lifecycle_managed.py scripts/test_agent_browser_process_identity.py scripts/test_agent_browser_lifecycle_sharing.py scripts/test_agent_browser_retired_cleanup.py scripts/test_agent_browser_lifecycle_sweep.py
+        language: python
+        additional_dependencies: [jsonschema==4.25.1]
+        pass_filenames: false
+        files: ^(?:bin/agent-browser-lifecycle$|amp/agent-browser-lifecycle/|scripts/test_agent_browser_(?:lifecycle(?:_managed|_sharing|_sweep)?|process_identity|retired_cleanup)\.py$|\.github/workflows/ci\.yml$|\.pre-commit-config\.yaml$)
 
       - id: check-amp-runner
         name: Test Amp runner LaunchAgent manager

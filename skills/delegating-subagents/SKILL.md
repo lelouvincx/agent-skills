@@ -41,10 +41,13 @@ Ask the user when the child or parent needs input only the user can provide. The
 
 When a child needs an existing agent-browser session:
 
-1. The owner passes the lifecycle session and owner thread IDs, namespace, mapped short daemon name, claimed CDP endpoint, profile and Chrome PID.
-2. The child verifies that lifecycle reports the session ready and that the live PID, profile and listener match. It records its attachment and continues when lifecycle confirms it.
-3. The child opens its own tab and uses the [explicit browser identity](../../amp/conventions/agent-browser.md#explicit-agent-browser-identity) for every command.
-4. Before returning, the child closes its tab, records detachment and waits for lifecycle confirmation. The owner retains shutdown responsibility.
+1. The owner passes the managed lifecycle `session_id` and `owner_thread_id` to the child.
+2. The child attaches with its own actual Amp thread ID: `agent-browser-lifecycle attach --session-id "$session" --owner-thread-id "$owner" --actor-thread-id "$child"`. Continue only when lifecycle confirms the attachment.
+3. The child opens its own tab through `agent-browser-lifecycle exec`, reads its stable `tabId` or `targetId` using `tab list --json`, and uses `--tab-id "$tab_id"` for every tab-specific command. Do not use shifting numeric tab positions.
+4. Keep tab selection and action in one lifecycle command; `exec --tab-id` performs both under the session lock. Shared daemon snapshot refs may be invalidated by other tabs or commands, so prefer semantic selectors and coordinate uninterrupted snapshot-to-ref use.
+5. Before returning, the child closes its tab, runs `agent-browser-lifecycle detach --session-id "$session" --actor-thread-id "$child"`, and waits for lifecycle confirmation. The owner retains shutdown responsibility.
+
+If the owner has started `stop`, lifecycle enters draining: new owner commands and new attachments are refused while existing children finish and detach. The owner repeats `stop` after the last detach. Use `reconcile --confirm-worker-finished` only after verifying the child finished or was cancelled; elapsed silence is not verification.
 
 ## Manage native child threads
 

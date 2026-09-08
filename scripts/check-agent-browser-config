@@ -1,0 +1,262 @@
+#!/usr/bin/env python3
+"""Smoke-test installed agent-browser config discovery without launching Chrome.
+
+This check drives the installed native CLI only through autoConnect probes that
+exit before daemon startup. The probes demonstrate native config discovery and
+override precedence; page-output formatting is covered by the pinned Rust suite
+and build CI, not by this installed-distribution smoke test.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+
+AUTO_CONNECT_CDP = "Cannot use --auto-connect and --cdp together"
+EXTENSION_CDP = "Cannot use --extension with --cdp (extensions require local browser)"
+
+
+class CheckFailure(Exception):
+    pass
+
+
+class Checker:
+    def __init__(self) -> None:
+        self.count = 0
+
+    def ok(self, condition: bool, message: str) -> None:
+        self.count += 1
+        if not condition:
+            raise CheckFailure(message)
+        print(f"ok {self.count} - {message}")
+
+    def equal(self, actual: object, expected: object, message: str) -> None:
+        self.count += 1
+        if actual != expected:
+            raise CheckFailure(f"{message}: expected {expected!r}, got {actual!r}")
+        print(f"ok {self.count} - {message}")
+
+
+def repo_root() -> Path:
+    return Path(__file__).resolve().parents[1]
+
+
+def write_config(path: Path, **values: object) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(values), encoding="utf-8")
+
+
+def clean_env(home: Path, install_dir: Path, socket_dir: Path) -> dict[str, str]:
+    keep_path = os.environ.get("PATH", "/usr/bin:/bin")
+    return {
+        "PATH": keep_path,
+        "HOME": str(home),
+        "TMPDIR": str(home.parent / "tmp"),
+        "NO_COLOR": "1",
+        "AGENT_BROWSER_CUSTOM_INSTALL_DIR": str(install_dir),
+        "AGENT_BROWSER_SOCKET_DIR": str(socket_dir),
+    }
+
+
+def run_cli(
+    cli: Path,
+    cwd: Path,
+    env: dict[str, str],
+    *args: str,
+) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [str(cli), *args],
+        cwd=cwd,
+        env=env,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        timeout=10,
+        check=False,
+    )
+
+
+def json_error(proc: subprocess.CompletedProcess[str]) -> str:
+    try:
+        payload = json.loads(proc.stdout)
+    except json.JSONDecodeError as exc:
+        raise CheckFailure(
+            f"expected JSON stdout, got stdout={proc.stdout!r} stderr={proc.stderr!r}"
+        ) from exc
+    return str(payload.get("error", ""))
+
+
+def assert_launch_error(
+    check: Checker,
+    label: str,
+    cli: Path,
+    cwd: Path,
+    env: dict[str, str],
+    expected: str,
+    *extra_args: str,
+) -> None:
+    proc = run_cli(
+        cli,
+        cwd,
+        env,
+        "--json",
+        "snapshot",
+        "--cdp",
+        "9222",
+        "--extension",
+        "/tmp/unused",
+        *extra_args,
+    )
+    check.equal(proc.returncode, 1, f"{label} exits before daemon startup")
+    check.equal(json_error(proc), expected, label)
+
+
+def main() -> int:
+    check = Checker()
+    root = repo_root()
+    cli = root / "bin/agent-browser"
+    install_dir = Path(
+        os.environ.get(
+            "AGENT_BROWSER_CUSTOM_INSTALL_DIR",
+            str(Path.home() / ".local/libexec/agent-browser-rfc0011"),
+        )
+    )
+
+    try:
+        check.ok(cli.is_file() and os.access(cli, os.X_OK), "repo bin/agent-browser wrapper is executable")
+        native = install_dir / "agent-browser"
+        check.ok(native.is_file() and os.access(native, os.X_OK), "real installed native agent-browser binary exists")
+
+        with tempfile.TemporaryDirectory(prefix="check-agent-browser-config-") as tmp:
+            tmp_root = Path(tmp)
+            home = tmp_root / "home"
+            cwd = tmp_root / "project"
+            socket_dir = tmp_root / "sockets"
+            (tmp_root / "tmp").mkdir()
+            home.mkdir()
+            cwd.mkdir()
+            socket_dir.mkdir()
+            env = clean_env(home, install_dir, socket_dir)
+
+            version = run_cli(cli, cwd, env, "--version")
+            check.equal(version.returncode, 0, "installed CLI runs with isolated HOME")
+            check.ok(version.stdout.startswith("agent-browser "), "installed CLI reports version")
+
+            # Observable daemon-free precedence probe. If autoConnect is true,
+            # autoConnect+CDP wins. If false, extension+CDP wins. Both checks
+            # happen before ensure_daemon, so neither Chrome nor the daemon is
+            # launched.
+            probe_env = dict(env)
+            assert_launch_error(
+                check,
+                "default autoConnect false selects extension+CDP error",
+                cli,
+                cwd,
+                probe_env,
+                EXTENSION_CDP,
+            )
+
+            write_config(home / ".agent-browser/config.json", autoConnect=True)
+            assert_launch_error(
+                check,
+                "user config autoConnect true beats default false",
+                cli,
+                cwd,
+                probe_env,
+                AUTO_CONNECT_CDP,
+            )
+
+            write_config(cwd / "agent-browser.json", autoConnect=False)
+            assert_launch_error(
+                check,
+                "project config autoConnect false beats user true",
+                cli,
+                cwd,
+                probe_env,
+                EXTENSION_CDP,
+            )
+
+            write_config(cwd / "agent-browser.json", autoConnect=True)
+            assert_launch_error(
+                check,
+                "project config autoConnect true beats user config",
+                cli,
+                cwd,
+                probe_env,
+                AUTO_CONNECT_CDP,
+            )
+
+            explicit_false = tmp_root / "explicit-false.json"
+            explicit_true = tmp_root / "explicit-true.json"
+            write_config(explicit_false, autoConnect=False)
+            write_config(explicit_true, autoConnect=True)
+
+            env_config = dict(probe_env)
+            env_config["AGENT_BROWSER_CONFIG"] = str(explicit_false)
+            assert_launch_error(
+                check,
+                "AGENT_BROWSER_CONFIG bypasses user and project config",
+                cli,
+                cwd,
+                env_config,
+                EXTENSION_CDP,
+            )
+
+            cli_config = dict(env_config)
+            cli_config["AGENT_BROWSER_CONFIG"] = str(explicit_true)
+            assert_launch_error(
+                check,
+                "--config bypasses AGENT_BROWSER_CONFIG",
+                cli,
+                cwd,
+                cli_config,
+                EXTENSION_CDP,
+                "--config",
+                str(explicit_false),
+            )
+
+            env_false = dict(probe_env)
+            env_false["AGENT_BROWSER_AUTO_CONNECT"] = "false"
+            assert_launch_error(
+                check,
+                "boolean env false cannot disable config true",
+                cli,
+                cwd,
+                env_false,
+                AUTO_CONNECT_CDP,
+            )
+
+            env_true_cli_false = dict(probe_env)
+            env_true_cli_false["AGENT_BROWSER_AUTO_CONNECT"] = "1"
+            assert_launch_error(
+                check,
+                "CLI --auto-connect false disables env/config true",
+                cli,
+                cwd,
+                env_true_cli_false,
+                EXTENSION_CDP,
+                "--auto-connect",
+                "false",
+            )
+
+            check.equal(list(socket_dir.iterdir()), [], "socket directory remains empty after all probes")
+
+        print(f"checked {check.count} assertions")
+        print(
+            "scope: autoConnect probes demonstrate native config discovery and override precedence; "
+            "page-output formatting is covered by the pinned Rust suite and build CI."
+        )
+        return 0
+    except (CheckFailure, subprocess.TimeoutExpired) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        print(f"checked {check.count} assertions before failure", file=sys.stderr)
+        return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

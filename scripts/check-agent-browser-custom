@@ -1,0 +1,277 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+tmp_root="$(mktemp -d)"
+trap 'rm -rf "$tmp_root"' EXIT
+
+fixture_repo="$tmp_root/repo"
+source_repo="$tmp_root/upstream"
+fake_bin="$tmp_root/bin"
+home="$tmp_root/home"
+install_dir="$tmp_root/install/agent-browser-rfc0011"
+target_dir="$tmp_root/target"
+mkdir -p "$fake_bin" "$home" "$target_dir" "$fixture_repo/amp" "$fixture_repo/bin" "$source_repo"
+
+cp -R "$REPO_DIR/amp/agent-browser-custom" "$fixture_repo/amp/agent-browser-custom"
+cp "$REPO_DIR/bin/agent-browser" "$fixture_repo/bin/agent-browser"
+chmod +x "$fixture_repo/amp/agent-browser-custom/build" "$fixture_repo/amp/agent-browser-custom/fingerprint" "$fixture_repo/bin/agent-browser"
+
+mkdir -p "$source_repo/cli" \
+	"$source_repo/skill-data/core/references" \
+	"$source_repo/skill-data/core/templates"
+cat > "$source_repo/README.md" <<'TXT'
+fixture upstream
+TXT
+cat > "$source_repo/cli/Cargo.toml" <<'TOML'
+[package]
+name = "agent-browser-fixture"
+version = "0.0.0"
+edition = "2021"
+TOML
+cat > "$source_repo/skill-data/core/SKILL.md" <<'TXT'
+fixture core skill
+TXT
+cat > "$source_repo/skill-data/core/references/authentication.md" <<'TXT'
+fixture authentication reference
+TXT
+cat > "$source_repo/skill-data/core/references/commands.md" <<'TXT'
+fixture commands reference
+TXT
+cat > "$source_repo/skill-data/core/templates/authenticated-session.sh" <<'TXT'
+#!/usr/bin/env sh
+echo fixture authenticated session
+TXT
+
+git -C "$source_repo" init -q
+git -C "$source_repo" add .
+git -C "$source_repo" \
+	-c user.name='Fixture' \
+	-c user.email='fixture@example.invalid' \
+	-c commit.gpgsign=false \
+	commit -q -m 'fixture upstream'
+commit="$(git -C "$source_repo" rev-parse HEAD)"
+printf '%s\n' "$commit" > "$fixture_repo/amp/agent-browser-custom/upstream-commit"
+
+patch_work="$tmp_root/patch-work"
+git -C "$source_repo" archive "$commit" | tar -x -C "$tmp_root"
+mkdir -p "$patch_work"
+mv "$tmp_root/cli" "$tmp_root/README.md" "$tmp_root/skill-data" "$patch_work/"
+(
+	cd "$patch_work"
+	git init -q
+	git add .
+	git -c user.name=Fixture -c user.email=fixture@example.invalid -c commit.gpgsign=false commit -q -m base
+	printf '\npatched build input\n' >> README.md
+	git diff -- README.md
+) > "$fixture_repo/amp/agent-browser-custom/rfc0011.patch"
+
+(
+	cd "$patch_work"
+	git add README.md
+	printf '\nmanaged build input\n' >> README.md
+	git diff -- README.md
+) > "$fixture_repo/amp/agent-browser-custom/rfc0012.patch"
+
+source "$fixture_repo/amp/agent-browser-custom/lib.sh"
+agent_browser_custom_skill_manifest "$source_repo/skill-data" > "$fixture_repo/amp/agent-browser-custom/skill-data.sha256"
+
+cat > "$fake_bin/cargo" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+if [ "${FAKE_CARGO_FAIL:-0}" = 1 ]; then
+	echo "fake cargo failure" >&2
+	exit 42
+fi
+if [ "$1" = "+nightly" ]; then
+	shift
+fi
+if [ "$1" != "build" ]; then
+	exit 0
+fi
+mkdir -p "$CARGO_TARGET_DIR/release"
+cat > "$CARGO_TARGET_DIR/release/agent-browser" <<'BIN'
+#!/usr/bin/env sh
+if [ -n "${FAKE_INVOKED:-}" ]; then
+	printf '.\n' >> "$FAKE_INVOKED"
+fi
+printf 'fake agent-browser'
+printf ' <%s>' "$AGENT_BROWSER_SKILLS_DIR" "$@"
+printf '\n'
+BIN
+chmod +x "$CARGO_TARGET_DIR/release/agent-browser"
+SH
+chmod +x "$fake_bin/cargo"
+
+cat > "$fake_bin/mv" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+if [ "${FAKE_MV_FAIL_INSTALL_RENAME:-0}" = 1 ] && [[ "${1:-}" == *'.agent-browser-rfc0011.install.'* ]]; then
+	echo "fake mv install rename failure" >&2
+	exit 43
+fi
+exec /bin/mv "$@"
+SH
+chmod +x "$fake_bin/mv"
+
+run_build() {
+	HOME="$home" \
+	PATH="$fake_bin:$PATH" \
+	AGENT_BROWSER_SOURCE_DIR="$source_repo" \
+	AGENT_BROWSER_CUSTOM_INSTALL_DIR="$install_dir" \
+	AGENT_BROWSER_TARGET_DIR="$target_dir" \
+	"$fixture_repo/amp/agent-browser-custom/build" >/dev/null
+}
+
+run_wrapper() {
+	(
+		cd "$tmp_root"
+		HOME="$home" \
+		FAKE_INVOKED="$tmp_root/invoked" \
+		AGENT_BROWSER_CUSTOM_INSTALL_DIR="$install_dir" \
+		AGENT_BROWSER_SKILLS_DIR="$tmp_root/unrelated skills" \
+		"$fixture_repo/bin/agent-browser" "$@"
+	)
+}
+
+expect_wrapper_failure_without_exec() {
+	local label="$1"
+	local stderr_file="$tmp_root/$label.stderr"
+	: > "$tmp_root/invoked"
+	if run_wrapper get core >"$tmp_root/$label.stdout" 2>"$stderr_file"; then
+		echo "error: wrapper accepted invalid distribution for $label" >&2
+		exit 1
+	fi
+	if [ -s "$tmp_root/invoked" ]; then
+		echo "error: wrapper invoked binary for invalid distribution $label" >&2
+		exit 1
+	fi
+	if ! grep -q 'run amp/agent-browser-custom/build' "$stderr_file"; then
+		echo "error: wrapper failure for $label did not include rebuild action" >&2
+		exit 1
+	fi
+}
+
+assert_wrapper_ok() {
+	local label="$1"
+	local expected="fake agent-browser <$install_dir/skill-data> <get> <core with spaces>"
+	local actual
+	actual="$(run_wrapper get 'core with spaces')"
+	if [ "$actual" != "$expected" ]; then
+		echo "error: wrapper did not force bundled skill-data or preserve arguments for $label" >&2
+		exit 1
+	fi
+}
+
+run_build
+assert_wrapper_ok initial
+
+if ! diff -qr "$source_repo/skill-data" "$install_dir/skill-data" >/dev/null; then
+	echo "error: installed skill-data differs from pinned fixture source bytes" >&2
+	exit 1
+fi
+
+mv "$install_dir/skill-data" "$install_dir/skill-data.missing"
+expect_wrapper_failure_without_exec missing-resources
+mv "$install_dir/skill-data.missing" "$install_dir/skill-data"
+
+rm "$install_dir/skill-data.sha256"
+expect_wrapper_failure_without_exec missing-manifest
+run_build
+
+printf '%s\n' stale > "$install_dir/build-input.sha256"
+expect_wrapper_failure_without_exec stale-receipt
+run_build
+
+printf '\n# distribution recipe changed\n' >> "$fixture_repo/amp/agent-browser-custom/build"
+expect_wrapper_failure_without_exec stale-distribution-input
+run_build
+
+printf '\nmutated template\n' >> "$install_dir/skill-data/core/templates/authenticated-session.sh"
+expect_wrapper_failure_without_exec modified-template
+run_build
+
+printf '\nmutated reference\n' >> "$install_dir/skill-data/core/references/authentication.md"
+expect_wrapper_failure_without_exec modified-reference
+run_build
+
+printf 'extra\n' > "$install_dir/skill-data/core/references/extra.md"
+expect_wrapper_failure_without_exec extra-file
+run_build
+
+printf 'extra\n' > "$install_dir/skill-data/core/references/extra.md"
+agent_browser_custom_skill_manifest "$install_dir/skill-data" > "$install_dir/skill-data.sha256"
+expect_wrapper_failure_without_exec manifest-matches-extra-file
+run_build
+
+rm "$install_dir/skill-data/core/references/authentication.md"
+expect_wrapper_failure_without_exec removed-file
+run_build
+
+rm "$install_dir/skill-data/core/references/authentication.md"
+ln -s commands.md "$install_dir/skill-data/core/references/authentication.md"
+expect_wrapper_failure_without_exec required-file-symlink
+run_build
+
+ln -s commands.md "$install_dir/skill-data/core/references/extra-link.md"
+expect_wrapper_failure_without_exec extra-symlink
+run_build
+
+mv "$install_dir/skill-data" "$install_dir/skill-data.real"
+ln -s "$install_dir/skill-data.real" "$install_dir/skill-data"
+expect_wrapper_failure_without_exec skill-data-root-symlink
+rm "$install_dir/skill-data"
+mv "$install_dir/skill-data.real" "$install_dir/skill-data"
+run_build
+
+printf '\ntampered\n' >> "$install_dir/skill-data/core/references/commands.md"
+agent_browser_custom_skill_manifest "$install_dir/skill-data" > "$install_dir/skill-data.sha256"
+expect_wrapper_failure_without_exec corrupted-manifest-matching-tampered-files
+run_build
+
+valid_receipt="$(cat "$install_dir/build-input.sha256")"
+if HOME="$home" \
+	PATH="$fake_bin:$PATH" \
+	FAKE_CARGO_FAIL=1 \
+	AGENT_BROWSER_SOURCE_DIR="$source_repo" \
+	AGENT_BROWSER_CUSTOM_INSTALL_DIR="$install_dir" \
+	AGENT_BROWSER_TARGET_DIR="$target_dir" \
+	"$fixture_repo/amp/agent-browser-custom/build" >"$tmp_root/failed-reinstall.stdout" 2>"$tmp_root/failed-reinstall.stderr"; then
+	echo "error: failing reinstall unexpectedly succeeded" >&2
+	exit 1
+fi
+if [ "$(cat "$install_dir/build-input.sha256")" != "$valid_receipt" ]; then
+	echo "error: failing reinstall changed the existing build receipt" >&2
+	exit 1
+fi
+assert_wrapper_ok failed-reinstall-preserved-install
+
+if HOME="$home" \
+	PATH="$fake_bin:$PATH" \
+	FAKE_MV_FAIL_INSTALL_RENAME=1 \
+	AGENT_BROWSER_SOURCE_DIR="$source_repo" \
+	AGENT_BROWSER_CUSTOM_INSTALL_DIR="$install_dir" \
+	AGENT_BROWSER_TARGET_DIR="$target_dir" \
+	"$fixture_repo/amp/agent-browser-custom/build" >"$tmp_root/failed-rename.stdout" 2>"$tmp_root/failed-rename.stderr"; then
+	echo "error: interrupted install rename unexpectedly succeeded" >&2
+	exit 1
+fi
+assert_wrapper_ok interrupted-rename-rollback
+
+failed_install="$tmp_root/failed-install"
+if HOME="$home" \
+	PATH="$fake_bin:$PATH" \
+	FAKE_CARGO_FAIL=1 \
+	AGENT_BROWSER_SOURCE_DIR="$source_repo" \
+	AGENT_BROWSER_CUSTOM_INSTALL_DIR="$failed_install" \
+	AGENT_BROWSER_TARGET_DIR="$target_dir" \
+	"$fixture_repo/amp/agent-browser-custom/build" >"$tmp_root/failed-build.stdout" 2>"$tmp_root/failed-build.stderr"; then
+	echo "error: failing initial build unexpectedly succeeded" >&2
+	exit 1
+fi
+if [ -e "$failed_install/build-input.sha256" ]; then
+	echo "error: failing initial build left a success receipt" >&2
+	exit 1
+fi
+
+echo "agent-browser custom packaging checks passed"

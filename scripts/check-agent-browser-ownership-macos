@@ -1,0 +1,760 @@
+#!/usr/bin/env python3
+"""RFC-0012 stage 3 macOS ownership checkpoint fixture.
+
+This script launches only disposable Chrome instances with fresh private fixture
+profiles and `--remote-debugging-pipe`. It never inspects personal Chrome
+command lines and never sends `kill(pid)` or `killpg`.
+"""
+
+from __future__ import annotations
+
+import argparse
+import fcntl
+import importlib.util
+import json
+import os
+import platform
+import select
+import socket
+import subprocess
+import sys
+import tempfile
+import textwrap
+import time
+from dataclasses import replace
+from pathlib import Path
+from typing import Any
+
+
+ROOT = Path(__file__).resolve().parents[1]
+MODULE_PATH = ROOT / "amp" / "agent-browser-lifecycle" / "process_identity.py"
+SPEC = importlib.util.spec_from_file_location("process_identity", MODULE_PATH)
+assert SPEC is not None and SPEC.loader is not None
+process_identity = importlib.util.module_from_spec(SPEC)
+sys.modules["process_identity"] = process_identity
+SPEC.loader.exec_module(process_identity)
+
+
+CHROME = Path("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome")
+ARTIFACT_ROOT = ROOT / ".amp" / "in" / "artifacts"
+EVIDENCE_JSON_SUFFIX = ".json"
+STATUS_TEST_FAILURE = 1
+STATUS_INCONCLUSIVE = 2
+
+
+class CheckError(RuntimeError):
+    """The checkpoint could not run safely."""
+
+
+class AssertionFailure(CheckError):
+    """The fixture ran but an expected safety assertion failed."""
+
+
+def require(condition: bool, message: str) -> None:
+    if not condition:
+        raise AssertionFailure(message)
+
+
+class CdpPipeChrome:
+    def __init__(self, name: str, fixture_root: Path) -> None:
+        self.name = name
+        self.profile = fixture_root / f"{name}-profile"
+        self.profile.mkdir(mode=0o700)
+        self._to_child_read, self._to_child_write = os.pipe()
+        self._from_child_read, self._from_child_write = os.pipe()
+        self.process: subprocess.Popen[bytes] | None = None
+        self.identity: Any | None = None
+        self.profile_identity: Any | None = None
+        self.close_response: dict[str, Any] | None = None
+
+    def start(self) -> None:
+        if not CHROME.exists():
+            raise CheckError(f"Chrome binary not found at {CHROME}")
+        command = [
+            str(CHROME),
+            "--headless=new",
+            "--remote-debugging-pipe",
+            f"--user-data-dir={self.profile}",
+            "--no-first-run",
+            "--no-default-browser-check",
+            "--disable-background-networking",
+            "--disable-sync",
+            "--disable-features=Translate,OptimizationHints,MediaRouter",
+            "about:blank",
+        ]
+
+        self._to_child_read = move_away_from_reserved_fds(self._to_child_read)
+        self._to_child_write = move_away_from_reserved_fds(self._to_child_write)
+        self._from_child_read = move_away_from_reserved_fds(self._from_child_read)
+        self._from_child_write = move_away_from_reserved_fds(self._from_child_write)
+
+        bootstrap = textwrap.dedent(
+            """
+            import os
+            import sys
+
+            cdp_read = int(sys.argv[1])
+            cdp_write = int(sys.argv[2])
+            chrome = sys.argv[3]
+            argv = sys.argv[3:]
+            os.dup2(cdp_read, 3)
+            os.dup2(cdp_write, 4)
+            os.set_inheritable(3, True)
+            os.set_inheritable(4, True)
+            keep = {0, 1, 2, 3, 4}
+            try:
+                max_fd = os.sysconf('SC_OPEN_MAX')
+            except (AttributeError, ValueError):
+                max_fd = 256
+            for fd in range(3, min(int(max_fd), 1024)):
+                if fd not in keep:
+                    try:
+                        os.close(fd)
+                    except OSError:
+                        pass
+            os.execv(chrome, argv)
+            """
+        )
+        self.process = subprocess.Popen(
+            [sys.executable, "-c", bootstrap, str(self._to_child_read), str(self._from_child_write), *command],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+            env=minimal_env(),
+            pass_fds=(self._to_child_read, self._from_child_write),
+            close_fds=True,
+        )
+        close_fd(self._to_child_read)
+        close_fd(self._from_child_write)
+        self._await_identity()
+        self.profile_identity = process_identity.profile_identity(self.profile)
+        version = self.cdp("Browser.getVersion", timeout=15)
+        if "result" not in version:
+            raise CheckError(f"{self.name} did not answer Browser.getVersion: {version}")
+
+    @property
+    def pid(self) -> int:
+        assert self.process is not None
+        return self.process.pid
+
+    def _await_identity(self) -> None:
+        deadline = time.monotonic() + 10
+        while time.monotonic() < deadline:
+            assert self.process is not None
+            if self.process.poll() is not None:
+                stderr = read_available(self.process.stderr)
+                raise CheckError(f"{self.name} exited during startup: {stderr}")
+            identity = process_identity.process_identity(self.pid)
+            if identity is not None and identity.name.startswith("Google Chrome"):
+                self.identity = identity
+                return
+            time.sleep(0.05)
+        raise CheckError(f"{self.name} identity was not observable")
+
+    def cdp(self, method: str, params: dict[str, Any] | None = None, timeout: float = 5) -> dict[str, Any]:
+        message_id = int(time.time() * 1_000_000) % 1_000_000_000
+        payload: dict[str, Any] = {"id": message_id, "method": method}
+        if params is not None:
+            payload["params"] = params
+        os.write(self._to_child_write, json.dumps(payload, separators=(",", ":")).encode() + b"\0")
+        deadline = time.monotonic() + timeout
+        buffer = b""
+        os.set_blocking(self._from_child_read, False)
+        while time.monotonic() < deadline:
+            remaining = max(0.05, deadline - time.monotonic())
+            ready, _, _ = select.select([self._from_child_read], [], [], remaining)
+            if not ready:
+                continue
+            chunk = os.read(self._from_child_read, 65536)
+            if not chunk:
+                break
+            buffer += chunk
+            while b"\0" in buffer:
+                raw, buffer = buffer.split(b"\0", 1)
+                if not raw:
+                    continue
+                response = json.loads(raw.decode())
+                if response.get("id") == message_id:
+                    return response
+        raise CheckError(f"timed out waiting for {method} from {self.name}")
+
+    def close_by_browser_close(self) -> dict[str, Any]:
+        if self.process is None or self.process.poll() is not None:
+            response = {"error": "process already absent"}
+        else:
+            try:
+                response = self.cdp("Browser.close", timeout=3)
+            except CheckError as exc:
+                response = {"error": str(exc)}
+        self.close_response = response
+        return response
+
+    def wait_absent(self, timeout: float = 10) -> bool:
+        if self.process is None:
+            return True
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            if process_identity.process_identity(self.pid) is None:
+                return True
+            time.sleep(0.1)
+        return process_identity.process_identity(self.pid) is None
+
+    def close_fds(self) -> None:
+        close_fd(self._to_child_write)
+        close_fd(self._from_child_read)
+
+
+def minimal_env() -> dict[str, str]:
+    env: dict[str, str] = {}
+    for key in ("PATH", "TMPDIR", "HOME"):
+        if key in os.environ:
+            env[key] = os.environ[key]
+    return env
+
+
+def close_fd(fd: int) -> None:
+    try:
+        os.close(fd)
+    except OSError:
+        pass
+
+
+def read_available(pipe: Any) -> str:
+    if pipe is None:
+        return ""
+    try:
+        fd = pipe.fileno()
+        os.set_blocking(fd, False)
+        chunks: list[bytes] = []
+        while True:
+            ready, _, _ = select.select([fd], [], [], 0)
+            if not ready:
+                break
+            chunk = os.read(fd, 65536)
+            if not chunk:
+                break
+            chunks.append(chunk)
+        return b"".join(chunks).decode(errors="replace")
+    except OSError:
+        return ""
+
+
+def identity_record(identity: Any) -> dict[str, Any]:
+    return {
+        "pid": identity.pid,
+        "start_time_us": identity.start_time_us,
+        "ppid": identity.ppid,
+        "uid": identity.uid,
+        "name": identity.name,
+        "boot_time_us": identity.boot.boot_time_us,
+        "boot_session_uuid": identity.boot.session_uuid,
+    }
+
+
+def profile_record(profile_identity: Any) -> dict[str, Any]:
+    return {
+        "path": profile_identity.path,
+        "device": profile_identity.device,
+        "inode": profile_identity.inode,
+    }
+
+
+def move_away_from_reserved_fds(fd: int) -> int:
+    if fd not in (3, 4):
+        return fd
+    moved = fcntl.fcntl(fd, fcntl.F_DUPFD_CLOEXEC, 5)
+    os.close(fd)
+    return moved
+
+
+def cleanup_decision(
+    *,
+    saved_identity: Any,
+    profile_identity: Any,
+    port: int | None = None,
+    inspect_uncertain: bool = False,
+) -> dict[str, Any]:
+    """Fixture decision gate. It refuses unsafe cleanup instead of signalling."""
+
+    if inspect_uncertain:
+        return {"decision": "refuse", "reason": "process inspection is uncertain"}
+
+    comparison = process_identity.compare_process_identity(saved_identity)
+    if not comparison.matches:
+        return {"decision": "refuse", "reason": comparison.reason}
+
+    try:
+        profile_matches = process_identity.compare_profile_identity(profile_identity)
+    except Exception as exc:  # noqa: BLE001 - evidence should preserve refusal cause.
+        return {"decision": "refuse", "reason": f"profile identity unavailable: {exc}"}
+    if not profile_matches:
+        return {"decision": "refuse", "reason": "profile identity does not match"}
+
+    if port is not None and port_is_listening(port):
+        return {"decision": "refuse", "reason": f"unrelated listener occupies 127.0.0.1:{port}"}
+
+    return {"decision": "allow-graceful-control-close", "reason": "owned control connection required"}
+
+
+def port_is_listening(port: int) -> bool:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+        probe.settimeout(0.2)
+        return probe.connect_ex(("127.0.0.1", port)) == 0
+
+
+def child_pids(parent_pid: int) -> list[int]:
+    result = subprocess.run(
+        ["pgrep", "-P", str(parent_pid)],
+        check=False,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+        text=True,
+        env=minimal_env(),
+    )
+    if result.returncode not in (0, 1):
+        raise CheckError(f"pgrep -P failed for pid {parent_pid}")
+    return [int(line) for line in result.stdout.splitlines() if line.strip()]
+
+
+def observed_descendants(root: Any) -> dict[str, Any]:
+    comparison = process_identity.compare_process_identity(root)
+    if not comparison.matches:
+        return {
+            "root_state": "absent_or_reused",
+            "root_reason": comparison.reason,
+            "descendants": [],
+            "limitations": [
+                "root process absent or identity-mismatched; observed descendants cannot prove that no unobserved or reparented helper remains"
+            ],
+        }
+
+    descendants: list[Any] = []
+    queue = [root.pid]
+    seen = {root.pid}
+    while queue:
+        parent_pid = queue.pop(0)
+        for pid in child_pids(parent_pid):
+            if pid in seen:
+                continue
+            seen.add(pid)
+            identity = process_identity.process_identity(pid)
+            if identity is None:
+                continue
+            descendants.append(identity)
+            queue.append(pid)
+    return {
+        "root_state": "matching_alive",
+        "descendants": descendants,
+        "limitations": [
+            "observed descendants are not a complete ownership inventory and cannot authorize cleanup success"
+        ],
+    }
+
+
+def classify_saved_identities(saved: list[Any]) -> dict[str, Any]:
+    states: dict[str, Any] = {"matching_alive": [], "reused": [], "absent": [], "unavailable": []}
+    for identity in saved:
+        try:
+            comparison = process_identity.compare_process_identity(identity)
+        except Exception as exc:  # noqa: BLE001 - evidence should preserve inspection failures.
+            states["unavailable"].append({"saved": identity_record(identity), "reason": str(exc)})
+            continue
+        if comparison.matches:
+            states["matching_alive"].append(
+                {"saved": identity_record(identity), "current": identity_record(comparison.current)}
+            )
+        elif comparison.current is None:
+            states["absent"].append({"saved": identity_record(identity), "reason": comparison.reason})
+        else:
+            states["reused"].append(
+                {
+                    "saved": identity_record(identity),
+                    "current": identity_record(comparison.current),
+                    "reason": comparison.reason,
+                }
+            )
+    states["counts"] = {key: len(value) for key, value in states.items() if isinstance(value, list)}
+    return states
+
+
+def read_line_timeout(pipe: Any, timeout: float) -> str:
+    fd = pipe.fileno()
+    os.set_blocking(fd, False)
+    deadline = time.monotonic() + timeout
+    data = b""
+    while time.monotonic() < deadline:
+        ready, _, _ = select.select([fd], [], [], max(0.05, deadline - time.monotonic()))
+        if not ready:
+            continue
+        chunk = os.read(fd, 1)
+        if not chunk:
+            break
+        data += chunk
+        if chunk == b"\n":
+            return data.decode().strip()
+    raise CheckError("timed out reading fixture helper pid")
+
+
+def run_main_first_fixture(fixture_root: Path) -> dict[str, Any]:
+    child_script = fixture_root / "main_first_fixture.py"
+    child_script.write_text(
+        textwrap.dedent(
+            """
+            import os
+            import subprocess
+            import sys
+
+            helper_read_fd = int(sys.argv[1])
+            child = subprocess.Popen(
+                [sys.executable, '-c', 'import sys; sys.stdin.buffer.read()'],
+                stdin=helper_read_fd,
+                pass_fds=(helper_read_fd,),
+                close_fds=True,
+            )
+            print(child.pid, flush=True)
+            sys.stdin.buffer.read(1)
+            # Simulate main-first failure. The helper remains until its explicit
+            # pipe is closed by the controller fixture.
+            os._exit(0)
+            """
+        )
+    )
+    helper_read_fd, helper_write_fd = os.pipe()
+    parent: subprocess.Popen[bytes] | None = None
+    try:
+        parent = subprocess.Popen(
+            [sys.executable, str(child_script), str(helper_read_fd)],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            env=minimal_env(),
+            pass_fds=(helper_read_fd,),
+            close_fds=True,
+        )
+        close_fd(helper_read_fd)
+        assert parent.stdout is not None and parent.stdin is not None
+        child_pid = int(read_line_timeout(parent.stdout, 5))
+        parent_identity = process_identity.process_identity(parent.pid)
+        child_identity = process_identity.process_identity(child_pid)
+        if parent_identity is None or child_identity is None:
+            raise CheckError("main-first fixture identity was not observable")
+        parent.stdin.write(b"x")
+        parent.stdin.close()
+        parent.wait(timeout=5)
+        decision = cleanup_decision(
+            saved_identity=parent_identity,
+            profile_identity=process_identity.profile_identity(fixture_root),
+        )
+        helper_state_after_parent_exit = classify_saved_identities([child_identity])
+        child_alive_before_explicit_exit = bool(helper_state_after_parent_exit["matching_alive"])
+        close_fd(helper_write_fd)
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline and process_identity.process_identity(child_pid) is not None:
+            time.sleep(0.05)
+        helper_state_after_pipe_close = classify_saved_identities([child_identity])
+        return {
+            "parent_identity": identity_record(parent_identity),
+            "child_identity": identity_record(child_identity),
+            "decision_after_parent_exit": decision,
+            "helper_state_after_parent_exit": helper_state_after_parent_exit,
+            "helper_alive_before_explicit_pipe_cleanup": child_alive_before_explicit_exit,
+            "helper_state_after_explicit_pipe_cleanup": helper_state_after_pipe_close,
+        }
+    finally:
+        close_fd(helper_read_fd)
+        close_fd(helper_write_fd)
+        if parent is not None:
+            if parent.stdin is not None:
+                try:
+                    parent.stdin.close()
+                except OSError:
+                    pass
+            read_available(parent.stderr)
+
+
+def assert_refusals(outcomes: dict[str, Any]) -> None:
+    require(outcomes["simulated_pid_reuse_refusal"]["decision"] == "refuse", "PID reuse refusal failed")
+    require(
+        outcomes["unrelated_listener_refusal"]["decision"]["decision"] == "refuse",
+        "listener conflict refusal failed",
+    )
+    require(outcomes["inspection_uncertainty_refusal"]["decision"] == "refuse", "uncertainty refusal failed")
+
+
+def assert_observed_states(states: dict[str, Any], expected: str, label: str) -> None:
+    counts = states["counts"]
+    observed = sum(counts.values())
+    require(observed > 0, f"{label} had no saved observed helpers to recheck")
+    for key in ("matching_alive", "reused", "absent", "unavailable"):
+        if key == expected:
+            require(counts[key] > 0, f"{label} expected {expected}, got {counts}")
+        else:
+            require(counts[key] == 0, f"{label} unexpected {key}, got {counts}")
+
+
+def run(evidence_path: Path) -> int:
+    if platform.system() != "Darwin":
+        raise CheckError("this checkpoint must run on macOS")
+    if not CHROME.exists():
+        raise CheckError(f"Chrome binary not found at {CHROME}")
+
+    evidence_path.parent.mkdir(parents=True, exist_ok=True)
+    started_at = time.strftime("%Y-%m-%d %H:%M:%S %Z")
+    ARTIFACT_ROOT.mkdir(parents=True, exist_ok=True)
+    fixture_root = Path(tempfile.mkdtemp(prefix="rfc0012-stage3-private-", dir=ARTIFACT_ROOT))
+    fixture_root.chmod(0o700)
+    outcomes: dict[str, Any] = {
+        "started_at": started_at,
+        "chrome": str(CHROME),
+        "fixture_root_left_for_review": str(fixture_root),
+        "stage3_gate": "NOT PASSED",
+        "stage3_gate_reason": "normal Chrome close was observed, but complete helper cleanup cannot be proven and real Chrome main-first crash was not tested",
+    }
+    target = CdpPipeChrome("target", fixture_root)
+    survivor = CdpPipeChrome("survivor", fixture_root)
+    saved_observed_helpers: list[Any] = []
+    try:
+        target.start()
+        survivor.start()
+        target_before = observed_descendants(target.identity)
+        survivor_before = observed_descendants(survivor.identity)
+        target_helpers_before = list(target_before["descendants"])
+        survivor_helpers_before = list(survivor_before["descendants"])
+        saved_observed_helpers = target_helpers_before + survivor_helpers_before
+        assert target.identity is not None and target.profile_identity is not None
+        assert survivor.identity is not None and survivor.profile_identity is not None
+
+        mutated = replace(target.identity, start_time_us=target.identity.start_time_us + 1)
+        outcomes["simulated_pid_reuse_refusal"] = cleanup_decision(
+            saved_identity=mutated,
+            profile_identity=target.profile_identity,
+        )
+
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as listener:
+            listener.bind(("127.0.0.1", 0))
+            listener.listen(1)
+            port = listener.getsockname()[1]
+            outcomes["unrelated_listener_refusal"] = {
+                "port": port,
+                "listener_process_identity": identity_record(process_identity.process_identity(os.getpid())),
+                "decision": cleanup_decision(
+                    saved_identity=survivor.identity,
+                    profile_identity=survivor.profile_identity,
+                    port=port,
+                ),
+                "listener_socket_open_after_refusal": listener.fileno() >= 0,
+            }
+
+        outcomes["inspection_uncertainty_refusal"] = cleanup_decision(
+            saved_identity=survivor.identity,
+            profile_identity=survivor.profile_identity,
+            inspect_uncertain=True,
+        )
+        assert_refusals(outcomes)
+
+        close_response = target.close_by_browser_close()
+        target_absent = target.wait_absent()
+        target_main_state_after_close = classify_saved_identities([target.identity])
+        target_helper_states_after_close = classify_saved_identities(target_helpers_before)
+        survivor_helper_states_while_survivor_alive = classify_saved_identities(survivor_helpers_before)
+        survivor_version_after = survivor.cdp("Browser.getVersion")
+        survivor_usable_after = "result" in survivor_version_after
+        survivor_close = survivor.close_by_browser_close()
+        survivor_absent = survivor.wait_absent()
+        survivor_main_state_after_close = classify_saved_identities([survivor.identity])
+        survivor_helper_states_after_close = classify_saved_identities(survivor_helpers_before)
+
+        require(target_absent, "target main process did not exit after Browser.close")
+        assert_observed_states(target_main_state_after_close, "absent", "target main after close")
+        assert_observed_states(target_helper_states_after_close, "absent", "target observed helpers after close")
+        require(survivor_usable_after, "survivor was not usable after target close")
+        assert_observed_states(
+            survivor_helper_states_while_survivor_alive,
+            "matching_alive",
+            "survivor observed helpers while survivor alive",
+        )
+        require(survivor_absent, "survivor main process did not exit after Browser.close")
+        assert_observed_states(survivor_main_state_after_close, "absent", "survivor main after close")
+        assert_observed_states(survivor_helper_states_after_close, "absent", "survivor observed helpers after close")
+
+        outcomes["real_chrome_normal_shutdown"] = {
+            "target_identity": identity_record(target.identity),
+            "target_profile_identity": profile_record(target.profile_identity),
+            "target_observed_helpers_before": [identity_record(p) for p in target_helpers_before],
+            "target_observed_descendant_limitations": target_before["limitations"],
+            "target_browser_close_response": close_response,
+            "target_main_state_after_close": target_main_state_after_close,
+            "target_observed_helper_states_after_close": target_helper_states_after_close,
+            "survivor_identity": identity_record(survivor.identity),
+            "survivor_profile_identity": profile_record(survivor.profile_identity),
+            "survivor_observed_helpers_before": [identity_record(p) for p in survivor_helpers_before],
+            "survivor_observed_descendant_limitations": survivor_before["limitations"],
+            "survivor_usable_after_target_close": survivor_usable_after,
+            "survivor_observed_helper_states_while_survivor_alive": survivor_helper_states_while_survivor_alive,
+            "survivor_browser_close_response": survivor_close,
+            "survivor_main_state_after_close": survivor_main_state_after_close,
+            "survivor_observed_helper_states_after_close": survivor_helper_states_after_close,
+            "limitation": "direct rechecks cover only helpers observed before close; they cannot prove no unobserved or reparented helper remains",
+        }
+
+        outcomes["simulated_main_first_failure"] = run_main_first_fixture(fixture_root)
+        require(
+            outcomes["simulated_main_first_failure"]["decision_after_parent_exit"]["decision"] == "refuse",
+            "simulated main-first absent parent was not refused",
+        )
+        require(
+            outcomes["simulated_main_first_failure"]["helper_alive_before_explicit_pipe_cleanup"],
+            "simulated helper was not alive after parent exit",
+        )
+        require(
+            outcomes["simulated_main_first_failure"]["helper_state_after_explicit_pipe_cleanup"]["counts"]["absent"] == 1,
+            "simulated helper did not exit after explicit pipe cleanup",
+        )
+
+    finally:
+        for chrome in (target, survivor):
+            try:
+                chrome.close_by_browser_close()
+                chrome.wait_absent(timeout=5)
+            except Exception as exc:  # noqa: BLE001 - cleanup evidence only.
+                outcomes.setdefault("cleanup_errors", []).append({"name": chrome.name, "error": str(exc)})
+            chrome.close_fds()
+        remaining = []
+        for identity in (target.identity, survivor.identity):
+            if identity is not None:
+                try:
+                    comparison = process_identity.compare_process_identity(identity)
+                    if comparison.matches:
+                        remaining.append(identity_record(comparison.current))
+                except Exception as exc:  # noqa: BLE001 - evidence only.
+                    remaining.append({"saved": identity_record(identity), "error": str(exc)})
+        outcomes["remaining_owned_main_processes_after_finally"] = remaining
+        outcomes["saved_observed_helper_states_after_finally"] = classify_saved_identities(saved_observed_helpers)
+        outcomes["leftover_private_fixture_root_not_deleted"] = str(fixture_root)
+
+    outcomes["status"] = STATUS_INCONCLUSIVE
+    outcomes["status_meaning"] = "inconclusive completeness gate; assertions passed but stage3 gate is NOT PASSED"
+    write_evidence(evidence_path, outcomes)
+    return STATUS_INCONCLUSIVE
+
+
+def write_evidence(evidence_path: Path, outcomes: dict[str, Any]) -> None:
+    raw_path = evidence_path.with_suffix(evidence_path.suffix + EVIDENCE_JSON_SUFFIX)
+    raw_path.write_text(json.dumps(outcomes, default=str, indent=2, sort_keys=True) + "\n")
+    markdown = render_markdown(outcomes, raw_path)
+    evidence_path.write_text(markdown)
+    print(markdown)
+
+
+def render_counts(states: dict[str, Any]) -> str:
+    counts = states["counts"]
+    return (
+        f"matching alive {counts['matching_alive']}; reused {counts['reused']}; "
+        f"absent {counts['absent']}; unavailable {counts['unavailable']}"
+    )
+
+
+def render_markdown(outcomes: dict[str, Any], raw_path: Path) -> str:
+    normal = outcomes["real_chrome_normal_shutdown"]
+    main_first = outcomes["simulated_main_first_failure"]
+    rows = [
+        ("Expected safety refusals", "passed", "PID reuse, listener conflict, and inspection uncertainty all refused."),
+        (
+            "Real Chrome normal close",
+            "partially observed",
+            "Target main and each saved observed target helper were absent after Browser.close; survivor stayed usable.",
+        ),
+        (
+            "Observed helper state reporting",
+            "passed for observed set only",
+            "Saved helper identities were rechecked directly and classified as matching alive, reused, absent, or unavailable.",
+        ),
+        (
+            "Main-first failure",
+            "simulated only",
+            "Controlled Python parent exited first; helper remained alive until explicit fixture pipe cleanup.",
+        ),
+        (
+            "Stage 3 completeness gate",
+            "NOT PASSED",
+            outcomes["stage3_gate_reason"],
+        ),
+    ]
+    lines = [
+        "# RFC-0012 stage 3 macOS checkpoint evidence",
+        "",
+        "> Supersedes the earlier evidence in this file. The prior run was incomplete because it relied on descendant inventory after an absent root, lacked assertions, risked parent fd3/fd4 descriptor overwrite, and moved profiles from an automatically deleted temporary root.",
+        "",
+        "## Summary",
+        "",
+        f"- outcome: **{outcomes['stage3_gate']}**",
+        f"- process result: assertions passed, script exits **{STATUS_INCONCLUSIVE}** because the completeness gate is inconclusive",
+        "- real Chrome main-first crash: **not tested**",
+        "- scope: disposable headless Chrome instances with private profiles only; no personal Chrome inspection and no signals",
+        f"- raw machine evidence with exact process IDs: `{raw_path}`",
+        f"- leftover private fixture root: `{outcomes['leftover_private_fixture_root_not_deleted']}`",
+        "",
+        "## Outcome table",
+        "",
+        "| Check | Result | Evidence |",
+        "| --- | --- | --- |",
+    ]
+    for check, result, evidence in rows:
+        lines.append(f"| {check} | {result} | {evidence} |")
+    lines.extend(
+        [
+            "",
+            "## Key observed state counts",
+            "",
+            f"- target main after close: {render_counts(normal['target_main_state_after_close'])}",
+            f"- target saved observed helpers after close: {render_counts(normal['target_observed_helper_states_after_close'])}",
+            f"- survivor saved observed helpers while survivor alive: {render_counts(normal['survivor_observed_helper_states_while_survivor_alive'])}",
+            f"- survivor main after close: {render_counts(normal['survivor_main_state_after_close'])}",
+            f"- survivor saved observed helpers after close: {render_counts(normal['survivor_observed_helper_states_after_close'])}",
+            f"- simulated helper after parent exit: {render_counts(main_first['helper_state_after_parent_exit'])}",
+            f"- simulated helper after explicit pipe cleanup: {render_counts(main_first['helper_state_after_explicit_pipe_cleanup'])}",
+            "",
+            "## Important limitations",
+            "",
+            "- Rechecking saved helpers proves only the state of helpers observed before close.",
+            "- It still cannot prove that no unobserved or reparented Chrome helper existed.",
+            "- The main-first failure scenario uses a controlled Python fixture, not a real Chrome crash.",
+            "- Private fixture profiles were left in place and were not moved or deleted because active ownership cannot be proven completely.",
+            "",
+            "## Command",
+            "",
+            "```bash",
+            "scripts/check-agent-browser-ownership-macos --evidence amp/docs/rfcs/evidence/rfc-0012-stage-3-macos-checkpoint.md",
+            "```",
+            "",
+            "## Environment",
+            "",
+            f"- started: {outcomes['started_at']}",
+            f"- Chrome binary: `{outcomes['chrome']}`",
+            f"- process identity module: `{MODULE_PATH}`",
+            "",
+        ]
+    )
+    return "\n".join(lines)
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--evidence",
+        type=Path,
+        default=ROOT / "amp" / "docs" / "rfcs" / "evidence" / "rfc-0012-stage-3-macos-checkpoint.md",
+    )
+    args = parser.parse_args()
+    try:
+        return run(args.evidence)
+    except AssertionFailure as exc:
+        print(f"checkpoint assertion failed safely: {exc}", file=sys.stderr)
+        return STATUS_TEST_FAILURE
+    except Exception as exc:  # noqa: BLE001 - checkpoint must report safely.
+        print(f"checkpoint failed safely: {exc}", file=sys.stderr)
+        return STATUS_TEST_FAILURE
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
