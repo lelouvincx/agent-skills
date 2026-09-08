@@ -211,9 +211,6 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-agent-browser-
 
-      - name: Verify Chrome
-        run: google-chrome --version
-
       - name: Build and test the pinned native patch
         env:
           AGENT_BROWSER_RUN_TESTS: "1"

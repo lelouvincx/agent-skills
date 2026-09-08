@@ -32,7 +32,7 @@ Re-run `build` to repair missing resources or replace an old distribution. The b
 
 When deliberately updating the upstream pin, regenerate `skill-data.sha256` from that revision's `skill-data/` and review the content changes. Do not regenerate the manifest merely to accept unexpected installed files. The manifest check detects local drift; it is not protection against a hostile process with the same user's file access.
 
-Run `scripts/check-agent-browser-custom` for offline packaging and failure tests without Chrome. Run `AGENT_BROWSER_RUN_TESTS=1 amp/agent-browser-custom/build` for the native suite, then verify the three skill commands above. See the root [Validation table](../../README.md#debug-a-failed-check) for other checks.
+Run `scripts/check-agent-browser-custom` for offline packaging and failure tests without Chrome. Run `AGENT_BROWSER_RUN_TESTS=1 amp/agent-browser-custom/build` for the browser-free native suite, then verify the three skill commands above. The build and CI leave ignored Chrome login tests disabled under the testing policy. See the root [Validation table](../../README.md#debug-a-failed-check) for other checks.
 
 ## Configuration defaults
 

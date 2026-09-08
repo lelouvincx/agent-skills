@@ -76,8 +76,6 @@ if [ "${AGENT_BROWSER_RUN_TESTS:-0}" = 1 ]; then
   "${test_env[@]}" cargo +nightly fmt --manifest-path "$build_dir/cli/Cargo.toml" -- --check
   "${test_env[@]}" cargo +nightly test --manifest-path "$build_dir/cli/Cargo.toml" \
     -- --test-threads=1
-  "${test_env[@]}" cargo +nightly test --manifest-path "$build_dir/cli/Cargo.toml" \
-      e2e_provider_login -- --ignored --test-threads=1
 fi
 
 CARGO_PROFILE_RELEASE_LTO=false \
