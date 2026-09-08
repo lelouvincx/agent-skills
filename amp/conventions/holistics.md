@@ -18,3 +18,8 @@
 - Leave the process running through transient timeout and connection errors so it can recover automatically. Treat a failed session refresh as terminal.
 - When cloud and local changes conflict, stop code sync, resolve the conflict locally, then restart code sync.
 - After stopping sync, inspect `git status` and `git diff`, confirm the end of the session’s `sync.log` shows the expected final events and stop, and verify `state.json` reports `dirty_count: 0`, `conflicts: []`, and `last_error: null`.
+
+## Publish
+
+- Before publishing, commit and push the local changes, merge them into the repository's default `main` or `master` branch, then run [`submit publish`](https://docs.holistics.io/docs/development/local-agentic-development#publish-1).
+- If publishing needs a Holistics API key and none is available, ask Chinh to provide it.

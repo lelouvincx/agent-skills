@@ -71,6 +71,7 @@ and this project does not currently use versioned releases.
 
 ### Changed
 
+- Document the Holistics publish workflow for local commit, push, default-branch merge, `submit publish`, and missing API keys. [#228](https://github.com/lelouvincx/agent-skills/pull/228)
 - Force every managed Amp runner to select service-account authentication at runtime. [#226](https://github.com/lelouvincx/agent-skills/pull/226)
 - Make `amp-chatgpt-subscription-selector` switch ChatGPT subscriptions based only on weekly Codex quota, ignoring the 5-hour quota window. [#225](https://github.com/lelouvincx/agent-skills/pull/225)
 - Allow `agent-secrets` to run approved tools such as Homebrew `gh` through bare command names resolved from `PATH`. [#223](https://github.com/lelouvincx/agent-skills/pull/223)
