@@ -124,6 +124,7 @@ class AgentSecretPolicyValidationTests(unittest.TestCase):
                 "lelouvincx-bot",
                 "amp-runner-r2",
                 "smartclass-cohere",
+                "openrouter",
             },
             set(manifest["bundles"]),
         )
@@ -136,6 +137,16 @@ class AgentSecretPolicyValidationTests(unittest.TestCase):
                 "allowedCommandClasses": ["smartclass-wrangler-dev"],
             },
             manifest["bundles"]["smartclass-cohere"],
+        )
+        self.assertEqual(
+            {
+                "audience": "agent",
+                "owner": "lelouvincx/smartclass",
+                "variables": ["OPENROUTER_API_KEY"],
+                "compatibleBundles": [],
+                "allowedCommandClasses": ["smartclass-openrouter-poc"],
+            },
+            manifest["bundles"]["openrouter"],
         )
         self.assertEqual(
             [
