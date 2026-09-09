@@ -43,6 +43,22 @@ Use managed commands for routine macOS work. Set `$thread` to the current actual
 
 For supported commands and startup checks, consult the [CLI reference](README.md#managed-commands). For syntax, use `agent-browser-lifecycle <command> --help`.
 
+## Persistent profiles
+
+Add `--profile-name upwork` to retain login between sessions. Keep the same approved name and state directory. Ephemeral profiles remain the default.
+
+1. Start with `--profile-name upwork --headed`. Pause automation for human login, then verify the destination and account.
+2. Have children detach, then `stop` as the owner. Continue only when the result is `closed`.
+3. Start with the same profile name, without `--headed`. Save the new session and tab IDs; verify the account before research.
+
+If headless access is challenged, repeat steps 2–3 with `--headed` for human verification. Saved login does not guarantee headless acceptance. Do not bypass anti-bot checks.
+
+Reuse requires verified closure and matching directory identity. Active claims, unsafe directories and Chromium locks block launch. Leave locks intact for human investigation.
+
+Existing ephemeral or external profiles cannot be adopted: use a new named profile and log in again. Never copy or relabel profiles. If first creation fails before identity recording, recover and choose a new name. Previously recorded profiles remain reusable after verified recovery.
+
+Profiles and their runtime files survive sweep and reboot. Manual deletion requires explicit approval for those artifacts, verified session closure, and independent process, listener and path-identity checks. After deletion, use a new name; leave history unchanged. Never commit, export or log profile contents.
+
 ## Subagent sharing
 
 The owner retains shutdown responsibility. Before dispatch, pass the child the `session_id`, `owner_thread_id`, and any non-default `XDG_STATE_HOME`.
@@ -79,6 +95,8 @@ Inspect `pending_reasons` if the result is `cleanup-pending`. Resolve the concre
 
 Run `agent-browser-lifecycle sweep` to remove eligible retired files after reboot; `start` also runs it. Same-boot sessions return counts without file inspection. Missing safety metadata blocks deletion. Treat `blocked` results as unresolved, not successful cleanup. Use `show` for active sessions, optionally narrowed by `--session-id`; it is not a retired-file inventory.
 
+Named-profile sessions are excluded before file inspection, regardless of boot or missing cleanup metadata. `retained_persistent` counts these retired sessions, not unique profiles. Their runtime files remain too; follow [persistent profile deletion rules](#persistent-profiles) rather than using sweep.
+
 ## Legacy/manual sessions
 
 Use this branch only for non-macOS runtimes, lifecycle debugging or explicit legacy work. The agent must verify processes and cleanup; legacy event recording supplies no such proof. Claims coordinate agents but do not reserve operating-system ports. Keep profiles private and all CDP/stream listeners on loopback.
@@ -106,7 +124,7 @@ Consult this section when inspecting or maintaining lifecycle storage, not for r
 
 - `lifecycle.jsonl` is authoritative append-only history. A newline commits a record; replay under the lock discards only an unterminated final fragment. Records contain complete session identity and lifecycle metadata, not URLs, titles, page content, secrets, task text or free-form errors.
 - `current.json` is a replaceable active-session view. `show` and `rebuild` replay history under `lifecycle.lock` and replace it atomically. Repair history from neither this cache nor inferred live processes. Replay itself has no process effects.
-- `sessions/<session_id>/chrome-data/` stores sensitive profile state. Managed daemon sockets and the config snapshot use a separate private short runtime path. Per-session `operation-locks/` serialize effects; the global journal lock is not held while creating or waiting for a child.
+- `sessions/<session_id>/chrome-data/` stores ephemeral profile state; `profiles/<profile_name>/` stores persistent profile state. Optional immutable `profile_name` metadata on v2 events marks retention; its absence keeps old histories ephemeral. Managed daemon sockets and the config snapshot use a separate private short runtime path. Per-session `operation-locks/` serialize effects; the global journal lock is not held while creating or waiting for a child.
 - The [schema](schema.json) defines legacy v1 and managed v2 events; replay additionally enforces transitions and identity. Current v2 views distinguish `legacy-unverified`, `managed-unverified` and `managed-ready`; cleanup-pending removes readiness. A terminal event removes the active session, not necessarily its disk files.
 - Sweep checks recorded artifact identities, boot and listeners, holding the journal lock through conflict revalidation, deletion and the completion record. Histories missing required metadata stay blocked.
 
@@ -128,6 +146,6 @@ Use an approved login alias with the pinned build:
 agent-browser-lifecycle exec --session-id "$session" --actor-thread-id "$thread" -- auth login <alias> --credential-provider onepassword
 ```
 
-Continue only when the destination and account match policy. If automatic login fails, stop the headless session, including attached subagents. After verified closure, start a fresh headed session with a new profile. Pause automated input during human login and until browser subagents detach; resume only when the destination and account match policy.
+Continue only when the destination and account match policy. If automatic login fails, stop the headless session, including attached subagents. After verified closure, start a fresh headed session, reusing the same named profile if one was selected. For login that must persist, follow [persistent profiles](#persistent-profiles). Pause automated input during human login and until browser subagents detach; resume only when the destination and account match policy.
 
 For missing or stale builds, follow the [build guide](../agent-browser-custom/README.md#install-and-use). For configuration changes, read the [config reference](../agent-browser-custom/README.md#configuration-defaults).

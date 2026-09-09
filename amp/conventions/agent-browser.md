@@ -3,7 +3,7 @@
 Use the `agent-browser` skill for page commands and the rules below for local policy.
 
 - Testing: use browser-free fixtures. No Chrome tests or silent Chromium substitutes. Ask the human for an alternative when live validation is necessary; distinguish mock coverage from live coverage.
-- Launch mode: headless by default; headed is pre-approved when needed. Changing mode requires a new session and profile.
+- Launch mode: headless by default; headed is pre-approved when needed. Changing mode requires verified closure and a new session. To retain login, use the same [named persistent profile](../agent-browser-lifecycle/reference.md#persistent-profiles).
 
 ## Managed macOS workflow
 
@@ -11,7 +11,7 @@ Before session work, read [lifecycle rules](agent-browser-lifecycle.md). Use the
 
 ### Explicit Agent Browser identity
 
-Each owner uses a fresh browser, private exclusive profile and loopback endpoint. Keep authentication in that profile.
+Each session uses a fresh browser process and loopback endpoint with exclusive ownership of a private profile. Profiles are ephemeral by default; opt into a named profile for login reuse. Keep authentication in the profile, never in journal records or exported cookies.
 
 ## Authentication
 

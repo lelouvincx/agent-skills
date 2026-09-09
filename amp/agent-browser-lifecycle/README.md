@@ -6,7 +6,7 @@ The public CLI supports legacy claims and managed sessions on macOS. Stage 3 sup
 
 Stage 5 switches routine macOS instructions to managed lifecycle commands. Managed launches persist intent, profile identity, process identity and release permission in that order. Replay accepts old history and labels legacy sessions unverified. Managed sessions cannot use legacy `record` commands to claim readiness or completed cleanup. See the [managed launch contract](reference.md#managed-launch-foundation).
 
-Stop and recovery report `closed` once the recorded Chrome process, daemon and session listeners are gone. Untracked helpers may remain until weekly reboot. Closed sessions release their active claims but retain private profile/runtime files until `sweep` can remove safely recorded retired artifacts. No process signals, implicit replacement, command replay or background supervisor are introduced.
+Stop and recovery report `closed` once the recorded Chrome process, daemon and session listeners are gone. Untracked helpers may remain until weekly reboot. Closed sessions release their active claims but retain private profile/runtime files. `sweep` removes eligible ephemeral artifacts; named persistent profiles and their runtime files are excluded. No process signals, implicit replacement, command replay or background supervisor are introduced.
 
 Run the lifecycle command in the root [Validation table](../../README.md#debug-a-failed-check) for replay, schema, launch-gate and identity tests. Most process-launch tests use disposable Python payloads and simulated identities; macOS also checks real birth identity across exec. The [Chrome checkpoint](../docs/rfcs/evidence/rfc-0012-stage-3-macos-checkpoint.md) is separate and returns exit code 2 for its inconclusive completeness gate.
 
@@ -27,6 +27,8 @@ agent-browser-lifecycle sweep
 
 Start defaults to headless; use `start --headed` for a fresh headed session. Commands take their browser identity from the journal, not command-line overrides. The helper snapshots the approved user config into a private runtime directory and bypasses project config discovery. It accepts the stage 2 output preferences and the approved `onepassword` credential plugin; unsupported config keys are refused, not silently discarded.
 
+Profiles default to ephemeral. Add `start --profile-name <name>` to save and reuse a private profile across new sessions, owners and modes after verified closure. See [persistent profiles](reference.md#persistent-profiles) for headed login → headless research, lock failures, retention and migration limits. Existing ephemeral profiles are not adopted.
+
 Owners and attached children can execute commands. A child attaches with the session and owner IDs provided by the owner, using the child's own actual Amp thread ID:
 
 ```bash
@@ -44,7 +46,7 @@ An execution failure requires recovery; it is not retried. Stop with attached ch
 
 Stop and recover check actual process and listener absence after requesting shutdown, even if the shutdown response was lost. A concrete blocker leaves `cleanup-pending` with `pending_reasons`. Successful closure appends `managed_closed` and removes the session from `show`. Repeated stop/recover by the owner returns `closed` without repeating effects. Neither command certifies complete descendant cleanup.
 
-`sweep` deletes only recorded retired profile/runtime directories after checking saved artifact identity, current boot and listeners. Same-boot retired sessions return counts without inspecting files. Older histories without required metadata are blocked. `start` also runs sweep and returns `sweep_summary`.
+`sweep` deletes only recorded retired ephemeral profile/runtime directories after checking saved artifact identity, current boot and listeners. Same-boot retired sessions return counts without inspecting files. Named-profile sessions are counted as `retained_persistent` without filesystem inspection and require explicitly approved manual deletion. Older histories without required metadata are blocked. `start` also runs sweep and returns `sweep_summary`.
 
 ## Responsibilities
 

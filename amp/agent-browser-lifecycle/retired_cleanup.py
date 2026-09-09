@@ -46,6 +46,8 @@ def remove_retired_artifacts(
 
     if not isinstance(session, dict):
         raise CleanupBlocked("session must be a dictionary")
+    if session.get("profile_name") is not None:
+        raise CleanupBlocked("persistent profile artifacts require explicitly approved manual deletion")
 
     artifact_boot = _boot_record(session.get("artifact_boot"), "artifact_boot")
     current = _boot_record(current_boot, "current_boot")
