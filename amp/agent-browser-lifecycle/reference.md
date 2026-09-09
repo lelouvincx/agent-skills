@@ -43,6 +43,27 @@ Use managed commands for routine macOS work. Set `$thread` to the current actual
 
 For supported commands and startup checks, consult the [CLI reference](README.md#managed-commands). For syntax, use `agent-browser-lifecycle <command> --help`.
 
+## Persistent profiles
+
+Use `start --profile-name upwork` when login must survive session closure. Names are lowercase letters, digits and hyphens, start with a letter, and contain at most 63 characters. They identify private profiles in this state directory, not arbitrary paths or authorization to use an account. Use the same state directory and approved profile name on later runs; never copy a profile into another state directory to evade ownership checks.
+
+1. Start a headed login session:
+
+   ```bash
+   agent-browser-lifecycle start --owner-thread-id "$thread" --workspace "$PWD" --profile-name upwork --headed
+   ```
+
+   Save the returned session ID. Pause automated input for human login, then verify the destination and account without recording credentials or cookies.
+2. Have attached children finish and detach. Stop as the owner and continue only when the result is `closed`.
+3. Start a new headless session with `--profile-name upwork` and without `--headed`. Save its new session and tab identities. Verify the destination and account before read-only research.
+4. If the site challenges headless access, stop and verify closure again, then start headed with the same profile name. Ask the human to complete verification. Saved login does not guarantee headless acceptance, including on Upwork; do not bypass anti-bot checks.
+
+The controller reserves the profile under the journal lock before filesystem preparation. An active, draining or cleanup-pending session blocks reuse by every owner and mode. Reuse requires matching saved directory identity from a closed session. Symlinks, non-private directories, missing/replaced profiles and Chromium singleton artifacts block launch. Leave lock artifacts intact and report the blocker for human investigation; even stale-looking locks are not permission to remove them.
+
+Ephemeral sessions remain the default. Existing ephemeral or external profiles cannot be adopted or migrated by this implementation: plan a new manual login in a named profile. Do not move, copy or relabel the currently authenticated browser's profile. A first creation interrupted before its directory identity was recorded also requires a new name after recovery; its uncertain directory remains intact. Failures while reusing an already recorded profile preserve that identity for reuse after verified recovery.
+
+Persistent profiles and their associated retired runtime files are retained indefinitely, including after reboot. Deletion requires explicit human approval for the exact profile and artifacts, verified closure of all sessions using it, and independent process/listener and path-identity checks. There is no automated deletion command. After an approved deletion, choose a new profile name; do not edit history to reuse the old one. Never commit, export or log profile contents.
+
 ## Subagent sharing
 
 The owner retains shutdown responsibility. Before dispatch, pass the child the `session_id`, `owner_thread_id`, and any non-default `XDG_STATE_HOME`.
@@ -79,6 +100,8 @@ Inspect `pending_reasons` if the result is `cleanup-pending`. Resolve the concre
 
 Run `agent-browser-lifecycle sweep` to remove eligible retired files after reboot; `start` also runs it. Same-boot sessions return counts without file inspection. Missing safety metadata blocks deletion. Treat `blocked` results as unresolved, not successful cleanup. Use `show` for active sessions, optionally narrowed by `--session-id`; it is not a retired-file inventory.
 
+Named-profile sessions are excluded before file inspection, regardless of boot or missing cleanup metadata. `retained_persistent` counts these retired sessions, not unique profiles. Their runtime files remain too; follow [persistent profile deletion rules](#persistent-profiles) rather than using sweep.
+
 ## Legacy/manual sessions
 
 Use this branch only for non-macOS runtimes, lifecycle debugging or explicit legacy work. The agent must verify processes and cleanup; legacy event recording supplies no such proof. Claims coordinate agents but do not reserve operating-system ports. Keep profiles private and all CDP/stream listeners on loopback.
@@ -106,7 +129,7 @@ Consult this section when inspecting or maintaining lifecycle storage, not for r
 
 - `lifecycle.jsonl` is authoritative append-only history. A newline commits a record; replay under the lock discards only an unterminated final fragment. Records contain complete session identity and lifecycle metadata, not URLs, titles, page content, secrets, task text or free-form errors.
 - `current.json` is a replaceable active-session view. `show` and `rebuild` replay history under `lifecycle.lock` and replace it atomically. Repair history from neither this cache nor inferred live processes. Replay itself has no process effects.
-- `sessions/<session_id>/chrome-data/` stores sensitive profile state. Managed daemon sockets and the config snapshot use a separate private short runtime path. Per-session `operation-locks/` serialize effects; the global journal lock is not held while creating or waiting for a child.
+- `sessions/<session_id>/chrome-data/` stores ephemeral profile state; `profiles/<profile_name>/` stores persistent profile state. Optional immutable `profile_name` metadata on v2 events marks retention; its absence keeps old histories ephemeral. Managed daemon sockets and the config snapshot use a separate private short runtime path. Per-session `operation-locks/` serialize effects; the global journal lock is not held while creating or waiting for a child.
 - The [schema](schema.json) defines legacy v1 and managed v2 events; replay additionally enforces transitions and identity. Current v2 views distinguish `legacy-unverified`, `managed-unverified` and `managed-ready`; cleanup-pending removes readiness. A terminal event removes the active session, not necessarily its disk files.
 - Sweep checks recorded artifact identities, boot and listeners, holding the journal lock through conflict revalidation, deletion and the completion record. Histories missing required metadata stay blocked.
 
@@ -128,6 +151,6 @@ Use an approved login alias with the pinned build:
 agent-browser-lifecycle exec --session-id "$session" --actor-thread-id "$thread" -- auth login <alias> --credential-provider onepassword
 ```
 
-Continue only when the destination and account match policy. If automatic login fails, stop the headless session, including attached subagents. After verified closure, start a fresh headed session with a new profile. Pause automated input during human login and until browser subagents detach; resume only when the destination and account match policy.
+Continue only when the destination and account match policy. If automatic login fails, stop the headless session, including attached subagents. After verified closure, start a fresh headed session, reusing the same named profile if one was selected. For login that must persist, follow [persistent profiles](#persistent-profiles). Pause automated input during human login and until browser subagents detach; resume only when the destination and account match policy.
 
 For missing or stale builds, follow the [build guide](../agent-browser-custom/README.md#install-and-use). For configuration changes, read the [config reference](../agent-browser-custom/README.md#configuration-defaults).

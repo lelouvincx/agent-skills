@@ -167,6 +167,7 @@ class ManagedSessionPreparation:
     profile_identity: ProfileIdentityRecord | None
     build_digest: str
     config_digest: str
+    profile_name: str | None = None
 
 
 @dataclasses.dataclass(frozen=True)
@@ -401,6 +402,9 @@ def validate_managed_record(record: dict[str, Any], location: str = "") -> None:
     }
     if event not in extra_by_event:
         raise LifecycleError(f"unsupported lifecycle event{location}: {event!r}")
+    if "profile_name" in record:
+        validate_profile_name(record["profile_name"])
+        common_required.add("profile_name")
     if set(record) != common_required | extra_by_event[event]:
         raise LifecycleError(f"managed lifecycle record has unexpected fields{location}")
     if record["schema"] != MANAGED_HISTORY_SCHEMA:
@@ -503,6 +507,8 @@ def assert_same_session(session: dict[str, Any], record: dict[str, Any]) -> None
 
 
 def assert_same_managed_session(session: dict[str, Any], record: dict[str, Any]) -> None:
+    if session.get("profile_name") != record.get("profile_name"):
+        raise LifecycleError("profile_name changed within managed session")
     for field in (
         "generation",
         "owner_thread_id",
@@ -638,6 +644,8 @@ def apply_managed_record(
             raise LifecycleError(f"managed artifacts removal refers to unknown retired session {session_id}")
         retired_session = retired[session_id]
         assert_same_managed_session(retired_session, record)
+        if retired_session.get("profile_name") is not None:
+            raise LifecycleError("persistent profile artifacts cannot be swept")
         if retired_session.get("artifacts_removed") is True:
             raise LifecycleError("managed artifacts were removed more than once")
         retired_session["artifacts_removed"] = True
@@ -649,6 +657,9 @@ def apply_managed_record(
             raise LifecycleError(f"session {session_id} was claimed more than once")
         if retired is not None and session_id in retired:
             raise LifecycleError(f"session {session_id} was claimed again after closure")
+        for active in sessions.values():
+            if paths_overlap(active.get("user_data_dir"), record["user_data_dir"]):
+                raise LifecycleError("profile is already claimed by an active session")
         sessions[session_id] = {
             "schema": MANAGED_CURRENT_SCHEMA,
             "session_id": session_id,
@@ -677,6 +688,8 @@ def apply_managed_record(
             "cleanup_pending_reason": None,
             "last_event_at": record["timestamp"],
         }
+        if "profile_name" in record:
+            sessions[session_id]["profile_name"] = record["profile_name"]
         return
 
     if session is None:
@@ -942,6 +955,7 @@ def managed_base_record(preparation: ManagedSessionPreparation, event: str) -> d
         "user_data_dir": preparation.user_data_dir,
         "build_digest": preparation.build_digest,
         "config_digest": preparation.config_digest,
+        **({"profile_name": preparation.profile_name} if preparation.profile_name is not None else {}),
     }
 
 
@@ -966,7 +980,23 @@ def session_preparation_from_session(session: dict[str, Any]) -> ManagedSessionP
         profile_identity=profile_record,
         build_digest=session["build_digest"],
         config_digest=session["config_digest"],
+        profile_name=session.get("profile_name"),
     )
+
+
+def validate_profile_name(name: str) -> None:
+    if not isinstance(name, str) or not re.fullmatch(r"[a-z][a-z0-9-]{0,62}", name):
+        raise LifecycleError("profile_name must be a lowercase name, not a path")
+
+
+def check_private_profile(path: Path, *, unlocked: bool = True) -> ProfileIdentityRecord:
+    identity = profile_identity_record(path)  # Refuses symlink components.
+    info = path.stat()
+    if info.st_uid != os.getuid() or info.st_mode & 0o777 != 0o700:
+        raise LifecycleError("persistent profile directory must be current-user-owned and mode 0700")
+    if unlocked and any(os.path.lexists(path / name) for name in ("SingletonLock", "SingletonSocket", "SingletonCookie")):
+        raise LifecycleError("persistent profile has Chromium lock artifacts; do not remove locks automatically")
+    return identity
 
 
 def prepare_managed_session(
@@ -980,6 +1010,7 @@ def prepare_managed_session(
     cdp_port: int,
     build_digest: str,
     config_digest: str,
+    profile_name: str | None = None,
     state_dir: Path | None = None,
     fail_after: str | None = None,
 ) -> ManagedSessionPreparation:
@@ -1002,6 +1033,8 @@ def prepare_managed_session(
         raise LifecycleError("cdp_port must be between 1 and 65535")
     validate_digest(build_digest, "build_digest")
     validate_digest(config_digest, "config_digest")
+    if profile_name is not None:
+        validate_profile_name(profile_name)
 
     resolved_state_dir = lifecycle_dir() if state_dir is None else state_dir
     history_path = resolved_state_dir / "lifecycle.jsonl"
@@ -1009,6 +1042,8 @@ def prepare_managed_session(
     session_id = str(uuid.uuid4())
     session_root = resolved_state_dir / "sessions" / session_id
     user_data_dir = session_root / "chrome-data"
+    if profile_name is not None:
+        user_data_dir = resolved_state_dir / "profiles" / profile_name
     preparation = ManagedSessionPreparation(
         session_id=session_id,
         generation=1,
@@ -1024,12 +1059,33 @@ def prepare_managed_session(
         profile_identity=None,
         build_digest=build_digest,
         config_digest=config_digest,
+        profile_name=profile_name,
     )
 
     with lifecycle_lock(resolved_state_dir):
         records = read_history(history_path)
         state = replay_state(records)
         sessions = state.active
+        conflicts = active_artifact_conflicts(sessions, {"schema": MANAGED_CURRENT_SCHEMA, **dataclasses.asdict(preparation)})
+        if conflicts:
+            raise LifecycleError("; ".join(conflicts))
+        if paths_overlap(preparation.runtime_path, str(resolved_state_dir / "profiles")):
+            raise LifecycleError("runtime path must not overlap persistent profiles")
+        if profile_name is not None:
+            profiles_dir = user_data_dir.parent
+            if not os.path.lexists(profiles_dir):
+                profiles_dir.mkdir(mode=0o700)
+                fsync_directory(resolved_state_dir)
+            check_private_profile(profiles_dir, unlocked=False)
+            previous = [s for s in state.retired.values()
+                        if s.get("profile_name") == profile_name and s.get("profile_identity") is not None]
+            if os.path.lexists(user_data_dir):
+                identity = check_private_profile(user_data_dir)
+                if not previous or previous[-1].get("profile_identity") != dataclasses.asdict(identity):
+                    raise LifecycleError("persistent profile lacks matching closed-session identity; adoption is unsupported")
+                preparation = dataclasses.replace(preparation, profile_identity=identity)
+            elif previous:
+                raise LifecycleError("saved persistent profile is missing; use a new profile name")
         if any(session["cdp_port"] == cdp_port for session in sessions.values()):
             raise LifecycleError(f"CDP port {cdp_port} is already claimed")
         if any(
@@ -1048,20 +1104,30 @@ def prepare_managed_session(
         if session_root.exists():
             raise LifecycleError(f"fresh session directory already exists: {session_root}")
         intent = managed_base_record(preparation, "managed_intent")
-        append_record(history_path, intent)
         apply_record(sessions, intent)
+        append_record(history_path, intent)
         write_current(current_path, sessions)
         if fail_after == "intent":
             raise LifecycleError("injected failure after managed intent")
 
     with session_operation_lock(resolved_state_dir, session_id):
         try:
+            # Recovery may have closed the intent before we acquired this lock.
+            session = load_sessions(resolved_state_dir).get(session_id)
+            if session is None or session["state"] != "intent-recorded":
+                raise LifecycleError("managed intent is no longer available for preparation")
             session_root.mkdir(mode=0o700)
-            user_data_dir.mkdir(mode=0o700)
+            if profile_name is None or not os.path.lexists(user_data_dir):
+                user_data_dir.mkdir(mode=0o700)
+                fsync_directory(user_data_dir.parent)
+            if profile_name is not None:
+                check_private_profile(user_data_dir)
             ensure_private_directory(Path(preparation.runtime_path))
             fsync_directory(session_root)
             fsync_directory(session_root.parent)
             profile_record = profile_identity_record(user_data_dir)
+            if preparation.profile_identity is not None and preparation.profile_identity != profile_record:
+                raise LifecycleError("persistent profile identity changed during preparation")
             preparation = dataclasses.replace(preparation, profile_identity=profile_record)
             if fail_after == "profile-create":
                 raise LifecycleError("injected failure after profile creation")
@@ -1137,6 +1203,8 @@ def launch_managed_role(
             raise LifecycleError("profile identity has not been recorded")
         if profile_identity_record(Path(preparation.user_data_dir)) != preparation.profile_identity:
             raise LifecycleError("profile identity changed before launch")
+        if preparation.profile_name is not None:
+            check_private_profile(Path(preparation.user_data_dir), unlocked=role == "chrome")
         reader_fd, writer_fd = os.pipe()
         os.set_inheritable(reader_fd, True)
         os.set_inheritable(writer_fd, False)
@@ -1656,6 +1724,7 @@ def command_start(args: argparse.Namespace) -> dict[str, Any]:
         cdp_port=cdp_port,
         build_digest=runtime.build_digest,
         config_digest=config.config_digest,
+        profile_name=getattr(args, "profile_name", None),
     )
     cdp_url = f"http://127.0.0.1:{preparation.cdp_port}"
     env = clean_runtime_env(runtime, preparation.short_daemon_name, cdp_url, runtime_socket_dir(preparation))
@@ -1697,6 +1766,7 @@ def command_start(args: argparse.Namespace) -> dict[str, Any]:
         "cdp_port": preparation.cdp_port,
         "user_data_dir": preparation.user_data_dir,
         "runtime_path": preparation.runtime_path,
+        "profile_name": preparation.profile_name,
         "short_daemon_name": preparation.short_daemon_name,
         "namespace": preparation.namespace,
         "chrome_pid": chrome.pid,
@@ -2037,6 +2107,7 @@ def retired_artifact_conflicts(
         "session_id": preparation.session_id if isinstance(preparation, ManagedSessionPreparation) else preparation.get("session_id"),
         "user_data_dir": preparation.user_data_dir if isinstance(preparation, ManagedSessionPreparation) else preparation.get("user_data_dir"),
         "runtime_path": preparation.runtime_path if isinstance(preparation, ManagedSessionPreparation) else preparation.get("runtime_path"),
+        "profile_name": preparation.profile_name if isinstance(preparation, ManagedSessionPreparation) else preparation.get("profile_name"),
     }
     for session in retired.values():
         if session.get("artifacts_removed") is True:
@@ -2045,6 +2116,11 @@ def retired_artifact_conflicts(
             continue
         for retired_label, retired_path in artifact_paths(session).items():
             for candidate_label, candidate_path in artifact_paths(candidate).items():
+                if (retired_label == candidate_label == "profile"
+                        and session.get("profile_name") is not None
+                        and session.get("profile_name") == candidate.get("profile_name")
+                        and retired_path == candidate_path):
+                    continue
                 if paths_overlap(retired_path, candidate_path):
                     conflicts.append(
                         f"{candidate_label} path overlaps unremoved retired session {session['session_id']}"
@@ -2083,6 +2159,9 @@ def sweep_retired_sessions(state_dir: Path | None = None) -> dict[str, Any]:
         state = replay_state(read_history(history_path))
         retired_ids = []
         for session_id, session in state.retired.items():
+            if session.get("profile_name") is not None:
+                summary["retained_persistent"] = summary.get("retained_persistent", 0) + 1
+                continue
             if session.get("artifacts_removed") is True:
                 continue
             if same_boot(session.get("artifact_boot"), current_boot):
@@ -2653,6 +2732,7 @@ def build_parser() -> argparse.ArgumentParser:
     start.add_argument("--workspace", required=True)
     start.add_argument("--cdp-port", type=int)
     start.add_argument("--headed", action="store_true")
+    start.add_argument("--profile-name", help="reuse a named private profile after verified closure (default: ephemeral)")
 
     execute = subparsers.add_parser("exec", help="execute an allowed command against a managed session")
     execute.add_argument("--session-id", required=True)

@@ -12,9 +12,11 @@ import tempfile
 import textwrap
 import time
 import unittest
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from unittest import mock
+from concurrent.futures import ThreadPoolExecutor
 
 ROOT = Path(__file__).resolve().parents[1]
 COMMAND = ROOT / "bin" / "agent-browser-lifecycle"
@@ -84,8 +86,8 @@ class ManagedLifecycleTest(unittest.TestCase):
         kwargs.update(overrides)
         return self.lifecycle.prepare_managed_session(**kwargs)
 
-    def ready_session(self):
-        prepared = self.prepare()
+    def ready_session(self, **overrides):
+        prepared = self.prepare(**overrides)
         for role in ("chrome", "daemon"):
             child = self.lifecycle.launch_managed_role(
                 session_id=prepared.session_id,
@@ -116,6 +118,195 @@ class ManagedLifecycleTest(unittest.TestCase):
         self.assertEqual(prepared.session_id, records[0]["session_id"])
         self.assertNotIn("profile_identity", records[0])
         self.assertTrue(Path(records[1]["profile_identity"]["path"]).is_dir())
+
+    def close_fixture(self, prepared, *, stop=False, pending=None):
+        with mock.patch.object(self.lifecycle, "lifecycle_dir", return_value=self.state_dir), \
+             mock.patch.object(self.lifecycle, "attempt_verified_shutdown", return_value=(None, "lost response")), \
+             mock.patch.object(self.lifecycle, "wait_for_managed_closure", return_value=pending or []):
+            command = self.lifecycle.command_stop if stop else self.lifecycle.command_recover_managed
+            return command(argparse.Namespace(session_id=prepared.session_id, owner_thread_id=prepared.owner_thread_id))
+
+    def test_persistent_headed_stop_headless_stop_headed_preserves_identity_and_data(self):
+        import jsonschema
+
+        first = self.ready_session(profile_name="upwork", launch_mode="headed")
+        marker = Path(first.user_data_dir) / "fixture-login"
+        marker.write_text("fixture-only-not-a-cookie")
+        marker.chmod(0o600)
+        self.assertEqual("closed", self.close_fixture(first, stop=True)["state"])
+        second = self.ready_session(profile_name="upwork", runtime_path=self.root / "run2")
+        self.assertNotEqual(first.session_id, second.session_id)
+        self.assertEqual(first.profile_identity, second.profile_identity)
+        self.assertEqual("headless", second.launch_mode)
+        self.assertEqual("fixture-only-not-a-cookie", marker.read_text())
+        self.assertEqual("closed", self.close_fixture(second, stop=True)["state"])
+        third = self.prepare(profile_name="upwork", launch_mode="headed", runtime_path=self.root / "run3",
+                             owner_thread_id="T-22222222-2222-2222-2222-222222222222")
+        self.assertEqual(first.profile_identity, third.profile_identity)
+        validator = jsonschema.Draft202012Validator(json.loads(SCHEMA.read_text()))
+        for record in self.history():
+            validator.validate(record)
+        validator.validate(self.lifecycle.current_view(self.lifecycle.replay(self.history())))
+        self.assertNotIn("fixture-only-not-a-cookie", json.dumps(self.history()))
+        for directory in (Path(first.user_data_dir), Path(first.user_data_dir).parent):
+            self.assertEqual(0o700, directory.stat().st_mode & 0o777)
+
+    def test_persistent_concurrent_owners_have_one_durable_claim(self):
+        def attempt(index):
+            try:
+                return self.prepare(profile_name="shared", launch_mode="headed" if index else "headless",
+                                    owner_thread_id=OWNER if index else "T-22222222-2222-2222-2222-222222222222",
+                                    cdp_port=45000 + index, short_daemon_name=f"ab-{index}",
+                                    runtime_path=self.root / f"run-{index}")
+            except self.lifecycle.LifecycleError:
+                return None
+
+        with mock.patch.object(self.lifecycle, "port_is_available", return_value=True), ThreadPoolExecutor(2) as executor:
+            results = list(executor.map(attempt, range(2)))
+        self.assertEqual(1, sum(result is not None for result in results))
+        self.assertEqual(1, len(self.lifecycle.replay(self.history())))
+        self.assertEqual(1, sum(record["event"] == "managed_intent" for record in self.history()))
+
+    def test_persistent_pending_shutdown_blocks_reuse_until_verified_closed(self):
+        first = self.ready_session(profile_name="upwork")
+        result = self.close_fixture(first, stop=True, pending=["chrome birth identity is still alive"])
+        self.assertEqual("cleanup-pending", result["state"])
+        with self.assertRaisesRegex(self.lifecycle.LifecycleError, "active session"):
+            self.prepare(profile_name="upwork", runtime_path=self.root / "run2")
+        self.assertEqual("closed", self.close_fixture(first)["state"])
+        second = self.prepare(profile_name="upwork", runtime_path=self.root / "run2")
+        self.assertEqual(first.profile_identity, second.profile_identity)
+
+    def test_persistent_invalid_names_and_external_paths_are_refused(self):
+        for name in ("", "../upwork", "/tmp/upwork", "UPWORK", "a/b", "a" * 64):
+            with self.subTest(name=name), self.assertRaisesRegex(self.lifecycle.LifecycleError, "profile_name"):
+                self.prepare(profile_name=name)
+        self.assertEqual([], self.history())
+        parser = self.lifecycle.build_parser()
+        args = parser.parse_args(["start", "--owner-thread-id", OWNER, "--workspace", str(self.workspace),
+                                  "--profile-name", "upwork", "--headed"])
+        self.assertEqual("upwork", args.profile_name)
+        self.assertTrue(args.headed)
+
+    def test_persistent_locks_including_dangling_symlinks_block_before_intent_and_launch(self):
+        first = self.prepare(profile_name="upwork")
+        self.close_fixture(first)
+        for name in ("SingletonLock", "SingletonSocket", "SingletonCookie"):
+            lock = Path(first.user_data_dir) / name
+            lock.symlink_to("missing-fixture-target")
+            before = self.history()
+            with self.assertRaisesRegex(self.lifecycle.LifecycleError, "lock artifacts"):
+                self.prepare(profile_name="upwork", runtime_path=self.root / "run2")
+            self.assertEqual(before, self.history())
+            lock.unlink()
+        second = self.prepare(profile_name="upwork", runtime_path=self.root / "run2")
+        (Path(first.user_data_dir) / "SingletonLock").touch()
+        with mock.patch.object(self.lifecycle.subprocess, "Popen") as spawn:
+            with self.assertRaisesRegex(self.lifecycle.LifecycleError, "lock artifacts"):
+                self.lifecycle.launch_managed_role(session_id=second.session_id, role="chrome",
+                                                   argv=[sys.executable, "-c", "pass"], state_dir=self.state_dir)
+            spawn.assert_not_called()
+
+    def test_persistent_unsafe_permissions_symlinks_replacement_and_missing_profile_are_refused(self):
+        first = self.prepare(profile_name="upwork")
+        self.close_fixture(first)
+        profile = Path(first.user_data_dir)
+        profile.chmod(0o755)
+        with self.assertRaisesRegex(self.lifecycle.LifecycleError, "0700"):
+            self.prepare(profile_name="upwork", runtime_path=self.root / "run2")
+        profile.chmod(0o700)
+        saved = profile.with_name("saved")
+        profile.rename(saved)
+        profile.symlink_to(saved)
+        with self.assertRaisesRegex(self.lifecycle.LifecycleError, "symlink"):
+            self.prepare(profile_name="upwork", runtime_path=self.root / "run2")
+        profile.unlink()
+        profile.mkdir(mode=0o700)
+        with self.assertRaisesRegex(self.lifecycle.LifecycleError, "adoption is unsupported"):
+            self.prepare(profile_name="upwork", runtime_path=self.root / "run2")
+        profile.rmdir()
+        with self.assertRaisesRegex(self.lifecycle.LifecycleError, "missing"):
+            self.prepare(profile_name="upwork", runtime_path=self.root / "run2")
+
+    def test_persistent_unknown_directory_is_not_adopted(self):
+        profile = self.state_dir / "profiles" / "upwork"
+        profile.mkdir(parents=True, mode=0o700)
+        profile.parent.chmod(0o700)
+        with self.assertRaisesRegex(self.lifecycle.LifecycleError, "adoption is unsupported"):
+            self.prepare(profile_name="upwork")
+        self.assertEqual([], self.history())
+
+    def test_persistent_preparation_failures_recover_without_discarding_saved_profile(self):
+        first = self.prepare(profile_name="upwork")
+        self.close_fixture(first)
+        for index, stage in enumerate(("intent", "profile-create", "profile-record")):
+            with self.assertRaisesRegex(self.lifecycle.LifecycleError, "injected failure"):
+                self.prepare(profile_name="upwork", runtime_path=self.root / f"failed-{index}", fail_after=stage)
+            session = self.live_session()
+            prepared = self.lifecycle.session_preparation_from_session(session)
+            with self.assertRaisesRegex(self.lifecycle.LifecycleError, "active session"):
+                self.prepare(profile_name="upwork", runtime_path=self.root / "blocked")
+            self.assertEqual("closed", self.close_fixture(prepared)["state"])
+        last = self.prepare(profile_name="upwork", runtime_path=self.root / "last")
+        self.assertEqual(first.profile_identity, last.profile_identity)
+
+    def test_persistent_recovery_before_preparation_lock_prevents_late_file_creation(self):
+        original_lock = self.lifecycle.session_operation_lock
+
+        @contextmanager
+        def recover_before_lock(state_dir, session_id):
+            session = self.live_session(session_id)
+            self.lifecycle.record_cleanup_pending(state_dir, session_id, "fixture recovery")
+            self.lifecycle.append_managed_closed(state_dir, session)
+            with original_lock(state_dir, session_id):
+                yield
+
+        with mock.patch.object(self.lifecycle, "session_operation_lock", side_effect=recover_before_lock):
+            with self.assertRaisesRegex(self.lifecycle.LifecycleError, "no longer available"):
+                self.prepare(profile_name="upwork")
+        self.assertFalse((self.state_dir / "profiles" / "upwork").exists())
+        self.assertEqual({}, self.lifecycle.replay(self.history()))
+
+    def test_persistent_first_creation_without_recorded_identity_is_retained_but_not_adopted(self):
+        with self.assertRaisesRegex(self.lifecycle.LifecycleError, "injected failure"):
+            self.prepare(profile_name="upwork", fail_after="profile-create")
+        prepared = self.lifecycle.session_preparation_from_session(self.live_session())
+        self.assertEqual("closed", self.close_fixture(prepared)["state"])
+        with self.assertRaisesRegex(self.lifecycle.LifecycleError, "adoption is unsupported"):
+            self.prepare(profile_name="upwork", runtime_path=self.root / "run2")
+        self.assertTrue(Path(prepared.user_data_dir).is_dir())
+
+    def test_persistent_sweep_never_inspects_or_deletes_retained_artifacts(self):
+        first = self.ready_session(profile_name="upwork")
+        self.close_fixture(first)
+        cleanup = self.lifecycle.load_retired_cleanup_module()
+        for boot in (FakeBoot("SIMULATED-BOOT", 123456789), FakeBoot("NEXT-BOOT", 223456789)):
+            identity = FakeIdentity(os.getpid(), boot, 987654321)
+            with mock.patch.object(self.lifecycle, "process_birth_identity_record", return_value=identity), \
+                 mock.patch.object(self.lifecycle, "load_retired_cleanup_module", return_value=cleanup), \
+                 mock.patch.object(cleanup, "remove_retired_artifacts", side_effect=AssertionError("must not inspect")):
+                summary = self.lifecycle.sweep_retired_sessions(self.state_dir)
+            self.assertEqual(1, summary["retained_persistent"])
+            self.assertEqual(0, summary["removed"])
+        self.assertTrue(Path(first.user_data_dir).is_dir())
+        self.assertTrue(Path(first.runtime_path).is_dir())
+        retired = self.lifecycle.replay_state(self.history()).retired[first.session_id]
+        with self.assertRaisesRegex(cleanup.CleanupBlocked, "explicitly approved"):
+            cleanup.remove_retired_artifacts(retired, None, lambda _: self.fail("listener inspection"))
+        removal = self.lifecycle.managed_base_record(first, "managed_artifacts_removed")
+        with self.assertRaisesRegex(self.lifecycle.LifecycleError, "cannot be swept"):
+            self.lifecycle.replay_state([*self.history(), removal])
+
+    def test_persistent_metadata_cannot_change_and_runtime_cannot_overlap_saved_profiles(self):
+        first = self.prepare(profile_name="upwork")
+        records = self.history()
+        changed = dict(records[-1], profile_name="different")
+        with self.assertRaisesRegex(self.lifecycle.LifecycleError, "profile_name changed"):
+            self.lifecycle.replay([records[0], changed])
+        self.close_fixture(first)
+        for path in (Path(first.user_data_dir), Path(first.user_data_dir) / "runtime", self.state_dir / "profiles"):
+            with self.assertRaisesRegex(self.lifecycle.LifecycleError, "overlap"):
+                self.prepare(runtime_path=path)
 
     def test_invalid_managed_arguments_have_no_side_effects(self) -> None:
         with self.assertRaisesRegex(self.lifecycle.LifecycleError, "namespace"):
