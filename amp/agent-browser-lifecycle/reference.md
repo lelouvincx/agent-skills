@@ -45,24 +45,19 @@ For supported commands and startup checks, consult the [CLI reference](README.md
 
 ## Persistent profiles
 
-Use `start --profile-name upwork` when login must survive session closure. Names are lowercase letters, digits and hyphens, start with a letter, and contain at most 63 characters. They identify private profiles in this state directory, not arbitrary paths or authorization to use an account. Use the same state directory and approved profile name on later runs; never copy a profile into another state directory to evade ownership checks.
+Add `--profile-name upwork` to retain login between sessions. Keep the same approved name and state directory. Ephemeral profiles remain the default.
 
-1. Start a headed login session:
+1. Start with `--profile-name upwork --headed`. Pause automation for human login, then verify the destination and account.
+2. Have children detach, then `stop` as the owner. Continue only when the result is `closed`.
+3. Start with the same profile name, without `--headed`. Save the new session and tab IDs; verify the account before research.
 
-   ```bash
-   agent-browser-lifecycle start --owner-thread-id "$thread" --workspace "$PWD" --profile-name upwork --headed
-   ```
+If headless access is challenged, repeat steps 2–3 with `--headed` for human verification. Saved login does not guarantee headless acceptance. Do not bypass anti-bot checks.
 
-   Save the returned session ID. Pause automated input for human login, then verify the destination and account without recording credentials or cookies.
-2. Have attached children finish and detach. Stop as the owner and continue only when the result is `closed`.
-3. Start a new headless session with `--profile-name upwork` and without `--headed`. Save its new session and tab identities. Verify the destination and account before read-only research.
-4. If the site challenges headless access, stop and verify closure again, then start headed with the same profile name. Ask the human to complete verification. Saved login does not guarantee headless acceptance, including on Upwork; do not bypass anti-bot checks.
+Reuse requires verified closure and matching directory identity. Active claims, unsafe directories and Chromium locks block launch. Leave locks intact for human investigation.
 
-The controller reserves the profile under the journal lock before filesystem preparation. An active, draining or cleanup-pending session blocks reuse by every owner and mode. Reuse requires matching saved directory identity from a closed session. Symlinks, non-private directories, missing/replaced profiles and Chromium singleton artifacts block launch. Leave lock artifacts intact and report the blocker for human investigation; even stale-looking locks are not permission to remove them.
+Existing ephemeral or external profiles cannot be adopted: use a new named profile and log in again. Never copy or relabel profiles. If first creation fails before identity recording, recover and choose a new name. Previously recorded profiles remain reusable after verified recovery.
 
-Ephemeral sessions remain the default. Existing ephemeral or external profiles cannot be adopted or migrated by this implementation: plan a new manual login in a named profile. Do not move, copy or relabel the currently authenticated browser's profile. A first creation interrupted before its directory identity was recorded also requires a new name after recovery; its uncertain directory remains intact. Failures while reusing an already recorded profile preserve that identity for reuse after verified recovery.
-
-Persistent profiles and their associated retired runtime files are retained indefinitely, including after reboot. Deletion requires explicit human approval for the exact profile and artifacts, verified closure of all sessions using it, and independent process/listener and path-identity checks. There is no automated deletion command. After an approved deletion, choose a new profile name; do not edit history to reuse the old one. Never commit, export or log profile contents.
+Profiles and their runtime files survive sweep and reboot. Manual deletion requires explicit approval for those artifacts, verified session closure, and independent process, listener and path-identity checks. After deletion, use a new name; leave history unchanged. Never commit, export or log profile contents.
 
 ## Subagent sharing
 
