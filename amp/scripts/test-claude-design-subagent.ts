@@ -129,10 +129,12 @@ process.stdin.on('end', () => {
 
 	process.env.AMP_DESIGN_TEST_SCENARIO = 'success'
 	const missingReviewDiff = await invokeCode({ mode: 'review', brief: 'test', workingDirectory: root }, 'missing-review-diff')
-	assert(!missingReviewDiff.ok && String(missingReviewDiff.error).includes('requires change-set evidence'), 'review must require a change-set source')
-	assert(!existsSync(capturePath), 'missing review evidence must fail before spawning Claude')
+	assert(missingReviewDiff.ok, 'review without supplied context must default to the built-in Git diff MCP tool')
+	const defaultGitDiffCapture = readCapture()
+	assert(argumentValue(defaultGitDiffCapture.args, '--tools') === 'Read,Grep,Glob,ToolSearch', 'default Git diff review must expose read-only MCP tool discovery')
+	assert(String(argumentValue(defaultGitDiffCapture.args, '--allowedTools')).includes('mcp__amp_git__git_diff'), 'default Git diff review must allow the Git diff tool')
 	const blankReviewDiff = await invokeCode({ mode: 'review', brief: 'test', context: '   ', workingDirectory: root }, 'blank-review-diff')
-	assert(!blankReviewDiff.ok && !existsSync(capturePath), 'blank review context must fail before spawning Claude')
+	assert(blankReviewDiff.ok, 'blank review context must also default to the built-in Git diff MCP tool')
 
 	const reviewWithContext = await invokeCode({ mode: 'review', brief: 'test', context: 'diff --git a/a.ts b/a.ts', workingDirectory: root }, 'review-context')
 	assert(reviewWithContext.ok, 'review with a supplied textual diff must succeed')
@@ -152,26 +154,24 @@ process.stdin.on('end', () => {
 	assert(gitDiffConfig.mcpServers?.amp_git?.env?.AMP_GIT_DIFF_REPOSITORY === root, 'Git diff MCP server must be pinned to the review working directory')
 	assert(gitDiffCapture.args.at(-1)?.includes('Obtain the exact change set before reading surrounding files'), 'review prompt must obtain an exact Git diff before inspecting files')
 
-	const semConfigPath = join(temp, 'sem-mcp.json')
-	writeFileSync(semConfigPath, JSON.stringify({ mcpServers: { sem: { command: 'sem', args: ['mcp'] } } }))
+	const externalMcpConfigPath = join(temp, 'external-mcp.json')
+	writeFileSync(externalMcpConfigPath, JSON.stringify({ mcpServers: { context: { command: 'context', args: ['mcp'] } } }))
 	const combinedGitAndCallerMcp = await invokeCode({
 		mode: 'review',
 		brief: 'test',
 		useGitDiff: true,
-		mcpConfigPath: semConfigPath,
+		mcpConfigPath: externalMcpConfigPath,
 		workingDirectory: root,
 	}, 'review-combined-mcp')
 	assert(!combinedGitAndCallerMcp.ok && String(combinedGitAndCallerMcp.error).includes('cannot be combined'), 'built-in Git diff must reject caller MCP configuration')
-	const reviewWithSemDiff = await invokeCode({
+	const reviewWithCallerMcpNoDiff = await invokeCode({
 		mode: 'review',
 		brief: 'test',
-		mcpConfigPath: semConfigPath,
-		allowedMcpTools: ['mcp__sem__sem_diff'],
+		mcpConfigPath: externalMcpConfigPath,
+		allowedMcpTools: ['mcp__amp_context__github_pr_diff'],
 		workingDirectory: root,
-	}, 'review-sem-diff')
-	assert(reviewWithSemDiff.ok, 'review with an explicitly configured semantic diff must succeed')
-	assert(argumentValue(readCapture().args, '--tools') === 'Read,Grep,Glob,ToolSearch', 'semantic diff review must expose read-only MCP tool discovery')
-	assert(readCapture().args.at(-1)?.includes('Semantic diff is entity-level'), 'semantic diff review prompt must retain the fidelity warning')
+	}, 'review-caller-mcp-no-diff')
+	assert(!reviewWithCallerMcpNoDiff.ok && String(reviewWithCallerMcpNoDiff.error).includes('requires change-set evidence'), 'review must not accept caller MCP tools as diff evidence')
 
 	const codeSuccess = await invokeCode({ mode: 'research', brief: 'test', model: 'fable', workingDirectory: root }, 'code-success')
 	assert(codeSuccess.ok, 'code subagent success scenario must succeed')

@@ -16,14 +16,7 @@
   "amp.gauge": "tokens",
   "amp.git.commit.ampThread.enabled": false,
   "amp.git.commit.coauthor.enabled": false,
-  "amp.internal.deepReasoningEffort": "xhigh",
   "amp.remoteThreadCreation.enabled": true,
-  "amp.mcpServers": {
-    "sem": {
-      "args": ["mcp"],
-      "command": "/opt/homebrew/bin/sem"
-    }
-  },
   "amp.updates.mode": "auto",
   "amp.showCosts": true
 }

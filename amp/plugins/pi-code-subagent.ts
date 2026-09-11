@@ -10,6 +10,7 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } fr
 import { homedir } from 'node:os'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
 import type { PluginAPI } from '@ampcode/plugin'
+import { getGitDiff } from '../mcp-servers/git-diff-server.mjs'
 
 type Mode = 'patch' | 'review' | 'research'
 type Confidence = 'low' | 'medium' | 'high'
@@ -113,7 +114,9 @@ export default function (amp: PluginAPI) {
 			required: ['mode', 'brief'],
 		},
 		async execute(rawInput, ctx) {
-			const input = normalizeInput(rawInput)
+			const normalizedInput = normalizeInput(rawInput)
+			if ('error' in normalizedInput) return failureJson(normalizedInput.error)
+			const input = await withDefaultReviewContext(normalizedInput)
 			if ('error' in input) return failureJson(input.error)
 
 			const threadID = ctx.thread.id
@@ -239,13 +242,30 @@ function normalizeInput(raw: Record<string, unknown>): ToolInput | { error: stri
 	return {
 		mode,
 		brief: brief.trim(),
-		context: typeof raw.context === 'string' ? raw.context : undefined,
+		context: typeof raw.context === 'string' && raw.context.trim() ? raw.context : undefined,
 		provider,
 		model,
 		thinking,
 		timeoutMinutes,
 		workingDirectory,
 		includeRawTranscript: raw.includeRawTranscript === true || process.env.AMP_PI_CODE_SUBAGENT_DEBUG === '1',
+	}
+}
+
+async function withDefaultReviewContext(input: ToolInput): Promise<ToolInput | { error: string }> {
+	if (input.mode !== 'review' || input.context) return input
+	try {
+		const diff = await getGitDiff(input.workingDirectory)
+		return {
+			...input,
+			context: [
+				'Built-in Git diff from Amp. Use this as the review scope before reading surrounding files.',
+				'',
+				diff,
+			].join('\n'),
+		}
+	} catch (error) {
+		return { error: `review mode requires change-set evidence, but the built-in Git diff failed: ${error instanceof Error ? error.message : String(error)}. Pass a non-empty context containing the textual diff.` }
 	}
 }
 

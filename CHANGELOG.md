@@ -72,6 +72,7 @@ and this project does not currently use versioned releases.
 
 ### Changed
 
+- Default Claude Code and Pi review subagents to exact Git diff context, remove the global sem MCP server and drop the internal deep reasoning setting from projected Amp settings. [#230](https://github.com/lelouvincx/agent-skills/pull/230)
 - Document the Holistics publish workflow for local commit, push, default-branch merge, `submit publish`, and missing API keys. [#228](https://github.com/lelouvincx/agent-skills/pull/228)
 - Force every managed Amp runner to select service-account authentication at runtime. [#226](https://github.com/lelouvincx/agent-skills/pull/226)
 - Make `amp-chatgpt-subscription-selector` switch ChatGPT subscriptions based only on weekly Codex quota, ignoring the 5-hour quota window. [#225](https://github.com/lelouvincx/agent-skills/pull/225)

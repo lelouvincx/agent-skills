@@ -74,7 +74,7 @@ safety:
     - "Adds ToolSearch only when explicit MCP access is enabled so Claude can discover allowlisted tools after asynchronous MCP startup."
     - "Denies Bash, Edit, Write, and NotebookEdit."
     - "MCP is explicit-only; allowedMcpTools requires mcpConfigPath."
-    - "Review mode requires change-set evidence from non-empty context, the built-in read-only Git review MCP tools, or explicitly enabled mcp__sem__sem_diff access."
+    - "Review mode requires change-set evidence from non-empty context or the built-in read-only Git review MCP tools."
     - "User, project, and local Claude Code setting sources are disabled so ambient hooks, plugins, skills, and permission rules cannot change the read-only child."
     - "Strict MCP isolation is always enabled; only an explicitly supplied read-only MCP configuration can add MCP servers."
     - "The spawned Claude process receives a sanitized environment; secret-looking ambient variables are not inherited. If Claude needs API/OAuth credentials, provide a 1Password-backed env file via AMP_CLAUDE_CODE_SUBAGENT_ENV_FILE."
@@ -119,8 +119,8 @@ Optional inputs:
 
 | Field | Type | Default | Notes |
 | --- | --- | --- | --- |
-| `context` | `string` | none | Pre-processed excerpts, diffs, or decisions. For review mode, provide the relevant textual diff here unless the built-in Git tools or `mcp__sem__sem_diff` supply the change set. |
-| `useGitDiff` | `boolean` | `false` | In review mode, expose the isolated built-in Git review tools without exposing Bash. Cannot be combined with caller MCP configuration. |
+| `context` | `string` | none | Pre-processed excerpts, diffs, or decisions. For review mode, provide the relevant textual diff here or let the built-in Git tools supply the change set. |
+| `useGitDiff` | `boolean` | `false` | In review mode, expose the isolated built-in Git review tools without exposing Bash. Review mode enables this by default when `context` is empty. Cannot be combined with caller MCP configuration. |
 | `githubProfile` | `work \| personal \| bot` | default profile | Sets `AMP_GITHUB_PROFILE` when valid. |
 | `model` | `fable \| opus \| sonnet` | `opus` | Use `fable` for the most ambitious work or `sonnet` for speed/lightweight requests. |
 | `timeoutMinutes` | `number` | `10` | Rounded up and capped at `30`. |
@@ -137,8 +137,7 @@ Output is a JSON string with `ok`, mode/model metadata, the parsed structured re
 Review mode does not start without a change set. Amp must provide one through:
 
 - non-empty `context` containing the relevant textual diff
-- `useGitDiff: true` for the built-in Git tools
-- explicit `mcp__sem__sem_diff` access through `mcpConfigPath` and `allowedMcpTools`
+- the built-in Git tools, either by setting `useGitDiff: true` or by omitting `context`
 
 Claude must get the selected diff before it reads surrounding files. For large working-tree changes, Claude first calls `git_changed_files`. It then requests path-scoped `git_diff` results.
 
@@ -162,8 +161,6 @@ The Git server runs fixed commands directly, without a shell. It:
 - limits each call by time and output size
 
 Git refs must not be empty. They cannot start with `-` or use reflog syntax. The model cannot choose the repository.
-
-Semantic diff remains lower fidelity because it only reports entity-level changes.
 
 The wrapper validates inputs and paths before it starts `claude -p`. It uses a strict output schema, `dontAsk` permissions and strict MCP isolation. It also denies shell and file-edit tools.
 
@@ -214,18 +211,6 @@ Review committed branch changes through the built-in ref diff:
 }
 ```
 
-Review through an explicitly configured semantic diff MCP fallback:
-
-```json
-{
-  "mode": "review",
-  "brief": "Review the working-tree changes for behavior regressions.",
-  "mcpConfigPath": "/path/to/read-only-mcp.json",
-  "allowedMcpTools": ["mcp__sem__sem_diff"],
-  "workingDirectory": "/path/to/project"
-}
-```
-
 Ask for a patch proposal without allowing edits:
 
 ```json
@@ -249,8 +234,8 @@ Use explicit read-only external context:
 
 ## Troubleshooting
 
-- `review mode requires change-set evidence`: pass a non-empty `context` containing the relevant diff, set `useGitDiff: true`, or pass an MCP config that exposes `mcp__sem__sem_diff` and explicitly include that tool in `allowedMcpTools`.
-- `useGitDiff cannot be combined with mcpConfigPath or allowedMcpTools`: use the isolated built-in Git diff server, or configure semantic diff and other read-only MCP tools explicitly.
+- `review mode requires change-set evidence`: pass a non-empty `context` containing the relevant diff, or use the built-in Git diff server.
+- `useGitDiff cannot be combined with mcpConfigPath or allowedMcpTools`: use the isolated built-in Git diff server, or configure other read-only MCP tools explicitly for non-review context.
 - `Git diff MCP server does not exist`: run `./sync-skills.sh` so the source-controlled MCP server is projected beside the plugin.
 - `workingDirectory does not exist`: pass an existing absolute path or a path relative to the plugin process cwd.
 - `allowedMcpTools requires mcpConfigPath`: MCP access is explicit-only; pass both fields or neither.

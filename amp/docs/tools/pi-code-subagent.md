@@ -37,11 +37,13 @@ contract:
 runtime:
   uses:
     - "spawn: pi"
+    - "spawn: git for default review context"
     - "ctx.thread.id"
     - "filesystem audit logs"
     - "token usage ledger"
   dependencies:
     - "Pi Coding Agent CLI on PATH"
+    - "Git on PATH for review mode when context is empty"
   env:
     - "AMP_PI_CODE_SUBAGENT_AUDIT_DIR"
     - "AMP_AGENT_TOKEN_USAGE_LOG"
@@ -64,6 +66,7 @@ safety:
   constraints:
     - "Allows only read, grep, find, and ls."
     - "Disables extensions, skills, prompt templates, themes, context files, and session persistence."
+    - "Review mode uses a built-in read-only Git diff when context is empty."
     - "The spawned Pi process receives a sanitized environment; secret-looking ambient variables are not inherited. If Pi needs provider credentials, provide a 1Password-backed env file via AMP_PI_CODE_SUBAGENT_ENV_FILE."
     - "Caps prompt size at 500000 bytes."
     - "Amp remains responsible for applying patches and verification."
@@ -107,7 +110,7 @@ Optional inputs:
 
 | Field | Type | Default | Notes |
 | --- | --- | --- | --- |
-| `context` | `string` | none | Pre-processed excerpts, diffs, or decisions. |
+| `context` | `string` | none | Pre-processed excerpts, diffs, or decisions. Review mode uses a built-in Git diff when this is empty. |
 | `provider` | `string` | `deepseek` | Pi provider. |
 | `model` | `string` | `deepseek-v4-flash` | Pi model. |
 | `thinking` | `off \| minimal \| low \| medium \| high \| xhigh` | `high` | Invalid values fall back to `high`. |
@@ -120,6 +123,8 @@ Output is a JSON string with `ok`, mode/provider/model/thinking metadata, parsed
 ## Behavior
 
 The tool normalizes inputs, validates `workingDirectory`, builds a mode-specific JSON schema, checks the constructed prompt is at most 500000 bytes, and runs `pi` with a read-only tool list. It disables Pi extensions, skills, prompt templates, themes, context files, and session persistence.
+
+Review mode needs a change set. Amp provides it through `context`, or the wrapper gets a built-in Git diff from `workingDirectory` when `context` is empty. The Git diff uses the same read-only implementation as the Claude Code subagent. It includes tracked staged and unstaged changes against `HEAD`, plus untracked path names.
 
 Pi receives a prompt that says Amp is the executor and Pi must provide structured advice only. The plugin strips a Markdown JSON fence if present, parses the first JSON object if needed, validates the mode-specific payload, extracts token usage where possible, writes redacted audit logs, and returns a compact JSON envelope to Amp.
 
@@ -139,6 +144,17 @@ Review current changes:
 {
   "mode": "review",
   "brief": "Review the current diff for concurrency bugs and missing tests.",
+  "workingDirectory": "/path/to/project"
+}
+```
+
+Review with a supplied textual diff:
+
+```json
+{
+  "mode": "review",
+  "brief": "Review this diff for behavior regressions.",
+  "context": "diff --git a/src/settings.ts b/src/settings.ts\n...",
   "workingDirectory": "/path/to/project"
 }
 ```
@@ -166,6 +182,7 @@ Use a lower thinking level for speed:
 ## Troubleshooting
 
 - `workingDirectory does not exist`: pass an existing absolute path or a path relative to the plugin process cwd.
+- `Git output exceeded the 1 MiB limit`: pass a narrower textual diff in `context`.
 - `prompt is too large`: shrink `brief` and `context`; do not paste whole threads.
 - Provider auth missing: use Pi's own credential store or set `AMP_PI_CODE_SUBAGENT_ENV_FILE` to a 1Password-backed env file. Do not export plaintext provider keys into Amp's environment.
 - `Pi exited with code ...`: inspect the returned `stderr` and audit log path.
