@@ -97,7 +97,6 @@ const GIT_DIFF_REFS_MCP_TOOL = 'mcp__amp_git__git_diff_refs'
 const GIT_CHANGED_FILES_MCP_TOOL = 'mcp__amp_git__git_changed_files'
 const GIT_FILE_AT_REF_MCP_TOOL = 'mcp__amp_git__git_file_at_ref'
 const GIT_MCP_TOOLS = [GIT_DIFF_MCP_TOOL, GIT_DIFF_REFS_MCP_TOOL, GIT_CHANGED_FILES_MCP_TOOL, GIT_FILE_AT_REF_MCP_TOOL]
-const SEM_DIFF_MCP_TOOL = 'mcp__sem__sem_diff'
 const GIT_DIFF_MCP_SERVER_PATH = fileURLToPath(new URL('../mcp-servers/git-diff-server.mjs', import.meta.url))
 const DESIGN_SDK_RUNNER_PATH = fileURLToPath(new URL('./claude-design-sdk-runner.mjs', import.meta.url))
 const MAX_DESIGN_SYNC_FILES = 256
@@ -160,7 +159,7 @@ export default function (amp: PluginAPI) {
 			'No MCP bridge is loaded by default so the default toolkit matches Pi Coding Agent. Pass mcpConfigPath/allowedMcpTools only for explicit read-only external context.',
 			'For GitHub profile routing, pass githubProfile explicitly as work, personal, or bot; do not pass natural-language profile phrases to this tool.',
 			'Use mode=review for reviewing a diff/implementation, mode=patch for a small-to-medium patch proposal, and mode=research for read-only investigation.',
-			'For mode=review, change-set evidence is required: pass the relevant textual diff in context, set useGitDiff=true for the built-in exact read-only working-tree diff, or explicitly enable mcp__sem__sem_diff through mcpConfigPath/allowedMcpTools.',
+			'For mode=review, change-set evidence is required: pass the relevant textual diff in context, or omit context to use the built-in exact read-only Git diff tools by default.',
 			'Pass a pre-processed Amp summary in brief/context; do not dump the full raw Amp thread by default.',
 		].join(' '),
 		inputSchema: {
@@ -177,11 +176,11 @@ export default function (amp: PluginAPI) {
 				},
 				context: {
 					type: 'string',
-					description: 'Optional pre-processed context: file excerpts, git diff, external context summaries, or prior decisions. Review mode requires a non-empty contextual diff unless useGitDiff or an explicit semantic diff MCP tool supplies it.',
+					description: 'Optional pre-processed context: file excerpts, git diff, external context summaries, or prior decisions. Review mode uses the built-in Git diff tools when this is empty.',
 				},
 				useGitDiff: {
 					type: 'boolean',
-					description: 'For review mode, expose the isolated built-in read-only Git review MCP tools without exposing Bash.',
+					description: 'For review mode, expose the isolated built-in read-only Git review MCP tools without exposing Bash. Enabled by default when review context is empty.',
 				},
 				githubProfile: {
 					type: 'string',
@@ -718,15 +717,15 @@ function normalizeInput(raw: Record<string, unknown>): ToolInput | { error: stri
 		? expandHome(raw.workingDirectory.trim())
 		: process.cwd()
 	const context = typeof raw.context === 'string' && raw.context.trim() ? raw.context : undefined
-	const useGitDiff = raw.useGitDiff === true
 	const mcpConfigPath = typeof raw.mcpConfigPath === 'string' && raw.mcpConfigPath.trim()
 		? expandHome(raw.mcpConfigPath.trim())
 		: undefined
 	const allowedMcpTools = stringArray(raw.allowedMcpTools)
+	const useGitDiff = raw.useGitDiff === true || (mode === 'review' && !context && !mcpConfigPath && allowedMcpTools.length === 0)
 
 	if (!existsSync(workingDirectory)) return { error: `workingDirectory does not exist: ${workingDirectory}` }
-	if (mode === 'review' && !context && !useGitDiff && !(mcpConfigPath && allowedMcpTools.includes(SEM_DIFF_MCP_TOOL))) {
-		return { error: `review mode requires change-set evidence: pass a non-empty context containing the textual diff, set useGitDiff=true, or explicitly allow ${SEM_DIFF_MCP_TOOL} with mcpConfigPath.` }
+	if (mode === 'review' && !context && !useGitDiff) {
+		return { error: 'review mode requires change-set evidence: pass a non-empty context containing the textual diff, or use the built-in Git diff server.' }
 	}
 
 	return {
@@ -822,10 +821,7 @@ function buildPrompt(input: ToolInput): string {
 					`- If the full working-tree diff exceeds its limit, call ${GIT_CHANGED_FILES_MCP_TOOL}, then call ${GIT_DIFF_MCP_TOOL} with only the relevant changed paths. Use ${GIT_FILE_AT_REF_MCP_TOOL} only when the previous committed contents are needed to verify a finding.`,
 					'- If no exact Git diff can be obtained, or the selected diff returns no change set when changes were expected, return needs_amp_judgment with low confidence and no findings instead of performing a generic repository audit.',
 				]
-				: [
-					`- Call ${SEM_DIFF_MCP_TOOL} before reading surrounding files. If it is not listed yet, use ToolSearch for that exact name first. Then inspect only the changed entities and code needed to verify findings.`,
-					'- Semantic diff is entity-level. If it is unavailable, fails, or returns no change set when changes were expected, return needs_amp_judgment with low confidence and no findings instead of performing a generic repository audit.',
-				]
+				: []
 	return [
 		'You are Claude Code running as a read-only subagent for Amp.',
 		'You must not modify files. Do not attempt to use Bash, Edit, Write, or NotebookEdit.',
