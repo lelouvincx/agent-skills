@@ -65,7 +65,7 @@ RFC-0011 browser login uses a temporary pinned native `agent-browser` patch. Bui
 
 ## Run a background Amp runner
 
-`amp-runner` installs a user LaunchAgent that starts at login, restarts after failure, and keeps the Mac awake on AC power.
+`amp-runner` installs a user LaunchAgent that starts at login, restarts after failure, enables Amp remote terminal control, and keeps the Mac awake on AC power.
 
 ```bash
 amp-runner install macbook.agent-skills

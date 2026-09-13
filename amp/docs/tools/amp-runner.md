@@ -3,7 +3,7 @@ doc_schema: "amp-artifact/v2"
 title: "Amp Runner"
 slug: "amp-runner"
 status: "active"
-summary: "Runs named Amp background runners as user LaunchAgents with crash recovery, private logs, and AC-only sleep prevention."
+summary: "Runs named Amp background runners as user LaunchAgents with crash recovery, private logs, remote terminal control, and AC-only sleep prevention."
 artifact:
   id: "amp-runner"
   type: "local_cli"
@@ -21,7 +21,7 @@ amp:
   docs_sources:
     api_docs: null
     agent_options: null
-  last_verified: "2026-08-24"
+  last_verified: "2026-09-13"
 contract:
   input_kind: "command_line_arguments"
   output_kind: "launchagent_state_and_logs"
@@ -49,6 +49,7 @@ runtime:
   env:
     - "AGENT_SECRET_AUTH"
     - "AMP_NO_TUI"
+    - "AMP_REMOTE_CONTROL_TERMINAL"
     - "AMP_LOG_LEVEL"
     - "AMP_LOG_FILE"
     - "AMP_RUNNER_* test and path overrides"
@@ -68,12 +69,13 @@ safety:
   user_gate: "manual shell invocation or explicit agent instruction"
   constraints:
     - "Runner IDs may contain only letters, numbers, dots, underscores, and hyphens."
-    - "The launcher owns Amp's runner ID, log level, log file, and no-TUI arguments."
+    - "The launcher owns Amp's runner ID, log level, log file, no-TUI, and remote terminal control arguments."
     - "Installation captures PATH and HOME but does not copy secret environment variables."
     - "Log directories use mode 0700; log files and LaunchAgent plists use mode 0600."
     - "caffeinate -s prevents system sleep only while the Mac uses AC power."
   risks:
     - "Structured and supervisor logs can contain sensitive local execution details."
+    - "Remote terminal control allows web Terminal access to the local runner after Amp workspace and user security checks pass."
     - "KeepAlive restarts a runner after failure until the LaunchAgent is stopped or uninstalled."
 related: []
 tags:
@@ -88,6 +90,8 @@ tags:
 ## Summary
 
 `amp-runner` manages named Amp background runners as macOS user LaunchAgents. Each runner starts at login and restarts after failure.
+
+Managed runners enable Amp remote terminal control. This lets you use the web Terminal for a CLI thread after Amp workspace and user security checks pass.
 
 The launcher wraps Amp with `caffeinate -s`. AC power keeps the Mac awake while the runner is active. Battery power keeps normal macOS sleep behaviour.
 
@@ -128,6 +132,8 @@ Use `--debug` or `--log-level debug` during an incident. Reinstall without that 
 
 The LaunchAgent runs Amp with `--no-tui` and the supplied runner ID. `KeepAlive` restarts the process after failure. A 10-second throttle limits restart loops.
 
+Before it starts Amp, `amp-runner run` sets `AMP_REMOTE_CONTROL_TERMINAL=1`. Amp uses this to enable terminal access from ampcode.com. The launcher owns this setting, so extra Amp arguments cannot disable remote terminal control for a managed runner.
+
 Before it starts Amp, `amp-runner run` sets `AGENT_SECRET_AUTH=service-account`. This makes every managed runner prefer service-account 1Password access without a per-runner option.
 
 `amp-runner run` also reads `~/.local/share/agent-secrets/op-service-account-token` if the file exists and is not empty. It exports the value as `OP_SERVICE_ACCOUNT_TOKEN` for the Amp process. It does not write the token value to the plist.
@@ -139,6 +145,8 @@ Amp writes structured records to `<runner-id>.log`. The LaunchAgent writes start
 ## Permissions and side effects
 
 The launcher creates, loads, restarts, and removes user LaunchAgents. It starts local Amp and `caffeinate` processes. It does not need administrator access.
+
+Remote terminal control exposes the runner terminal through Amp's cross-client access path. Amp workspace access and passkey settings still apply.
 
 Installation captures `PATH` so plugins and MCP servers can find commands such as `npx`. It captures `HOME` for normal user-path resolution. It does not copy secret environment variables into the plist.
 
