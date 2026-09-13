@@ -180,7 +180,7 @@ parse_run_options() {
 	if [ "$amp_arg_count" -gt 0 ]; then
 		for arg in "${amp_args[@]}"; do
 			case "$arg" in
-				--runner-id|--runner-id=*|--log-level|--log-level=*|--log-file|--log-file=*|--no-tui)
+				--runner-id|--runner-id=*|--log-level|--log-level=*|--log-file|--log-file=*|--no-tui|--remote-control-terminal|--no-remote-control-terminal)
 					fail "amp-runner owns Amp argument: $arg"
 					;;
 			esac
@@ -204,6 +204,7 @@ run_runner() {
 
 	export AGENT_SECRET_AUTH=service-account
 	export AMP_NO_TUI=1
+	export AMP_REMOTE_CONTROL_TERMINAL=1
 	export AMP_LOG_LEVEL="$log_level"
 	export AMP_LOG_FILE="$log_dir/$runner_id.log"
 

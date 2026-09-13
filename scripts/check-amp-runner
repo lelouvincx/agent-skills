@@ -16,6 +16,7 @@ cat > "$tmp_dir/bin/caffeinate" <<'EOF'
 #!/usr/bin/env bash
 {
 	printf 'AMP_NO_TUI=%s\n' "${AMP_NO_TUI:-}"
+	printf 'AMP_REMOTE_CONTROL_TERMINAL=%s\n' "${AMP_REMOTE_CONTROL_TERMINAL:-}"
 	printf 'AMP_LOG_LEVEL=%s\n' "${AMP_LOG_LEVEL:-}"
 	printf 'AMP_LOG_FILE=%s\n' "${AMP_LOG_FILE:-}"
 	printf 'AGENT_SECRET_AUTH=%s\n' "${AGENT_SECRET_AUTH:-}"
@@ -89,6 +90,7 @@ logs="$tmp_dir/logs"
 mock_amp="$(CDPATH= cd -- "$tmp_dir/bin" && pwd)/amp"
 run_launcher run --debug --log-dir "$logs" macbook.agent-skills -- --no-ide
 grep -Fxq 'AMP_NO_TUI=1' "$tmp_dir/capture"
+grep -Fxq 'AMP_REMOTE_CONTROL_TERMINAL=1' "$tmp_dir/capture"
 grep -Fxq 'AMP_LOG_LEVEL=debug' "$tmp_dir/capture"
 grep -Fxq "AMP_LOG_FILE=$logs/macbook.agent-skills.log" "$tmp_dir/capture"
 grep -Fxq 'AGENT_SECRET_AUTH=service-account' "$tmp_dir/capture"
@@ -150,6 +152,12 @@ grep -Fq 'RUNNER_ID may contain only' "$tmp_dir/stderr"
 
 if run_launcher run test.runner -- --log-file other.log >"$tmp_dir/stdout" 2>"$tmp_dir/stderr"; then
 	printf '%s\n' 'Expected an owned Amp argument to fail.' >&2
+	exit 1
+fi
+grep -Fq 'amp-runner owns Amp argument' "$tmp_dir/stderr"
+
+if run_launcher run test.runner -- --no-remote-control-terminal >"$tmp_dir/stdout" 2>"$tmp_dir/stderr"; then
+	printf '%s\n' 'Expected remote terminal disabling to fail.' >&2
 	exit 1
 fi
 grep -Fq 'amp-runner owns Amp argument' "$tmp_dir/stderr"
