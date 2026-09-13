@@ -75,3 +75,9 @@ A browser login profile is one entry in an agent bundle's `browserLogins` map. F
 Registration is complete when policy validation and `agent-secrets doctor` pass. A fresh-session login must then verify the expected destination and account.
 
 Runtime Chrome profiles do not need registration. `agent-browser-lifecycle claim` creates a fresh exclusive profile for each browser session.
+
+## Runtime and doctor checks
+
+`agent-secrets run` is the hot path. It validates the selected bundle files, command class, child environment and selected 1Password references. In service-account mode, it does not list vaults or run the full posture check.
+
+`agent-secrets doctor` is the broad check. In service-account mode, it validates that the service account can access exactly the `Agent Secrets` vault, reads every registered reference, and probes that authentication variables do not reach child processes.

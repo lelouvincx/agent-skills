@@ -8,6 +8,7 @@
 - For plans, separate the actions for the agent and Chinh, then state the expected outcome.
 - Before drafting text that Chinh will send to someone else, including Slack messages and emails, load `govuk-style`.
 - Store screenshots, recordings, and other visual artifacts under `.amp/in/artifacts/`.
+- When creating a subdirectory under `.amp/in/artifacts/`, add a `.thread-metadata` file in that subdirectory containing the current Amp thread ID.
 - When Chinh asks to create an Amp runner for a directory path, run `amp-runner install --workdir <path> macbook.<directory-basename>` and verify it is running with `amp-runner status macbook.<directory-basename>`.
 
 ## Delegation
@@ -26,6 +27,7 @@
 - Before searching, creating, or moving Linear issues, read `{AMP_CONFIG_DIR:~/.config/amp}/conventions/linear.md`.
 - Before reading or writing Notion content, read `{AMP_CONFIG_DIR:~/.config/amp}/conventions/notion.md`.
 - Before changing or operating Logseq report automation, its service-account authentication, or its bot repository allowlist, read `{AMP_CONFIG_DIR:~/.config/amp}/conventions/logseq-report-automation.md`.
+- Before bot-owned repository maintenance such as bot commits, pushes, pull requests, changelog updates or check polling, read `{AMP_CONFIG_DIR:~/.config/amp}/conventions/bot-repository-maintenance.md`.
 
 ## Secrets and local env files
 
