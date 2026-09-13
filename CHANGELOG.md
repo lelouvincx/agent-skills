@@ -72,6 +72,7 @@ and this project does not currently use versioned releases.
 
 ### Changed
 
+- Merge `technical-precision` and `writing-for-agents` into `govuk-style` so one writing skill covers plain English, technical precision and agent-facing instructions. [#232](https://github.com/lelouvincx/agent-skills/pull/232)
 - Enable Amp remote terminal control for every managed `amp-runner` process. [#231](https://github.com/lelouvincx/agent-skills/pull/231)
 - Default Claude Code and Pi review subagents to exact Git diff context, remove the global sem MCP server and drop the internal deep reasoning setting from projected Amp settings. [#230](https://github.com/lelouvincx/agent-skills/pull/230)
 - Document the Holistics publish workflow for local commit, push, default-branch merge, `submit publish`, and missing API keys. [#228](https://github.com/lelouvincx/agent-skills/pull/228)
