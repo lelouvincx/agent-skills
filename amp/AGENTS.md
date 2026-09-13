@@ -40,6 +40,7 @@
 ## Version control
 
 - Use the current working tree by default. Create a Git worktree only when Chinh explicitly asks for one. When requested, create it under `<repository-root>/.amp/worktrees/`, where `<repository-root>` is the output of `git rev-parse --show-toplevel`, and verify that `git worktree list --porcelain` reports it there before use.
+- In the `agent-skills` repository, use `agent-bot-pr` for bot commits, pushes, pull request operations, changelog insertion and check polling. It owns the approved bot path for that repository.
 - Before opening a pull request, find and use the repository's pull request template.
 - For GitHub authentication:
   - Use `GH_TOKEN_BOT` when the user explicitly requests the bot token.
