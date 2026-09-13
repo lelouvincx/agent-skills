@@ -46,4 +46,4 @@ Replace this with the evidence spine from the process.
 
 ## Extra pruning trigger
 
-If the document still feels long or repetitive after the process, load `writing-for-agents` and apply its duplication, no-op and sprawl checks.
+If the document still feels long or repetitive after the process, load `govuk-style` and apply its agent-facing duplication, no-op and sprawl checks.
