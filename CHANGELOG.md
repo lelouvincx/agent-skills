@@ -73,6 +73,7 @@ and this project does not currently use versioned releases.
 
 ### Changed
 
+- Fix managed Agent Browser shutdown to reconnect to the approved CDP endpoint before reporting cleanup complete. [#234](https://github.com/lelouvincx/agent-skills/pull/234)
 - Keep `agent-secrets` and managed Amp runner hot paths unattended by removing interactive fallback, moving broad service-account vault checks to `doctor`, adding end-to-end good-outcome tests, and adding `agent-bot-pr` for fast bot commits, PRs, changelog updates and check polling. [#233](https://github.com/lelouvincx/agent-skills/pull/233)
 - Fold technical-precision guidance and agent-writing reference material into `govuk-style` so one writing skill covers plain English, technical precision and agent-facing instructions while keeping `writing-for-agents` available as a remote skill. [#232](https://github.com/lelouvincx/agent-skills/pull/232)
 - Enable Amp remote terminal control for every managed `amp-runner` process. [#231](https://github.com/lelouvincx/agent-skills/pull/231)
