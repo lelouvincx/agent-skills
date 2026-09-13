@@ -184,7 +184,7 @@ Run the relevant repository command directly:
 | Test the Amp documentation validator | `python3 -m unittest amp/scripts/test_validate_plugin_docs.py` |
 | Validate Amp capability and issue docs | `python3 amp/scripts/validate-plugin-docs.py` |
 | Validate Amp RFCs | `python3 amp/scripts/validate-rfcs.py` |
-| Test the agent secret resolver and browser credential plugin | `uvx --with jsonschema==4.25.1 python -m unittest amp/scripts/test_validate_agent_secrets.py amp/scripts/test_agent_secrets.py amp/scripts/test_agent_browser_plugin_onepassword.py` |
+| Test the agent secret resolver and browser credential plugin | `uvx --with jsonschema==4.25.1 python -m unittest amp/scripts/test_validate_agent_secrets.py amp/scripts/test_agent_secrets.py amp/scripts/test_agent_secrets_good_outcomes.py amp/scripts/test_agent_browser_plugin_onepassword.py` |
 | Validate agent secret policy | `uvx --with jsonschema==4.25.1 python amp/scripts/validate-agent-secrets.py` |
 | Test pinned Agent Browser skill packaging without Chrome | `scripts/check-agent-browser-custom` |
 | Test Agent Browser configuration merge | `python3 -m unittest amp/scripts/test_merge_agent_browser_config.py` |

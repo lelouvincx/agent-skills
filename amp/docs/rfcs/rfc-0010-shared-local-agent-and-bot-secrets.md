@@ -7,12 +7,13 @@ file: "rfc-0010-shared-local-agent-and-bot-secrets.md"
 status: "Accepted"
 summary: "Provide named 1Password-backed capability bundles to approved local agents and deterministic bot commands without giving child processes the service-account token."
 created: "2026-08-22"
-updated: "2026-09-05"
+updated: "2026-09-13"
 amp_thread_id:
   T-01a070c8-6420-741e-933d-be92c58c5d73: "allowed the exact 1Password OTP attribute query needed to resolve current one-time passwords"
   T-01a027f3-f748-745c-99e0-42be89c4e177: "moved the shared successor design from Logseq into agent-skills and generalized access for local agents and bots"
   T-01a02845-76ae-715f-9569-84bba5c6e1d6: "reviewed command-class enforcement, Logseq cutover safety and child-environment construction"
-  T-01a02856-b1f8-771e-8cd8-240316b81f1c: "accepted the contract and implementation plan, including asymmetric authentication fallback and deterministic Logseq preflight and publishing"
+  T-01a02856-b1f8-771e-8cd8-240316b81f1c: "accepted the contract and implementation plan, including deterministic Logseq preflight and publishing"
+  T-01a091ca-9f4e-720f-b80f-ef255e7e3e00: "removed unattended interactive fallback and restored the no-child-token runner boundary"
   T-019f4f39-34b7-7169-9005-a5d36a49c642: "established the original unattended 1Password service-account and publishing boundaries"
   T-01a00a25-4ccc-7188-a1f1-210ad413b2b2: "implemented and verified the original Logseq-specific credential topology"
 dependency:
@@ -264,15 +265,13 @@ Invalid values fail immediately.
 
 Interactive mode never falls back to the service account.
 
-Service-account mode tries the service account first.
+Service-account mode uses the service account only.
 
-If a required 1Password command fails for an operational reason, it retries the complete authentication and resolution operation through the interactive account.
+If a required 1Password command fails for an operational reason, the resolver fails closed. It does not retry through the interactive account.
 
-The resolver reports that fallback occurred without printing a secret or full reference.
+The resolver does not fall back after a manifest, local-file, command-class or vault-scope validation failure.
 
-It does not fall back after a manifest, local-file, command-class or vault-scope validation failure.
-
-Interactive fallback may request desktop or biometric approval, including when a supervised process selected service-account mode.
+Interactive approval is allowed only when the caller selects interactive mode explicitly.
 
 ### 1Password topology
 
@@ -523,6 +522,8 @@ It passes child arguments directly without constructing a shell command string.
 
 It returns the child's exit status.
 
+In service-account mode, `run` resolves only the selected references. It does not list vaults or run the full posture check.
+
 It does not provide a raw read, print, export, shell-evaluation or clipboard operation.
 
 It must not send resolved values or full references to `pbcopy`, OSC 52 or another clipboard API.
@@ -608,9 +609,9 @@ The resolver runs these steps:
 5. Validate local bundle files without resolving them.
 6. Validate the bootstrap file in service-account mode.
 7. Build the sanitized non-secret child base environment.
-8. Authenticate to 1Password, validating the selected account in interactive mode or exact vault access in service-account mode.
+8. Authenticate to 1Password, validating the selected account in interactive mode or reading selected references in service-account mode.
 9. Resolve only references from selected bundles.
-10. If a service-account `op` command failed for an operational reason, report the fallback and repeat steps 8 and 9 through the interactive account.
+10. If a service-account `op` command failed for an operational reason, fail closed without interactive fallback.
 11. Add the selected credential variables to the sanitized base environment.
 12. Execute the child directly without either authentication variable.
 13. Clear resolved values and return the child exit status.
@@ -623,7 +624,7 @@ Unsafe local files fail before 1Password access.
 
 Plaintext values and references outside `Agent Secrets` fail before 1Password access.
 
-Service-account access to another vault fails before child execution.
+`doctor` reports service-account access to a vault set other than exactly `Agent Secrets`.
 
 It does not trigger interactive fallback because wrong vault scope is a policy failure.
 
@@ -643,13 +644,11 @@ It never reads the service-account bootstrap token.
 
 Service-account mode validates the bootstrap path before 1Password access.
 
-It tries service-account authentication and resolution first.
+It uses service-account authentication and resolution only.
 
-If a required `op` command fails for an operational reason, it retries through the explicit interactive account.
+If a required `op` command fails for an operational reason, the resolver fails closed.
 
-The fallback may trigger desktop or biometric approval.
-
-The resolver writes a stage-level fallback diagnostic before it retries.
+It never triggers desktop or biometric approval.
 
 ### Logseq migration behavior
 
@@ -800,7 +799,7 @@ The doctor checks exact vault scope and token non-inheritance through a probe ch
 
 It reports variable names and status only.
 
-If service-account 1Password access fails for an operational reason, it reports the fallback and retries through the interactive account.
+If service-account 1Password access fails for an operational reason, it reports the failure. It does not retry through the interactive account.
 
 ## Maintenance notes
 
@@ -839,9 +838,9 @@ The implementation must prove:
 - RFC validation passes
 - `agent-secrets` works outside a Logseq checkout
 - interactive mode never reads the bootstrap token
-- service-account mode tries the service account before interactive fallback
+- service-account mode never falls back to interactive approval
 - interactive mode never falls back to the service account
-- service-account operational failures report fallback without a secret or full reference
+- service-account operational failures fail closed without a secret or full reference
 - manifest, local-file, command-class and vault-scope failures do not trigger fallback
 - the service account can read exactly `Agent Secrets`
 - unsafe files, plaintext values and out-of-vault references fail before 1Password access

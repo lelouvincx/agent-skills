@@ -134,9 +134,9 @@ The LaunchAgent runs Amp with `--no-tui` and the supplied runner ID. `KeepAlive`
 
 Before it starts Amp, `amp-runner run` sets `AMP_REMOTE_CONTROL_TERMINAL=1`. Amp uses this to enable terminal access from ampcode.com. The launcher owns this setting, so extra Amp arguments cannot disable remote terminal control for a managed runner.
 
-Before it starts Amp, `amp-runner run` sets `AGENT_SECRET_AUTH=service-account`. This makes every managed runner prefer service-account 1Password access without a per-runner option.
+Before it starts Amp, `amp-runner run` sets `AGENT_SECRET_AUTH=service-account`. This makes every managed runner use service-account 1Password access without a per-runner option. If service-account authentication fails, the runner fails instead of asking for interactive approval.
 
-`amp-runner run` also reads `~/.local/share/agent-secrets/op-service-account-token` if the file exists and is not empty. It exports the value as `OP_SERVICE_ACCOUNT_TOKEN` for the Amp process. It does not write the token value to the plist.
+`amp-runner run` does not export `OP_SERVICE_ACCOUNT_TOKEN` to the Amp process. `agent-secrets` reads the bootstrap file only for the short `op` subprocess that resolves approved references.
 
 `list` sums CPU and resident memory across the LaunchAgent process and all of its descendants, including `caffeinate`, Amp, and child processes. Resource values are unavailable for runners that are not loaded or have no live process.
 
@@ -150,7 +150,7 @@ Remote terminal control exposes the runner terminal through Amp's cross-client a
 
 Installation captures `PATH` so plugins and MCP servers can find commands such as `npx`. It captures `HOME` for normal user-path resolution. It does not copy secret environment variables into the plist.
 
-The service-account bootstrap token stays in the local agent-secrets file. The runner reads it only when the process starts. The non-secret `AGENT_SECRET_AUTH` selector is set by `amp-runner run`, not by the LaunchAgent plist.
+The service-account bootstrap token stays in the local agent-secrets file. The runner does not read it. The non-secret `AGENT_SECRET_AUTH` selector is set by `amp-runner run`, not by the LaunchAgent plist.
 
 Treat both log files as sensitive. They can contain local paths, prompts, tool activity, and failure details.
 

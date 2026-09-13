@@ -190,13 +190,12 @@ Service-account mode will:
 
 1. Validate the bootstrap directory and file.
 2. Pass the bootstrap value only to required `op` subprocesses.
-3. Verify that the service account sees exactly `Agent Secrets`.
-4. Resolve all selected references through the service account.
-5. If an `op` command fails operationally, discard partial results and retry the complete operation through the interactive account.
+3. Resolve selected references through the service account.
+4. Fail closed if an `op` command fails operationally.
+
+`doctor` verifies that the service account sees exactly `Agent Secrets`.
 
 Wrong vault scope is a policy failure, not an operational failure.
-
-The resolver must report fallback before retrying.
 
 The diagnostic must not contain a secret or full reference.
 
@@ -338,7 +337,7 @@ Completion: interactive tests pass without live 1Password access.
 
 Rollback: revert Stage 2. Policy remains inert.
 
-### Stage 3 add service-account fallback and doctor
+### Stage 3 add service-account mode and doctor
 
 Depends on Stage 2.
 
@@ -354,10 +353,9 @@ Test:
 - bootstrap owner, type, symbolic link and mode checks
 - exact service-account vault scope
 - service-account-first ordering
-- operational fallback to interactive
 - no reverse fallback
 - no fallback for policy failures
-- complete retry after discarding partial values
+- fail-closed service-account operational errors
 - token and selector non-inheritance
 - redacted diagnostics
 - absence of clipboard calls

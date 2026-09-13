@@ -430,14 +430,15 @@ class AgentSecretsTests(unittest.TestCase):
             self.agent,
             output,
             auth="service-account",
+            FAKE_OP_FAIL_SERVICE="vault",
         )
         self.assertEqual(0, result.returncode, result.stderr)
-        self.assertEqual(["service:vault", "service:read"], self.op_events())
+        self.assertEqual(["service:read"], self.op_events())
         payload = json.loads(output.read_text())
         self.assertNotIn("OP_SERVICE_ACCOUNT_TOKEN", payload["environment"])
         self.assertNotIn("AGENT_SECRET_AUTH", payload["environment"])
 
-    def test_service_account_operational_failure_retries_the_complete_operation_interactively(self):
+    def test_service_account_operational_failure_does_not_fall_back_interactively(self):
         output = self.home / "fallback.json"
         result = self.run_cli(
             "run",
@@ -451,19 +452,9 @@ class AgentSecretsTests(unittest.TestCase):
             auth="service-account",
             FAKE_OP_FAIL_SERVICE_REFERENCE_SUFFIX="beta-value",
         )
-        self.assertEqual(0, result.returncode, result.stderr)
-        self.assertEqual(
-            [
-                "service:vault",
-                "service:read",
-                "service:read",
-                "interactive:account",
-                "interactive:read",
-                "interactive:read",
-            ],
-            self.op_events(),
-        )
-        self.assertIn("retrying the complete operation interactively", result.stderr)
+        self.assertNotEqual(0, result.returncode)
+        self.assertEqual(["service:read", "service:read"], self.op_events())
+        self.assertNotIn("retrying", result.stderr)
         self.assertNotIn("op://", result.stderr)
         self.assertNotIn("test-bootstrap-value", result.stderr)
         self.assertNotIn("resolved-", result.stderr)
@@ -478,10 +469,10 @@ class AgentSecretsTests(unittest.TestCase):
             self.agent,
             self.home / "strict.json",
             auth="interactive",
-            FAKE_OP_FAIL_SERVICE="vault",
+            FAKE_OP_FAIL_SERVICE="read",
         )
         self.assertNotEqual(0, result.returncode)
-        self.assertEqual(["service:vault"], self.op_events())
+        self.assertEqual(["service:read"], self.op_events())
         self.assertNotIn("retrying", result.stderr)
 
     def test_browser_login_supplies_only_validated_values_and_metadata_to_handler(self):
@@ -527,7 +518,6 @@ class AgentSecretsTests(unittest.TestCase):
         self.assertEqual("resolved-otp?attribute=otp", credential["otp"])
         self.assertEqual(
             [
-                "service:vault",
                 "service:read",
                 "service:read",
                 "service:read",
@@ -583,7 +573,7 @@ class AgentSecretsTests(unittest.TestCase):
         self.assertEqual("#second-username", credential["usernameSelector"])
         self.assertNotIn("otp", credential)
         self.assertEqual(
-            ["service:vault", "service:read", "service:read"], self.op_events()
+            ["service:read", "service:read"], self.op_events()
         )
 
     def test_browser_login_constraints_fail_before_1password_access(self):
@@ -664,14 +654,9 @@ class AgentSecretsTests(unittest.TestCase):
         self.assertEqual(["interactive:account"], self.op_events())
         self.assertNotIn("retrying", result.stderr)
 
-    def test_wrong_service_account_vault_scope_is_a_policy_failure_without_fallback(self):
+    def test_doctor_checks_service_account_vault_scope_without_fallback(self):
         result = self.run_cli(
-            "run",
-            "--bundle",
-            "alpha",
-            "--",
-            self.agent,
-            self.home / "out",
+            "doctor",
             auth="service-account",
             FAKE_OP_VAULTS="Agent Secrets,Other Vault",
         )

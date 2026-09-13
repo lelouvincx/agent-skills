@@ -186,7 +186,7 @@ class OnePasswordPluginTests(unittest.TestCase):
             payload["credential"],
         )
         self.assertEqual(
-            ["called", "called", "called", "called"],
+            ["called", "called", "called"],
             self.op_log.read_text().splitlines(),
         )
         self.assertNotIn("synthetic-bootstrap", result.stdout + result.stderr)
