@@ -128,6 +128,7 @@ Local skills are maintained in this repository. Remote skills are fetched and pr
 | [to-questionnaire](skills/to-questionnaire/SKILL.md) | Remote | turn missing stakeholder knowledge into a reusable questionnaire |
 | [to-spec](skills/to-spec/SKILL.md) | Remote | turn a conversation into a specification in the project issue tracker |
 | [write-aql](skills/write-aql/SKILL.md) | Remote | write and run Holistics AQL queries |
+| [writing-for-agents](skills/writing-for-agents/SKILL.md) | Remote | write documents for agents, including skills and agent instructions |
 | [writing-investigation-docs](skills/writing-investigation-docs/SKILL.md) | Local | write evidence-first investigation and decision docs |
 
 ### Amp and plugin skills
