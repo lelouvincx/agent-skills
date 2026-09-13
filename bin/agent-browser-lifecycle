@@ -88,6 +88,7 @@ ALLOWED_MANAGED_ACTIONS = {
     "dialog",
     "is",
     "find",
+    "set",
     "mouse",
     "keyboard",
     "keydown",
@@ -1568,7 +1569,7 @@ def verify_managed_birth(session: dict[str, Any], role: str) -> None:
     if saved is None:
         raise LifecycleError(f"{role} identity is missing; recovery is required")
     current = process_birth_identity_record(saved["pid"])
-    if dataclasses.asdict(current) != saved:
+    if not same_process_birth(saved, current):
         raise LifecycleError(f"{role} process identity changed; recovery is required")
 
 
@@ -1865,6 +1866,27 @@ def _validate_positionals(tokens: list[str], usage: str, *, minimum: int = 0, ma
         raise LifecycleError(f"managed exec has too many arguments for {usage}")
 
 
+def _validate_set_args(args: list[str]) -> None:
+    if not args or args[0].startswith("--"):
+        raise LifecycleError("managed exec permits only set viewport <width> <height> or set media light|dark")
+    setting = args[0]
+    if setting == "viewport":
+        _validate_positionals(args[1:], "set viewport", minimum=2, maximum=2)
+        try:
+            width, height = (int(value) for value in args[1:])
+        except ValueError as error:
+            raise LifecycleError("managed exec requires positive integer viewport dimensions") from error
+        if not (1 <= width <= 8192 and 1 <= height <= 8192):
+            raise LifecycleError("managed exec requires viewport dimensions from 1 to 8192")
+        return
+    if setting == "media":
+        _validate_positionals(args[1:], "set media", minimum=1, maximum=1)
+        if args[1] not in {"light", "dark"}:
+            raise LifecycleError("managed exec permits only set media light|dark")
+        return
+    raise LifecycleError("managed exec permits only set viewport <width> <height> or set media light|dark")
+
+
 def _validate_action_args(action: str, args: list[str]) -> None:
     if action in {"open", "goto", "navigate", "read", "screenshot", "snapshot"}:
         value_flags = {
@@ -1941,6 +1963,8 @@ def _validate_action_args(action: str, args: list[str]) -> None:
                 positionals.append(args[index])
                 index += 1
         _validate_positionals(positionals, "wait", maximum=1)
+    elif action == "set":
+        _validate_set_args(args)
     elif action == "tab":
         if not args:
             return
@@ -2042,7 +2066,16 @@ def load_retired_cleanup_module() -> Any:
 def same_boot(left: dict[str, Any] | None, right: BootIdentityRecord) -> bool:
     if not isinstance(left, dict):
         return False
+    # macOS adjusts kern.boottime when its wall clock changes. The UUID is stable.
+    if left.get("session_uuid") is not None and right.session_uuid is not None:
+        return left["session_uuid"] == right.session_uuid
     return left.get("session_uuid") == right.session_uuid and left.get("boot_time_us") == right.boot_time_us
+
+
+def same_process_birth(saved: dict[str, Any], current: ProcessBirthIdentityRecord) -> bool:
+    return (same_boot(saved["boot"], current.boot)
+            and saved["pid"] == current.pid
+            and saved["start_time_us"] == current.start_time_us)
 
 
 def paths_overlap(left: Any, right: Any) -> bool:
@@ -2228,12 +2261,7 @@ def recorded_process_status(saved: dict[str, Any] | None, role: str) -> str | No
         return f"{role} process inspection failed: {exc}"
     if current is None:
         return None
-    saved_record = ProcessBirthIdentityRecord(
-        boot=BootIdentityRecord(**saved["boot"]),
-        pid=saved["pid"],
-        start_time_us=saved["start_time_us"],
-    )
-    if current == saved_record:
+    if same_process_birth(saved, current):
         return f"{role} process is still running"
     return f"{role} PID was reused or identity changed"
 

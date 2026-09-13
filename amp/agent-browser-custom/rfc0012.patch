@@ -234,6 +234,18 @@ index 67989ab..1faebee 100644
      #[test]
      fn test_spawn_race_loser_does_not_overwrite_winner_config() {
          let guard = EnvGuard::new(&["AGENT_BROWSER_SOCKET_DIR", "AGENT_BROWSER_NAMESPACE"]);
+diff --git a/cli/src/flags.rs b/cli/src/flags.rs
+index 1e1d93a..f9a0d7e 100644
+--- a/cli/src/flags.rs
++++ b/cli/src/flags.rs
+@@ -1431,5 +1431,7 @@ mod tests {
+     #[test]
+     fn test_parse_executable_path_flag_no_value() {
++        let guard = EnvGuard::new(&["AGENT_BROWSER_EXECUTABLE_PATH"]);
++        guard.remove("AGENT_BROWSER_EXECUTABLE_PATH");
+         let flags = parse_flags(&args("--executable-path"));
+         assert_eq!(flags.executable_path, None);
+     }
 diff --git a/cli/src/main.rs b/cli/src/main.rs
 index 2a0d82f..02b8fda 100644
 --- a/cli/src/main.rs
@@ -389,7 +401,7 @@ index 60b3ced..9d980ff 100644
      fn tools_profiles_tool_lists_startup_profiles() {
          let result = call_tool(
 diff --git a/cli/src/native/actions.rs b/cli/src/native/actions.rs
-index cd1cca3..2f22986 100644
+index cd1cca3..6d0854e 100644
 --- a/cli/src/native/actions.rs
 +++ b/cli/src/native/actions.rs
 @@ -9,7 +9,9 @@ use std::sync::Arc;
@@ -421,7 +433,7 @@ index cd1cca3..2f22986 100644
          }
      }
  
-@@ -2477,6 +2483,176 @@ fn policy_actions_for_command(
+@@ -2477,6 +2483,191 @@ fn policy_actions_for_command(
      actions
  }
  
@@ -514,7 +526,22 @@ index cd1cca3..2f22986 100644
 +
 +async fn handle_managed_shutdown(state: &mut DaemonState) -> Result<Value, String> {
 +    if let Some(ref mgr) = state.browser {
-+        mgr.request_browser_close().await?;
++        if let Err(existing_err) = mgr.request_browser_close().await {
++            let expected = env::var("AGENT_BROWSER_MANAGED_CDP").map_err(|_| {
++                format!(
++                    "Managed browser shutdown could not use existing CDP connection ({}) and AGENT_BROWSER_MANAGED_CDP is not set",
++                    existing_err
++                )
++            })?;
++            BrowserManager::request_browser_close_at(&expected)
++                .await
++                .map_err(|reconnect_err| {
++                    format!(
++                        "Managed browser shutdown could not use existing CDP connection ({}) or reconnect to approved managed endpoint ({}); refusing to report closed",
++                        existing_err, reconnect_err
++                    )
++                })?;
++        }
 +    }
 +    close_current_browser(state).await?;
 +    Ok(json!({ "shutdown": true, "closed": true }))
@@ -598,7 +625,7 @@ index cd1cca3..2f22986 100644
  pub async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Value {
      let action = cmd.get("action").and_then(|v| v.as_str()).unwrap_or("");
      let id = cmd
-@@ -2487,6 +2663,10 @@ pub async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Value {
+@@ -2487,6 +2678,10 @@ pub async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Value {
  
      let cmd_start = std::time::Instant::now();
  
@@ -609,7 +636,7 @@ index cd1cca3..2f22986 100644
      if let Err(err) = validate_restore_config_from_command(cmd) {
          return error_response(&id, &err);
      }
-@@ -2610,6 +2790,9 @@ pub async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Value {
+@@ -2610,6 +2805,9 @@ pub async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Value {
      } else {
          false
      };
@@ -619,7 +646,7 @@ index cd1cca3..2f22986 100644
      let mut lifecycle_reused = false;
      let mut lifecycle_launched = false;
      let mut lifecycle_relaunched_browser = false;
-@@ -2690,6 +2873,9 @@ pub async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Value {
+@@ -2690,6 +2888,9 @@ pub async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Value {
  
      if !skip_launch {
          if needs_launch {
@@ -629,7 +656,7 @@ index cd1cca3..2f22986 100644
              lifecycle_relaunched_browser = restore_transition_closed_browser
                  || state.browser.is_some()
                  || state.active_provider_session.is_some();
-@@ -8412,6 +8598,10 @@ async fn current_stream_status(state: &DaemonState) -> Value {
+@@ -8412,6 +8613,10 @@ async fn current_stream_status(state: &DaemonState) -> Value {
  }
  
  async fn handle_stream_enable(cmd: &Value, state: &mut DaemonState) -> Result<Value, String> {
@@ -640,7 +667,7 @@ index cd1cca3..2f22986 100644
      if state.stream_server.is_some() {
          return Err("Streaming is already enabled for this session".to_string());
      }
-@@ -14388,6 +14578,230 @@ printf '%s' '{"protocol":"agent-browser.plugin.v1","success":true,"data":{}}'
+@@ -14388,6 +14593,338 @@ printf '%s' '{"protocol":"agent-browser.plugin.v1","success":true,"data":{}}'
          assert_eq!(state.mouse_state.buttons, 0);
      }
  
@@ -837,6 +864,114 @@ index cd1cca3..2f22986 100644
 +        assert_eq!(shutdown["data"]["closed"], true);
 +    }
 +
++    async fn disconnected_external_manager() -> BrowserManager {
++        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
++        let ws_url = format!("ws://{}", listener.local_addr().unwrap());
++        let server = tokio::spawn(async move {
++            let (stream, _) = listener.accept().await.unwrap();
++            let _ws = tokio_tungstenite::accept_async(stream).await.unwrap();
++        });
++        let manager = BrowserManager::test_external_manager_for_ws_url(ws_url)
++            .await
++            .expect("test manager should connect");
++        server.await.unwrap();
++        manager
++    }
++
++    async fn managed_close_fixture() -> (String, oneshot::Receiver<String>) {
++        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
++        let endpoint = format!("http://{}", listener.local_addr().unwrap());
++        let ws_url = format!(
++            "ws://{}/devtools/browser/test",
++            listener.local_addr().unwrap()
++        );
++        let (method_tx, method_rx) = oneshot::channel();
++
++        tokio::spawn(async move {
++            let (mut http_stream, _) = listener.accept().await.unwrap();
++            let mut request = [0u8; 1024];
++            let _ = http_stream.read(&mut request).await.unwrap();
++            let body = json!({ "webSocketDebuggerUrl": ws_url }).to_string();
++            let response = format!(
++                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
++                body.len(), body
++            );
++            http_stream.write_all(response.as_bytes()).await.unwrap();
++
++            let (ws_stream, _) = listener.accept().await.unwrap();
++            let mut ws = tokio_tungstenite::accept_async(ws_stream).await.unwrap();
++            if let Some(Ok(tokio_tungstenite::tungstenite::Message::Text(text))) =
++                futures_util::StreamExt::next(&mut ws).await
++            {
++                let value: Value = serde_json::from_str(&text).unwrap();
++                let id = value.get("id").and_then(Value::as_u64).unwrap();
++                let method = value
++                    .get("method")
++                    .and_then(Value::as_str)
++                    .unwrap()
++                    .to_string();
++                let _ = method_tx.send(method);
++                futures_util::SinkExt::send(
++                    &mut ws,
++                    tokio_tungstenite::tungstenite::Message::Text(
++                        json!({ "id": id, "result": {} }).to_string(),
++                    ),
++                )
++                .await
++                .unwrap();
++            }
++        });
++
++        (endpoint, method_rx)
++    }
++
++    #[tokio::test]
++    async fn managed_shutdown_reconnects_to_approved_cdp_after_dead_connection() {
++        let guard = EnvGuard::new(&["AGENT_BROWSER_MANAGED", "AGENT_BROWSER_MANAGED_CDP"]);
++        guard.set("AGENT_BROWSER_MANAGED", "1");
++        let mut state = DaemonState::new();
++        state.browser = Some(disconnected_external_manager().await);
++        let (endpoint, method_rx) = managed_close_fixture().await;
++        guard.set("AGENT_BROWSER_MANAGED_CDP", &endpoint);
++
++        let response = execute_command(
++            &json!({ "id": "m8c", "action": "managed_shutdown" }),
++            &mut state,
++        )
++        .await;
++
++        assert_eq!(response["success"], true, "unexpected response: {response}");
++        assert_eq!(response["data"]["shutdown"], true);
++        assert_eq!(response["data"]["closed"], true);
++        assert!(state.browser.is_none());
++        assert_eq!(method_rx.await.unwrap(), "Browser.close");
++    }
++
++    #[tokio::test]
++    async fn managed_shutdown_fails_closed_when_dead_connection_endpoint_unavailable() {
++        let guard = EnvGuard::new(&["AGENT_BROWSER_MANAGED", "AGENT_BROWSER_MANAGED_CDP"]);
++        guard.set("AGENT_BROWSER_MANAGED", "1");
++        guard.set("AGENT_BROWSER_MANAGED_CDP", "http://127.0.0.1:1");
++        let mut state = DaemonState::new();
++        state.browser = Some(disconnected_external_manager().await);
++
++        let response = execute_command(
++            &json!({ "id": "m8d", "action": "managed_shutdown" }),
++            &mut state,
++        )
++        .await;
++
++        assert_eq!(response["success"], false);
++        assert!(response["error"]
++            .as_str()
++            .unwrap()
++            .contains("refusing to report closed"));
++        assert!(
++            state.browser.is_some(),
++            "failed shutdown must not tear down state and claim cleanup can continue"
++        );
++    }
++
 +    #[tokio::test]
 +    async fn managed_shutdown_reports_closed_for_daemon_exit_detection() {
 +        let guard = EnvGuard::new(&["AGENT_BROWSER_MANAGED"]);
@@ -872,10 +1007,10 @@ index cd1cca3..2f22986 100644
      fn test_mouse_event_params_preserve_position_and_buttons() {
          let mut mouse_state = MouseState::default();
 diff --git a/cli/src/native/browser.rs b/cli/src/native/browser.rs
-index 798ee5c..a4056b0 100644
+index 798ee5c..5a6be77 100644
 --- a/cli/src/native/browser.rs
 +++ b/cli/src/native/browser.rs
-@@ -1305,6 +1305,17 @@ impl BrowserManager {
+@@ -1305,6 +1305,60 @@ impl BrowserManager {
          Ok(())
      }
  
@@ -888,6 +1023,49 @@ index 798ee5c..a4056b0 100644
 +            .send_command_no_params("Browser.close", None)
 +            .await?;
 +        Ok(())
++    }
++
++    /// Request graceful browser shutdown by opening a fresh CDP connection to
++    /// an already-approved endpoint. This is intentionally narrower than
++    /// `connect_cdp`: it resolves the browser WebSocket and sends only
++    /// `Browser.close`, without discovering targets, launching, or changing the
++    /// daemon's current browser identity.
++    pub async fn request_browser_close_at(cdp_url: &str) -> Result<(), String> {
++        let ws_url = tokio::time::timeout(Duration::from_secs(5), resolve_cdp_url(cdp_url))
++            .await
++            .map_err(|_| "Timed out resolving managed CDP endpoint".to_string())??;
++        let client = tokio::time::timeout(Duration::from_secs(5), CdpClient::connect(&ws_url))
++            .await
++            .map_err(|_| "Timed out reconnecting to managed CDP endpoint".to_string())??;
++        tokio::time::timeout(
++            Duration::from_secs(5),
++            client.send_command_no_params("Browser.close", None),
++        )
++        .await
++        .map_err(|_| "Timed out sending Browser.close to managed CDP endpoint".to_string())??;
++        Ok(())
++    }
++
++    #[cfg(test)]
++    pub(crate) async fn test_external_manager_for_ws_url(ws_url: String) -> Result<Self, String> {
++        let client = Arc::new(CdpClient::connect(&ws_url).await?);
++        Ok(Self {
++            client,
++            browser_process: None,
++            ws_url,
++            pages: Vec::new(),
++            active_page_index: 0,
++            default_timeout_ms: 25_000,
++            download_path: None,
++            ignore_https_errors: false,
++            visited_origins: HashSet::new(),
++            next_tab_id: 1,
++            direct_page: false,
++            pin_tab: false,
++            bound_target_id: None,
++            bound_target_gone: None,
++            headless: true,
++        })
 +    }
 +
      pub fn has_pages(&self) -> bool {
@@ -986,17 +1164,5 @@ index deae896..553af20 100644
          ));
 +        assert!(close_completed_response("managed_shutdown", &direct));
          assert!(close_completed_response("confirm", &confirmed));
-     }
- 
-diff --git a/cli/src/flags.rs b/cli/src/flags.rs
---- a/cli/src/flags.rs
-+++ b/cli/src/flags.rs
-@@ -1431,6 +1431,8 @@
-     #[test]
-     fn test_parse_executable_path_flag_no_value() {
-+        let guard = EnvGuard::new(&["AGENT_BROWSER_EXECUTABLE_PATH"]);
-+        guard.remove("AGENT_BROWSER_EXECUTABLE_PATH");
-         let flags = parse_flags(&args("--executable-path"));
-         assert_eq!(flags.executable_path, None);
      }
  
