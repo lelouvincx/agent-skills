@@ -153,9 +153,11 @@ command_open() {
 	fi
 	[[ -n "$pr_number" ]] || fail 'pull request creation did not return a number'
 	bot_gh api --method POST "repos/$AGENT_GITHUB_REPOSITORY/pulls/$pr_number/requested_reviewers" \
-		--field "reviewers[]=$AGENT_GITHUB_REVIEWER" >/dev/null || true
+		--field "reviewers[]=$AGENT_GITHUB_REVIEWER" >/dev/null || \
+		printf 'WARNING: could not request reviewer: %s\n' "$AGENT_GITHUB_REVIEWER" >&2
 	bot_gh api --method POST "repos/$AGENT_GITHUB_REPOSITORY/issues/$pr_number/assignees" \
-		--field "assignees[]=$AGENT_BOT_GITHUB_LOGIN" >/dev/null || true
+		--field "assignees[]=$AGENT_BOT_GITHUB_LOGIN" >/dev/null || \
+		printf 'WARNING: could not assign PR to: %s\n' "$AGENT_BOT_GITHUB_LOGIN" >&2
 	bot_gh api "repos/$AGENT_GITHUB_REPOSITORY/pulls/$pr_number" \
 		--jq '{number, html_url, head: .head.sha, state}'
 }
