@@ -3,6 +3,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 LIB="$ROOT/amp/agent-secrets/lib-agent.sh"
+BOT_PR="$ROOT/bin/agent-bot-pr"
 TMP_DIR=$(mktemp -d)
 trap 'rm -rf "$TMP_DIR"' EXIT
 
@@ -80,5 +81,32 @@ if grep -Eq 'pages/Weekly|reviewers\[\]=lelouvincx' "$LIB"; then
 	echo "ERROR: Shared agent library contains Logseq publishing policy" >&2
 	exit 1
 fi
+
+bash -n "$BOT_PR"
+"$BOT_PR" help >/dev/null 2>&1
+
+BOT_PR_REPO="$TMP_DIR/bot-pr-repo"
+mkdir -p "$BOT_PR_REPO/amp/agent-secrets" "$BOT_PR_REPO/bin"
+cp "$LIB" "$BOT_PR_REPO/amp/agent-secrets/lib-agent.sh"
+cp "$ROOT/amp/agent-secrets/github-identities.json" "$BOT_PR_REPO/amp/agent-secrets/github-identities.json"
+cp "$BOT_PR" "$BOT_PR_REPO/bin/agent-bot-pr"
+cat >"$BOT_PR_REPO/CHANGELOG.md" <<'MD'
+# Changelog
+
+## [Unreleased]
+
+### Changed
+
+- Existing entry.
+MD
+(
+	cd "$BOT_PR_REPO"
+	git init -q
+	git remote add origin git@github.com:lelouvincx/agent-skills.git
+	PATH="$TMP_DIR:$PATH" ./bin/agent-bot-pr changelog --pr 999 --entry 'Test bot PR helper'
+	grep -Fxq -- '- Test bot PR helper [#999](https://github.com/lelouvincx/agent-skills/pull/999)' CHANGELOG.md
+	PATH="$TMP_DIR:$PATH" ./bin/agent-bot-pr changelog --pr 999 --entry 'Test bot PR helper'
+	[[ "$(grep -Fc 'Test bot PR helper' CHANGELOG.md)" == 1 ]]
+)
 
 echo "Shared agent library contract passed"

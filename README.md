@@ -61,6 +61,17 @@ The service-account bootstrap file is separate and is never projected from this 
 The resolver provides only `run` and `doctor`.
 It does not print, export, evaluate or copy resolved values to the clipboard.
 
+Use `agent-bot-pr` for fast repository maintenance through the approved bot path:
+
+```bash
+agent-bot-pr commit -m "fix: keep agent-secrets hot paths unattended" -- bin/agent-secrets amp/scripts/test_agent_secrets.py
+agent-bot-pr open --title "Keep agent-secrets hot paths unattended" --body-file /tmp/pr-body.md
+agent-bot-pr changelog --pr 233 --entry "Keep agent-secrets hot paths unattended."
+agent-bot-pr checks
+```
+
+The helper reuses the hardened bot SSH identity for commits and pushes. GitHub writes go through `agent-secrets` and the `lelouvincx-bot` bundle.
+
 RFC-0011 browser login uses a temporary pinned native `agent-browser` patch. Build and install it with `amp/agent-browser-custom/build`; the projected wrapper refuses missing or stale builds and mismatched skill content. The [custom-build guide](amp/agent-browser-custom/README.md) covers the bundled version-matched skills and rebuild procedure. Remove `amp/agent-browser-custom` when an official agent-browser release supports destination-checked credential login.
 
 ## Run a background Amp runner
@@ -185,6 +196,7 @@ Run the relevant repository command directly:
 | Validate Amp capability and issue docs | `python3 amp/scripts/validate-plugin-docs.py` |
 | Validate Amp RFCs | `python3 amp/scripts/validate-rfcs.py` |
 | Test the agent secret resolver and browser credential plugin | `uvx --with jsonschema==4.25.1 python -m unittest amp/scripts/test_validate_agent_secrets.py amp/scripts/test_agent_secrets.py amp/scripts/test_agent_secrets_good_outcomes.py amp/scripts/test_agent_browser_plugin_onepassword.py` |
+| Test shared agent helper contracts | `amp/scripts/test-agent-secrets-lib.sh` |
 | Validate agent secret policy | `uvx --with jsonschema==4.25.1 python amp/scripts/validate-agent-secrets.py` |
 | Test pinned Agent Browser skill packaging without Chrome | `scripts/check-agent-browser-custom` |
 | Test Agent Browser configuration merge | `python3 -m unittest amp/scripts/test_merge_agent_browser_config.py` |

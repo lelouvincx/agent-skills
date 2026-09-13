@@ -73,7 +73,7 @@ and this project does not currently use versioned releases.
 
 ### Changed
 
-- Keep `agent-secrets` and managed Amp runner hot paths unattended by removing interactive fallback, moving broad service-account vault checks to `doctor`, and adding end-to-end good-outcome tests. [#233](https://github.com/lelouvincx/agent-skills/pull/233)
+- Keep `agent-secrets` and managed Amp runner hot paths unattended by removing interactive fallback, moving broad service-account vault checks to `doctor`, adding end-to-end good-outcome tests, and adding `agent-bot-pr` for fast bot commits, PRs, changelog updates and check polling. [#233](https://github.com/lelouvincx/agent-skills/pull/233)
 - Fold technical-precision guidance and agent-writing reference material into `govuk-style` so one writing skill covers plain English, technical precision and agent-facing instructions while keeping `writing-for-agents` available as a remote skill. [#232](https://github.com/lelouvincx/agent-skills/pull/232)
 - Enable Amp remote terminal control for every managed `amp-runner` process. [#231](https://github.com/lelouvincx/agent-skills/pull/231)
 - Default Claude Code and Pi review subagents to exact Git diff context, remove the global sem MCP server and drop the internal deep reasoning setting from projected Amp settings. [#230](https://github.com/lelouvincx/agent-skills/pull/230)

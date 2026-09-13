@@ -1,0 +1,239 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+	cat >&2 <<'EOF'
+Usage:
+  agent-bot-pr commit -m MESSAGE -- FILE [FILE...]
+  agent-bot-pr push [BRANCH]
+  agent-bot-pr open --title TITLE --body-file FILE [--base BRANCH] [--branch BRANCH]
+  agent-bot-pr changelog --pr NUMBER --entry TEXT [--section SECTION]
+  agent-bot-pr checks [BRANCH]
+
+Commits and pushes use the hardened bot SSH identity. GitHub writes go through
+agent-secrets with the lelouvincx-bot bundle, so the script never reads the bot
+token value.
+EOF
+}
+
+fail() {
+	printf 'ERROR: %s\n' "$*" >&2
+	exit 1
+}
+
+repo_root() {
+	git rev-parse --show-toplevel 2>/dev/null || fail 'not inside a Git repository'
+}
+
+load_contract() {
+	ROOT="$(repo_root)"
+	# shellcheck source=/dev/null
+	source "$ROOT/amp/agent-secrets/lib-agent.sh"
+	AGENT_BOT_GITHUB_LOGIN="${AGENT_BOT_GITHUB_LOGIN:-lelouvincx-bot}"
+	AGENT_BOT_GIT_EMAIL="${AGENT_BOT_GIT_EMAIL:-bot@lelouvincx.com}"
+	AGENT_BOT_SSH_KEY="${AGENT_BOT_SSH_KEY:-$HOME/.ssh/lelouvincx_bot_ed25519}"
+	AGENT_BOT_SIGNING_KEY_CONFIG="${AGENT_BOT_SIGNING_KEY_CONFIG:-$AGENT_BOT_SSH_KEY}"
+	AGENT_GITHUB_REVIEWER="${AGENT_GITHUB_REVIEWER:-lelouvincx}"
+	AGENT_GITHUB_REPOSITORY="${AGENT_GITHUB_REPOSITORY:-$(repository_from_origin)}"
+	AGENT_SECRETS_BIN="${AGENT_SECRETS_BIN:-$HOME/.local/bin/agent-secrets}"
+	GH_BIN="${GH_BIN:-$(command -v gh || true)}"
+	[[ -n "$GH_BIN" && -x "$GH_BIN" ]] || fail 'gh is not available or executable'
+}
+
+repository_from_origin() {
+	local remote
+	remote=$(git remote get-url origin 2>/dev/null) || fail 'origin remote is missing'
+	case "$remote" in
+	git@github.com:*.git)
+		remote="${remote#git@github.com:}"
+		printf '%s\n' "${remote%.git}"
+		;;
+	https://github.com/*.git)
+		remote="${remote#https://github.com/}"
+		printf '%s\n' "${remote%.git}"
+		;;
+	*)
+		fail "origin remote must be a GitHub SSH or HTTPS URL: $remote"
+		;;
+	esac
+}
+
+current_branch() {
+	git symbolic-ref --quiet --short HEAD || fail 'current HEAD is detached'
+}
+
+bot_gh() {
+	AGENT_SECRET_AUTH="${AGENT_SECRET_AUTH:-service-account}" \
+		"$AGENT_SECRETS_BIN" run --bundle lelouvincx-bot -- "$GH_BIN" "$@"
+}
+
+command_commit() {
+	local message="" paths=()
+	while [[ $# -gt 0 ]]; do
+		case "$1" in
+		-m|--message)
+			[[ $# -ge 2 ]] || fail "$1 requires a value"
+			message="$2"
+			shift 2
+			;;
+		--)
+			shift
+			paths=("$@")
+			break
+			;;
+		*)
+			fail "unknown commit option: $1"
+			;;
+		esac
+	done
+	[[ -n "$message" ]] || fail 'commit requires -m MESSAGE'
+	[[ "${#paths[@]}" -gt 0 ]] || fail 'commit requires -- FILE [FILE...]'
+	agent_commit_files /dev/null "$AGENT_BOT_SSH_KEY" "$message" "${paths[@]}"
+}
+
+command_push() {
+	local branch="${1:-$(current_branch)}"
+	[[ $# -le 1 ]] || fail 'push accepts at most one branch'
+	agent_push_branch /dev/null "$AGENT_BOT_SSH_KEY" "$branch"
+}
+
+command_open() {
+	local title="" body_file="" base="main" branch=""
+	while [[ $# -gt 0 ]]; do
+		case "$1" in
+		--title)
+			[[ $# -ge 2 ]] || fail '--title requires a value'
+			title="$2"
+			shift 2
+			;;
+		--body-file)
+			[[ $# -ge 2 ]] || fail '--body-file requires a value'
+			body_file="$2"
+			shift 2
+			;;
+		--base)
+			[[ $# -ge 2 ]] || fail '--base requires a value'
+			base="$2"
+			shift 2
+			;;
+		--branch)
+			[[ $# -ge 2 ]] || fail '--branch requires a value'
+			branch="$2"
+			shift 2
+			;;
+		*)
+			fail "unknown open option: $1"
+			;;
+		esac
+	done
+	[[ -n "$title" ]] || fail 'open requires --title'
+	[[ -n "$body_file" ]] || fail 'open requires --body-file'
+	[[ -f "$body_file" && ! -L "$body_file" && -s "$body_file" ]] || fail "body file must be a non-empty regular file: $body_file"
+	branch="${branch:-$(current_branch)}"
+	command_push "$branch"
+
+	local owner pr_number
+	owner="${AGENT_GITHUB_REPOSITORY%%/*}"
+	pr_number=$(bot_gh api --method GET "repos/$AGENT_GITHUB_REPOSITORY/pulls" \
+		--field state=open \
+		--field "head=$owner:$branch" \
+		--field "base=$base" \
+		--jq '.[0].number // empty')
+	if [[ -z "$pr_number" ]]; then
+		pr_number=$(bot_gh api --method POST "repos/$AGENT_GITHUB_REPOSITORY/pulls" \
+			--raw-field "title=$title" \
+			--raw-field "head=$branch" \
+			--raw-field "base=$base" \
+			--field "body=@$body_file" \
+			--jq .number)
+	else
+		bot_gh api --method PATCH "repos/$AGENT_GITHUB_REPOSITORY/pulls/$pr_number" \
+			--raw-field "title=$title" \
+			--field "body=@$body_file" >/dev/null
+	fi
+	[[ -n "$pr_number" ]] || fail 'pull request creation did not return a number'
+	bot_gh api --method POST "repos/$AGENT_GITHUB_REPOSITORY/pulls/$pr_number/requested_reviewers" \
+		--field "reviewers[]=$AGENT_GITHUB_REVIEWER" >/dev/null || true
+	bot_gh api --method POST "repos/$AGENT_GITHUB_REPOSITORY/issues/$pr_number/assignees" \
+		--field "assignees[]=$AGENT_BOT_GITHUB_LOGIN" >/dev/null || true
+	bot_gh api "repos/$AGENT_GITHUB_REPOSITORY/pulls/$pr_number" \
+		--jq '{number, html_url, head: .head.sha, state}'
+}
+
+command_changelog() {
+	local pr="" entry="" section="Changed"
+	while [[ $# -gt 0 ]]; do
+		case "$1" in
+		--pr)
+			[[ $# -ge 2 ]] || fail '--pr requires a value'
+			pr="$2"
+			shift 2
+			;;
+		--entry)
+			[[ $# -ge 2 ]] || fail '--entry requires a value'
+			entry="$2"
+			shift 2
+			;;
+		--section)
+			[[ $# -ge 2 ]] || fail '--section requires a value'
+			section="$2"
+			shift 2
+			;;
+		*)
+			fail "unknown changelog option: $1"
+			;;
+		esac
+	done
+	[[ "$pr" =~ ^[0-9]+$ ]] || fail 'changelog requires --pr NUMBER'
+	[[ -n "$entry" ]] || fail 'changelog requires --entry TEXT'
+	python3 - "$pr" "$section" "$entry" <<'PY'
+import sys
+from pathlib import Path
+
+number, section, entry = sys.argv[1:]
+path = Path("CHANGELOG.md")
+text = path.read_text()
+line = f"- {entry} [#{number}](https://github.com/lelouvincx/agent-skills/pull/{number})"
+if line in text:
+    raise SystemExit(0)
+heading = f"### {section}\n\n"
+start = text.find("## [Unreleased]")
+if start == -1:
+    raise SystemExit("CHANGELOG.md is missing [Unreleased]")
+position = text.find(heading, start)
+if position == -1:
+    raise SystemExit(f"CHANGELOG.md is missing section: {heading.strip()}")
+position += len(heading)
+path.write_text(text[:position] + line + "\n" + text[position:])
+PY
+}
+
+command_checks() {
+	local branch="${1:-$(current_branch)}"
+	[[ $# -le 1 ]] || fail 'checks accepts at most one branch'
+	bot_gh api "repos/$AGENT_GITHUB_REPOSITORY/commits/$branch/check-runs" \
+		--jq '{check_runs: [.check_runs[] | {name, status, conclusion}], pending: ([.check_runs[] | select(.status != "completed")] | length), failures: ([.check_runs[] | select(.status == "completed" and (.conclusion | IN("success", "skipped", "neutral") | not))] | length)}'
+}
+
+main() {
+	[[ $# -gt 0 ]] || { usage; exit 2; }
+	local command="$1"
+	shift
+	case "$command" in
+	-h|--help|help)
+		usage
+		return 0
+		;;
+	esac
+	load_contract
+	case "$command" in
+	commit) command_commit "$@" ;;
+	push) command_push "$@" ;;
+	open) command_open "$@" ;;
+	changelog) command_changelog "$@" ;;
+	checks) command_checks "$@" ;;
+	*) usage; fail "unknown command: $command" ;;
+	esac
+}
+
+main "$@"
