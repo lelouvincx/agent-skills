@@ -27,6 +27,7 @@
 - Before searching, creating, or moving Linear issues, read `{AMP_CONFIG_DIR:~/.config/amp}/conventions/linear.md`.
 - Before reading or writing Notion content, read `{AMP_CONFIG_DIR:~/.config/amp}/conventions/notion.md`.
 - Before changing or operating Logseq report automation, its service-account authentication, or its bot repository allowlist, read `{AMP_CONFIG_DIR:~/.config/amp}/conventions/logseq-report-automation.md`.
+- Before bot-owned repository maintenance such as bot commits, pushes, pull requests, changelog updates or check polling, read `{AMP_CONFIG_DIR:~/.config/amp}/conventions/bot-repository-maintenance.md`.
 
 ## Secrets and local env files
 
@@ -40,7 +41,6 @@
 ## Version control
 
 - Use the current working tree by default. Create a Git worktree only when Chinh explicitly asks for one. When requested, create it under `<repository-root>/.amp/worktrees/`, where `<repository-root>` is the output of `git rev-parse --show-toplevel`, and verify that `git worktree list --porcelain` reports it there before use.
-- In the `agent-skills` repository, use `agent-bot-pr` for bot commits, pushes, pull request operations, changelog insertion and check polling. It owns the approved bot path for that repository.
 - Before opening a pull request, find and use the repository's pull request template.
 - For GitHub authentication:
   - Use `GH_TOKEN_BOT` when the user explicitly requests the bot token.

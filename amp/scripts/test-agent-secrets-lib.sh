@@ -13,6 +13,12 @@ printf '%s\n' "$*" >>"$AGENT_SECRETS_TEST_LOG"
 SH
 chmod +x "$TMP_DIR/agent-secrets"
 
+cat >"$TMP_DIR/gh" <<'SH'
+#!/usr/bin/env bash
+exit 0
+SH
+chmod +x "$TMP_DIR/gh"
+
 AGENT_SECRETS_TEST_LOG="$TMP_DIR/requests.log"
 export AGENT_SECRETS_TEST_LOG
 AGENT_SECRETS_BIN="$TMP_DIR/agent-secrets"
@@ -86,9 +92,7 @@ bash -n "$BOT_PR"
 "$BOT_PR" help >/dev/null 2>&1
 
 BOT_PR_REPO="$TMP_DIR/bot-pr-repo"
-mkdir -p "$BOT_PR_REPO/amp/agent-secrets" "$BOT_PR_REPO/bin"
-cp "$LIB" "$BOT_PR_REPO/amp/agent-secrets/lib-agent.sh"
-cp "$ROOT/amp/agent-secrets/github-identities.json" "$BOT_PR_REPO/amp/agent-secrets/github-identities.json"
+mkdir -p "$BOT_PR_REPO/bin"
 cp "$BOT_PR" "$BOT_PR_REPO/bin/agent-bot-pr"
 cat >"$BOT_PR_REPO/CHANGELOG.md" <<'MD'
 # Changelog
@@ -102,10 +106,10 @@ MD
 (
 	cd "$BOT_PR_REPO"
 	git init -q
-	git remote add origin git@github.com:lelouvincx/agent-skills.git
-	PATH="$TMP_DIR:$PATH" ./bin/agent-bot-pr changelog --pr 999 --entry 'Test bot PR helper'
-	grep -Fxq -- '- Test bot PR helper [#999](https://github.com/lelouvincx/agent-skills/pull/999)' CHANGELOG.md
-	PATH="$TMP_DIR:$PATH" ./bin/agent-bot-pr changelog --pr 999 --entry 'Test bot PR helper'
+	git remote add origin git@github.com:lelouvincx/smartclass.git
+	AGENT_SKILLS_ROOT="$ROOT" PATH="$TMP_DIR:$PATH" ./bin/agent-bot-pr changelog --pr 999 --entry 'Test bot PR helper'
+	grep -Fxq -- '- Test bot PR helper [#999](https://github.com/lelouvincx/smartclass/pull/999)' CHANGELOG.md
+	AGENT_SKILLS_ROOT="$ROOT" PATH="$TMP_DIR:$PATH" ./bin/agent-bot-pr changelog --pr 999 --entry 'Test bot PR helper'
 	[[ "$(grep -Fc 'Test bot PR helper' CHANGELOG.md)" == 1 ]]
 )
 

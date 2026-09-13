@@ -3,6 +3,14 @@ set -euo pipefail
 
 usage() {
 	cat >&2 <<'EOF'
+Purpose:
+  Keep bot-owned repository maintenance fast and consistent across Chinh's
+  approved personal repositories.
+
+Original intention:
+  Wrap the safe path for commits, pushes, pull request creation, changelog
+  updates and check polling so agents do not rebuild that path by hand.
+
 Usage:
   agent-bot-pr commit -m MESSAGE -- FILE [FILE...]
   agent-bot-pr push [BRANCH]
@@ -25,10 +33,27 @@ repo_root() {
 	git rev-parse --show-toplevel 2>/dev/null || fail 'not inside a Git repository'
 }
 
+agent_skills_root() {
+	local candidate
+	for candidate in \
+		"${AGENT_SKILLS_ROOT:-}" \
+		"$ROOT" \
+		"$(project-resolve agent-skills --path 2>/dev/null || true)" \
+		"$HOME/Developer/agent-skills"; do
+		[[ -n "$candidate" ]] || continue
+		if [[ -f "$candidate/amp/agent-secrets/lib-agent.sh" ]]; then
+			cd "$candidate" && pwd
+			return 0
+		fi
+	done
+	fail 'agent-skills checkout with amp/agent-secrets/lib-agent.sh is required'
+}
+
 load_contract() {
 	ROOT="$(repo_root)"
+	AGENT_SKILLS_ROOT="$(agent_skills_root)"
 	# shellcheck source=/dev/null
-	source "$ROOT/amp/agent-secrets/lib-agent.sh"
+	source "$AGENT_SKILLS_ROOT/amp/agent-secrets/lib-agent.sh"
 	AGENT_BOT_GITHUB_LOGIN="${AGENT_BOT_GITHUB_LOGIN:-lelouvincx-bot}"
 	AGENT_BOT_GIT_EMAIL="${AGENT_BOT_GIT_EMAIL:-bot@lelouvincx.com}"
 	AGENT_BOT_SSH_KEY="${AGENT_BOT_SSH_KEY:-$HOME/.ssh/lelouvincx_bot_ed25519}"
@@ -188,14 +213,14 @@ command_changelog() {
 	done
 	[[ "$pr" =~ ^[0-9]+$ ]] || fail 'changelog requires --pr NUMBER'
 	[[ -n "$entry" ]] || fail 'changelog requires --entry TEXT'
-	python3 - "$pr" "$section" "$entry" <<'PY'
+	python3 - "$pr" "$section" "$entry" "$AGENT_GITHUB_REPOSITORY" <<'PY'
 import sys
 from pathlib import Path
 
-number, section, entry = sys.argv[1:]
+number, section, entry, repository = sys.argv[1:]
 path = Path("CHANGELOG.md")
 text = path.read_text()
-line = f"- {entry} [#{number}](https://github.com/lelouvincx/agent-skills/pull/{number})"
+line = f"- {entry} [#{number}](https://github.com/{repository}/pull/{number})"
 if line in text:
     raise SystemExit(0)
 heading = f"### {section}\n\n"

@@ -61,16 +61,16 @@ The service-account bootstrap file is separate and is never projected from this 
 The resolver provides only `run` and `doctor`.
 It does not print, export, evaluate or copy resolved values to the clipboard.
 
-Use `agent-bot-pr` for fast repository maintenance through the approved bot path:
+Use `agent-bot-pr` for fast repository maintenance through the approved bot path in approved repositories:
 
 ```bash
 agent-bot-pr commit -m "fix: keep agent-secrets hot paths unattended" -- bin/agent-secrets amp/scripts/test_agent_secrets.py
-agent-bot-pr open --title "Keep agent-secrets hot paths unattended" --body-file /tmp/pr-body.md
+agent-bot-pr open --title "fix: keep agent-secrets hot paths unattended" --body-file /tmp/pr-body.md
 agent-bot-pr changelog --pr 233 --entry "Keep agent-secrets hot paths unattended."
 agent-bot-pr checks
 ```
 
-The helper reuses the hardened bot SSH identity for commits and pushes. GitHub writes go through `agent-secrets` and the `lelouvincx-bot` bundle.
+The helper reuses the hardened bot SSH identity for commits and pushes. GitHub writes go through `agent-secrets` and the `lelouvincx-bot` bundle. The approved repository set lives in `amp/agent-secrets/github-identities.json`.
 
 RFC-0011 browser login uses a temporary pinned native `agent-browser` patch. Build and install it with `amp/agent-browser-custom/build`; the projected wrapper refuses missing or stale builds and mismatched skill content. The [custom-build guide](amp/agent-browser-custom/README.md) covers the bundled version-matched skills and rebuild procedure. Remove `amp/agent-browser-custom` when an official agent-browser release supports destination-checked credential login.
 

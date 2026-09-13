@@ -186,8 +186,6 @@ run_runner() {
 	[ "$no_start" = false ] || fail '--no-start is valid only with install'
 	[ "$workdir" = "$PWD" ] || fail '--workdir is valid only with install'
 	prepare_logs "$log_dir" "$runner_id"
-	unset OP_SERVICE_ACCOUNT_TOKEN
-
 	export AGENT_SECRET_AUTH=service-account
 	export AMP_NO_TUI=1
 	export AMP_REMOTE_CONTROL_TERMINAL=1
