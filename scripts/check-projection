@@ -21,6 +21,10 @@ mkdir -p "$tmp_home/.config/amp/conventions"
 touch "$tmp_home/.config/amp/conventions/stale.md"
 mkdir -p "$tmp_home/.config/amp/state"
 printf '%s\n' 'pre-existing runtime state' > "$tmp_home/.config/amp/state/github-thread-events.sqlite"
+mkdir -p "$tmp_home/.local/share/amp-cliproxy/auth"
+printf '%s\n' 'pre-existing-api-key' > "$tmp_home/.local/share/amp-cliproxy/api-key.txt"
+printf '%s\n' 'pre-existing-config' > "$tmp_home/.local/share/amp-cliproxy/config.yaml"
+printf '%s\n' 'pre-existing-auth' > "$tmp_home/.local/share/amp-cliproxy/auth/claude-existing.json"
 mkdir -p "$tmp_home/.agent-browser"
 cat > "$tmp_home/.agent-browser/config.json" <<'JSON'
 {
@@ -41,6 +45,12 @@ HOME="$tmp_home" \
 
 agent_browser_config_once="$tmp_home/agent-browser-config.once"
 cp "$tmp_home/.agent-browser/config.json" "$agent_browser_config_once"
+cliproxy_api_key_once="$tmp_home/cliproxy-api-key.once"
+cliproxy_config_once="$tmp_home/cliproxy-config.once"
+cliproxy_auth_once="$tmp_home/cliproxy-auth.once"
+cp "$tmp_home/.local/share/amp-cliproxy/api-key.txt" "$cliproxy_api_key_once"
+cp "$tmp_home/.local/share/amp-cliproxy/config.yaml" "$cliproxy_config_once"
+cp "$tmp_home/.local/share/amp-cliproxy/auth/claude-existing.json" "$cliproxy_auth_once"
 
 HOME="$tmp_home" \
 	AMP_CONFIG_DIR="$tmp_home/.config/amp" \
@@ -48,6 +58,21 @@ HOME="$tmp_home" \
 
 if ! cmp -s "$agent_browser_config_once" "$tmp_home/.agent-browser/config.json"; then
 	echo "error: projection changed serialized agent-browser configuration on repeated sync" >&2
+	exit 1
+fi
+
+if ! cmp -s "$cliproxy_api_key_once" "$tmp_home/.local/share/amp-cliproxy/api-key.txt"; then
+	echo "error: projection changed an existing CLIProxyAPI key on repeated sync" >&2
+	exit 1
+fi
+
+if ! cmp -s "$cliproxy_config_once" "$tmp_home/.local/share/amp-cliproxy/config.yaml"; then
+	echo "error: projection changed an existing CLIProxyAPI config on repeated sync" >&2
+	exit 1
+fi
+
+if ! cmp -s "$cliproxy_auth_once" "$tmp_home/.local/share/amp-cliproxy/auth/claude-existing.json"; then
+	echo "error: projection changed an existing CLIProxyAPI auth file on repeated sync" >&2
 	exit 1
 fi
 
@@ -69,12 +94,49 @@ for path in \
 	".config/amp/docs" \
 	".config/amp/mcp-servers/git-diff-server.mjs" \
 	".config/amp/projects.yaml" \
-	".config/amp/PROJECTS.md"; do
+	".config/amp/PROJECTS.md" \
+	".local/share/amp-cliproxy/README.md" \
+	".local/share/amp-cliproxy/docker-compose.yml" \
+	".local/share/amp-cliproxy/config.example.yaml" \
+	".local/share/amp-cliproxy/ensure-runtime.sh" \
+	".local/share/amp-cliproxy/api-key.txt" \
+	".local/share/amp-cliproxy/config.yaml" \
+	".local/share/amp-cliproxy/auth"; do
 	if [ ! -e "$tmp_home/$path" ]; then
 		echo "error: projection did not create $path" >&2
 		exit 1
 	fi
 done
+
+if [ ! -x "$tmp_home/.local/share/amp-cliproxy/ensure-runtime.sh" ]; then
+	echo "error: projected CLIProxyAPI runtime helper is not executable" >&2
+	exit 1
+fi
+
+if [ "$(cat "$tmp_home/.local/share/amp-cliproxy/api-key.txt")" != "pre-existing-api-key" ]; then
+	echo "error: projection overwrote an existing CLIProxyAPI key" >&2
+	exit 1
+fi
+
+if [ "$(cat "$tmp_home/.local/share/amp-cliproxy/config.yaml")" != "pre-existing-config" ]; then
+	echo "error: projection overwrote an existing CLIProxyAPI config" >&2
+	exit 1
+fi
+
+if [ "$(cat "$tmp_home/.local/share/amp-cliproxy/auth/claude-existing.json")" != "pre-existing-auth" ]; then
+	echo "error: projection overwrote an existing CLIProxyAPI auth file" >&2
+	exit 1
+fi
+
+if ! diff -q "$REPO_DIR/amp/local-claude-cliproxy/docker-compose.yml" "$tmp_home/.local/share/amp-cliproxy/docker-compose.yml" >/dev/null; then
+	echo "error: CLIProxyAPI docker-compose projection differs from its source" >&2
+	exit 1
+fi
+
+if ! diff -q "$REPO_DIR/amp/local-claude-cliproxy/config.example.yaml" "$tmp_home/.local/share/amp-cliproxy/config.example.yaml" >/dev/null; then
+	echo "error: CLIProxyAPI config template projection differs from its source" >&2
+	exit 1
+fi
 
 conventions="$tmp_home/.config/amp/conventions"
 if [ ! -d "$conventions" ] || [ -L "$conventions" ]; then

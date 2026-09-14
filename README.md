@@ -225,6 +225,7 @@ Run the relevant repository command directly:
 | [Label skill and plugin usage](amp/docs/tools/label-skill-plugin-usage.md) | Agent tool | Agent | add or correct usage-event labels |
 | [Pi Code subagent](amp/docs/tools/pi-code-subagent.md) | Agent tool | Agent | ask Pi Coding Agent for read-only advice |
 | [Grok 4.6 Max](amp/docs/tools/grok-4-6-max.md) | Agent mode | Mode picker | run an experimental Grok 4.6 agent mode with max reasoning effort |
+| [Local Claude CLIProxyAPI runtime](amp/docs/tools/local-claude-cliproxy.md) | Command | Command palette | open and review the projected local Claude proxy runtime |
 | [Logseq log current task](amp/docs/tools/logseq-log-current-task-command.md) | Command | Command palette | log the current Amp task into Logseq |
 | [Track event](amp/docs/tools/track-event.md) | Command | Command palette | record skill or plugin usage manually |
 | [Capture skill and plugin magic words](amp/docs/tools/capture-skill-plugin-magic-words.md) | Event handler | Plugin event pipeline | record usage events from trigger phrases |
