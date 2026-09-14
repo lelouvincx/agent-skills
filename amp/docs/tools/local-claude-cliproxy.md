@@ -144,11 +144,12 @@ Amp backend
 
 The Docker config must use `host: ""` inside the container. Binding CLIProxyAPI to `127.0.0.1` inside Docker would bind to the container loopback and break host port publishing.
 
-The initial validated Amp mappings are narrow and explicit:
+The validated Amp mappings are narrow and explicit:
 
 ```text
 anthropic/claude-opus-4-7  -> claude-opus-4-7
 anthropic/claude-fable-5-1 -> claude-fable-5-1
+anthropic/claude-opus-5    -> claude-opus-5
 ```
 
 ### Manual operation
