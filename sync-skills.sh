@@ -10,6 +10,7 @@ CLAUDE_SKILLS_DIR="$HOME/.claude/skills"
 AGENTS_SKILLS_DIR="$HOME/.agents/skills"
 AMP_CONFIG_DIR="${AMP_CONFIG_DIR:-$HOME/.config/amp}"
 LOCAL_BIN="$HOME/.local/bin"
+LOCAL_SHARE="$HOME/.local/share"
 
 mkdir -p "$CLAUDE_SKILLS_DIR" "$AGENTS_SKILLS_DIR" "$LOCAL_BIN"
 
@@ -497,6 +498,26 @@ sync_amp_artifacts() {
 	echo ""
 }
 
+# --- Local runtime artifacts (~/.local/share) ---
+
+sync_local_runtime_artifacts() {
+	local source_dir target_dir
+	source_dir="$AMP_DIR/local-claude-cliproxy"
+	[ -d "$source_dir" ] || return 0
+
+	target_dir="$LOCAL_SHARE/amp-cliproxy"
+	mkdir -p "$target_dir"
+	rsync -a \
+		--exclude 'auth/' \
+		--exclude 'api-key.txt' \
+		--exclude 'config.yaml' \
+		"$source_dir/" "$target_dir/"
+	chmod +x "$target_dir/ensure-runtime.sh"
+	"$target_dir/ensure-runtime.sh" "$target_dir"
+	echo "synced: amp/local-claude-cliproxy/ -> $target_dir"
+	echo ""
+}
+
 # --- Skills ---
 
 remove_stale_skill_links() {
@@ -549,6 +570,7 @@ fi
 
 ensure_skill_dependencies
 sync_amp_artifacts
+sync_local_runtime_artifacts
 
 for target in "$CLAUDE_SKILLS_DIR" "$AGENTS_SKILLS_DIR"; do
 	remove_stale_skill_links "$target"

@@ -52,6 +52,7 @@ All active documents use `amp-artifact/v2`, which supports skills, local CLIs, a
 
 ### Commands
 
+- [Local Claude CLIProxyAPI Runtime](./local-claude-cliproxy.md)
 - [Logseq: Log Current Task Command](./logseq-log-current-task-command.md)
 - [Track Event](./track-event.md)
 
