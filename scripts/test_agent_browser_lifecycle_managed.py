@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import dataclasses
 import importlib.machinery
 import importlib.util
 import json
@@ -629,9 +630,9 @@ class ManagedLifecycleTest(unittest.TestCase):
             self.lifecycle.reject_dangerous_inherited_env()
 
     def test_exec_argv_allows_real_native_commands_and_rejects_reserved_flags(self) -> None:
-        for argv in (["open", "https://example.com"], ["screenshot", "--screenshot-format", "jpeg"], ["wait", "--text", "Ready"], ["press", "Enter"], ["scroll", "down", "300", "--selector", "main"], ["tab", "new", "--label", "docs", "https://example.com"], ["auth", "login", "github", "--credential-provider", "onepassword", "--item", "GitHub"], ["eval", "() => '--cdp is just text'"], ["fill", "#notes", "batch script --cdp text"]):
+        for argv in (["open", "https://example.com"], ["screenshot", "--screenshot-format", "jpeg"], ["wait", "--text", "Ready"], ["press", "Enter"], ["scroll", "down", "300", "--selector", "main"], ["tab", "new", "--label", "docs", "https://example.com"], ["auth", "login", "github", "--credential-provider", "onepassword", "--item", "GitHub"], ["eval", "() => '--cdp is just text'"], ["fill", "#notes", "batch script --cdp text"], ["set", "viewport", "390", "844"], ["set", "viewport", "1280", "800"], ["set", "viewport", "320", "568"], ["set", "viewport", "844", "390"], ["set", "media", "light"], ["set", "media", "dark"]):
             self.lifecycle.validate_exec_argv(argv)
-        for argv, message in [(["open", "--cdp", "http://127.0.0.1:1", "https://example.com"], "--cdp"), (["auth", "login", "github", "--provider", "onepassword"], "--provider"), (["--engine", "lightpanda", "open", "https://example.com"], "--engine"), (["batch", "--json"], "batch")]:
+        for argv, message in [(["open", "--cdp", "http://127.0.0.1:1", "https://example.com"], "--cdp"), (["auth", "login", "github", "--provider", "onepassword"], "--provider"), (["--engine", "lightpanda", "open", "https://example.com"], "--engine"), (["batch", "--json"], "batch"), (["set", "device", "iPhone 14"], "set"), (["set", "viewport", "0", "844"], "viewport"), (["set", "viewport", "390", "-1"], "viewport"), (["set", "viewport", "10000", "844"], "viewport"), (["set", "viewport", "390", "844", "2"], "set viewport"), (["set", "viewport", "390", "844", "--cdp"], "set viewport"), (["set", "media", "reduced-motion"], "media"), (["set", "media", "dark", "reduced-motion"], "set media"), (["set", "media", "--cdp"], "media")]:
             with self.assertRaisesRegex(self.lifecycle.LifecycleError, message):
                 self.lifecycle.validate_exec_argv(argv)
 
@@ -768,6 +769,40 @@ class ManagedLifecycleTest(unittest.TestCase):
         with mock.patch.object(self.lifecycle, "lsof_any_listener_pids", return_value=set()), mock.patch.object(self.lifecycle, "daemon_socket_pending_reason", return_value=None):
             reasons = self.lifecycle.managed_closure_pending_reasons(session)
         self.assertIn("profile identity no longer matches", reasons)
+
+    def test_boot_clock_adjustment_preserves_process_identity_but_not_pid_reuse(self) -> None:
+        prepared = self.ready_session()
+        session = self.live_session(prepared.session_id)
+        saved = session["roles"]["chrome"]["birth_identity"]
+        for delta in (-1000000, 1000000):
+            current = self.lifecycle.ProcessBirthIdentityRecord(
+                boot=self.lifecycle.BootIdentityRecord(
+                    session_uuid=saved["boot"]["session_uuid"],
+                    boot_time_us=saved["boot"]["boot_time_us"] + delta,
+                ),
+                pid=saved["pid"], start_time_us=saved["start_time_us"],
+            )
+            with self.subTest(delta=delta), \
+                 mock.patch.object(self.lifecycle, "process_birth_identity_record", return_value=current), \
+                 mock.patch.object(self.lifecycle, "optional_process_birth_identity_record", return_value=current):
+                self.lifecycle.verify_managed_birth(session, "chrome")
+                self.assertEqual("chrome process is still running", self.lifecycle.recorded_process_status(saved, "chrome"))
+                reused = dataclasses.replace(current, start_time_us=current.start_time_us + 1)
+                with mock.patch.object(self.lifecycle, "optional_process_birth_identity_record", return_value=reused):
+                    self.assertEqual("chrome PID was reused or identity changed", self.lifecycle.recorded_process_status(saved, "chrome"))
+
+    def test_boot_match_requires_uuid_or_exact_uuid_absent_fallback(self) -> None:
+        boot = self.lifecycle.BootIdentityRecord
+        cases = [
+            ({"session_uuid": "a", "boot_time_us": 100}, boot("a", 200), True),
+            ({"session_uuid": "a", "boot_time_us": 100}, boot("b", 100), False),
+            ({"session_uuid": None, "boot_time_us": 100}, boot(None, 100), True),
+            ({"session_uuid": None, "boot_time_us": 100}, boot(None, 101), False),
+            ({"session_uuid": "a", "boot_time_us": 100}, boot(None, 100), False),
+        ]
+        for saved, current, expected in cases:
+            with self.subTest(saved=saved, current=current):
+                self.assertEqual(expected, self.lifecycle.same_boot(saved, current))
 
     def test_missing_identity_before_release_is_noop_but_after_release_is_pending(self) -> None:
         prepared = self.prepare()
