@@ -133,7 +133,7 @@ class AgentSecretPolicyValidationTests(unittest.TestCase):
                 "audience": "agent",
                 "owner": "lelouvincx/smartclass",
                 "variables": ["COHERE_API_KEY"],
-                "compatibleBundles": [],
+                "compatibleBundles": ["openrouter"],
                 "allowedCommandClasses": ["smartclass-wrangler-dev"],
             },
             manifest["bundles"]["smartclass-cohere"],
@@ -143,8 +143,11 @@ class AgentSecretPolicyValidationTests(unittest.TestCase):
                 "audience": "agent",
                 "owner": "lelouvincx/smartclass",
                 "variables": ["OPENROUTER_API_KEY"],
-                "compatibleBundles": [],
-                "allowedCommandClasses": ["smartclass-openrouter-poc"],
+                "compatibleBundles": ["smartclass-cohere"],
+                "allowedCommandClasses": [
+                    "smartclass-openrouter-poc",
+                    "smartclass-wrangler-dev",
+                ],
             },
             manifest["bundles"]["openrouter"],
         )

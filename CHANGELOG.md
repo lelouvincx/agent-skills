@@ -73,6 +73,7 @@ and this project does not currently use versioned releases.
 
 ### Changed
 
+- Allow SmartClass's Cohere and OpenRouter provider bundles to run together through the local Wrangler wrapper. [#236](https://github.com/lelouvincx/agent-skills/pull/236)
 - Add a source-controlled Local Claude CLIProxyAPI runtime, command capability docs, and a safe projection to `~/.local/share/amp-cliproxy`. [#235](https://github.com/lelouvincx/agent-skills/pull/235)
 - Fix managed Agent Browser shutdown to reconnect to the approved CDP endpoint before reporting cleanup complete. [#234](https://github.com/lelouvincx/agent-skills/pull/234)
 - Keep `agent-secrets` and managed Amp runner hot paths unattended by removing interactive fallback, moving broad service-account vault checks to `doctor`, adding end-to-end good-outcome tests, and adding `agent-bot-pr` for fast bot commits, PRs, changelog updates and check polling. [#233](https://github.com/lelouvincx/agent-skills/pull/233)
