@@ -786,16 +786,34 @@ class SmartClassWranglerWrapperTests(unittest.TestCase):
         )
 
     def test_probe_reports_presence_without_printing_the_value(self):
-        secret_name = "COHERE" + "_API_KEY"
+        cohere_secret = "COHERE" + "_API_KEY"
+        openrouter_secret = "OPENROUTER" + "_API_KEY"
+        result = self.run_wrapper(
+            "probe",
+            {
+                cohere_secret: "cohere-placeholder-value",
+                openrouter_secret: "openrouter-placeholder-value",
+            },
+        )
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual(
+            "COHERE_API_KEY is present\nOPENROUTER_API_KEY is present\n",
+            result.stdout,
+        )
+        self.assertNotIn("cohere-placeholder-value", result.stdout + result.stderr)
+        self.assertNotIn("openrouter-placeholder-value", result.stdout + result.stderr)
+
+    def test_probe_accepts_openrouter_without_cohere(self):
+        secret_name = "OPENROUTER" + "_API_KEY"
         result = self.run_wrapper("probe", {secret_name: "placeholder-value"})
         self.assertEqual(0, result.returncode, result.stderr)
-        self.assertEqual("COHERE_API_KEY is present\n", result.stdout)
+        self.assertEqual("OPENROUTER_API_KEY is present\n", result.stdout)
         self.assertNotIn("placeholder-value", result.stdout + result.stderr)
 
     def test_wrapper_rejects_missing_secret_and_unapproved_modes(self):
         missing = self.run_wrapper("probe")
         self.assertNotEqual(0, missing.returncode)
-        self.assertIn("COHERE_API_KEY is unavailable", missing.stderr)
+        self.assertIn("no approved SmartClass provider secret", missing.stderr)
 
         secret_name = "COHERE" + "_API_KEY"
         unapproved = self.run_wrapper("deploy", {secret_name: "placeholder-value"})
@@ -804,13 +822,15 @@ class SmartClassWranglerWrapperTests(unittest.TestCase):
         self.assertNotIn("placeholder-value", unapproved.stdout + unapproved.stderr)
 
     def test_dev_executes_only_local_wrangler_with_a_minimal_environment(self):
-        secret_name = "COHERE" + "_API_KEY"
+        cohere_secret = "COHERE" + "_API_KEY"
+        openrouter_secret = "OPENROUTER" + "_API_KEY"
         inherited = {
             "HOME": "/tmp/untrusted-home",
             "PATH": "/tmp/untrusted-bin",
             "UNRELATED": "drop-me",
             "GH_TOKEN": "drop-me-too",
-            secret_name: "placeholder-value",
+            cohere_secret: "cohere-placeholder-value",
+            openrouter_secret: "openrouter-placeholder-value",
         }
         with (
             mock.patch.object(sys, "argv", [str(SMARTCLASS_WRAPPER), "dev"]),
@@ -844,7 +864,8 @@ class SmartClassWranglerWrapperTests(unittest.TestCase):
                     f"{SMARTCLASS_RUNTIME['NODE_DIRECTORY']}:"
                     "/opt/homebrew/bin:/usr/bin:/bin"
                 ),
-                secret_name: "placeholder-value",
+                cohere_secret: "cohere-placeholder-value",
+                openrouter_secret: "openrouter-placeholder-value",
                 "CLOUDFLARE_INCLUDE_PROCESS_ENV": "true",
             },
             environment,
