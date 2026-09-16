@@ -16,6 +16,12 @@ Use managed commands for routine macOS work. Set `$thread` to the current actual
 
    Use `--headed` when needed. Continue only after startup reports ready; save its returned `session_id` as `$session`. The lifecycle controller supplies the private profile, saved config, daemon identity and loopback endpoint. Use these saved identities rather than overriding flags or launching a browser directly.
 
+   For headed human sign-in, use a named persistent profile from the start:
+
+   ```bash
+   agent-browser-lifecycle start --owner-thread-id "$thread" --workspace "$PWD" --headed --profile-name <site-or-task>
+   ```
+
 2. **Open your own tab and save its identity.**
 
    ```bash
@@ -47,11 +53,16 @@ For supported commands and startup checks, consult the [CLI reference](README.md
 
 Add `--profile-name upwork` to retain login between sessions. Keep the same approved name and state directory. Ephemeral profiles remain the default.
 
-1. Start with `--profile-name upwork --headed`. Pause automation for human login, then verify the destination and account.
-2. Have children detach, then `stop` as the owner. Continue only when the result is `closed`.
-3. Start with the same profile name, without `--headed`. Save the new session and tab IDs; verify the account before research.
+When headed Chrome is needed for human sign-in, choose the named profile before opening Chrome. Do not ask the human to sign in to an ephemeral headed session, then recover or reopen and make them sign in again.
 
-If headless access is challenged, repeat steps 2–3 with `--headed` for human verification. Saved login does not guarantee headless acceptance. Do not bypass anti-bot checks.
+1. Check for an existing active headed session for this thread and profile with `show`. If one exists, continue in that session and save its current tab IDs instead of starting a replacement.
+2. If no active session exists, start with `--profile-name upwork --headed`. Pause automation for human login, then verify the destination and account.
+3. Keep the headed session under agent control. Chinh gives browser instructions in the thread; the agent performs navigation, click, fill, snapshot and other page actions through the saved session and tab IDs. Pause only for truly human-only steps such as password manager, Touch ID, OTP or passkey input, then resume control after confirmation.
+4. Continue using that active headed session for headed-only work. Do not stop and reopen it merely to refresh tabs or because a previous browser command failed; follow [recovery](#recovery-and-retired-files) only when the lifecycle controller requires it.
+5. To switch back to headless, have children detach, then `stop` as the owner. Continue only when the result is `closed`.
+6. Start with the same profile name, without `--headed`. Save the new session and tab IDs; verify the account before research.
+
+If headless access is challenged, repeat the verified close and headed start with the same named profile for human verification. Saved login does not guarantee headless acceptance. Do not bypass anti-bot checks.
 
 Reuse requires verified closure and matching directory identity. Active claims, unsafe directories and Chromium locks block launch. Leave locks intact for human investigation.
 

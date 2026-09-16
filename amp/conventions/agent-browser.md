@@ -3,7 +3,7 @@
 Use the `agent-browser` skill for page commands and the rules below for local policy.
 
 - Testing: use browser-free fixtures. No Chrome tests or silent Chromium substitutes. Ask the human for an alternative when live validation is necessary; distinguish mock coverage from live coverage.
-- Launch mode: headless by default; headed is pre-approved when needed. Changing mode requires verified closure and a new session. To retain login, use the same [named persistent profile](../agent-browser-lifecycle/reference.md#persistent-profiles).
+- Launch mode: headless by default; headed is pre-approved when needed. For headed Chrome, choose a named persistent profile before launch, reuse the active headed session, and keep the page agent-controlled through thread commands. Pause only for truly human-only steps such as password manager, Touch ID, OTP or passkey input. Do not reopen Chrome unless no active session exists or verified closure is required. Changing mode requires verified closure and a new session. To retain login, use the same [named persistent profile](../agent-browser-lifecycle/reference.md#persistent-profiles).
 
 ## Managed macOS workflow
 
