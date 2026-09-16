@@ -74,6 +74,7 @@ and this project does not currently use versioned releases.
 
 ### Changed
 
+- Clarify headed Agent Browser lifecycle guidance to reuse persistent-profile headed sessions without reopening loops while preserving agent control. [#238](https://github.com/lelouvincx/agent-skills/pull/238)
 - Allow SmartClass's Cohere and OpenRouter provider bundles to run together through the local Wrangler wrapper. [#236](https://github.com/lelouvincx/agent-skills/pull/236)
 - Add a source-controlled Local Claude CLIProxyAPI runtime, command capability docs, and a safe projection to `~/.local/share/amp-cliproxy`. [#235](https://github.com/lelouvincx/agent-skills/pull/235)
 - Fix managed Agent Browser shutdown to reconnect to the approved CDP endpoint before reporting cleanup complete. [#234](https://github.com/lelouvincx/agent-skills/pull/234)
