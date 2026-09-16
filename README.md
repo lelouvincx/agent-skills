@@ -105,6 +105,7 @@ Local skills are maintained in this repository. Remote skills are fetched and pr
 | [build-dashboard-controls](skills/build-dashboard-controls/SKILL.md) | Remote | add filters, date drills, and comparisons to Holistics dashboards |
 | [build-dashboard-theme](skills/build-dashboard-theme/SKILL.md) | Remote | create and apply Holistics dashboard themes |
 | [build-visualizations](skills/build-visualizations/SKILL.md) | Remote | author Holistics dashboard visualizations and dynamic content |
+| [clear-writing](skills/clear-writing/SKILL.md) | Local | write clear prose, technical documentation, customer-facing messages, and agent-facing instructions |
 | [collaborating-with-claude-design](skills/collaborating-with-claude-design/SKILL.md) | Local | coordinate Claude Design creation, browser verification, and evidence-based iteration |
 | [convert-agent-skill-to-holistics](skills/convert-agent-skill-to-holistics/SKILL.md) | Remote | convert skills between Agent Skills and Holistics AML formats |
 | [create-holistics-skill](skills/create-holistics-skill/SKILL.md) | Remote | author and refine Holistics AML skills |
@@ -115,7 +116,7 @@ Local skills are maintained in this repository. Remote skills are fetched and pr
 | [domain-modeling](skills/domain-modeling/SKILL.md) | Remote | define domain terms, context, and architectural decisions |
 | [email](skills/email/SKILL.md) | Local | read, send, and organize personal and bot email through `gog` |
 | [figma-design-to-code](skills/figma-design-to-code/SKILL.md) | Remote | inspect Figma designs and implement them as code |
-| [govuk-style](skills/govuk-style/SKILL.md) | Local | write clear prose, technical documentation, customer-facing messages, and agent-facing instructions |
+| [govuk-style](skills/govuk-style/SKILL.md) | Local | compatibility alias for `clear-writing` |
 | [grill-me](skills/grill-me/SKILL.md) | Remote | sharpen a plan or design through a focused interview |
 | [grill-with-docs](skills/grill-with-docs/SKILL.md) | Remote | sharpen a plan while recording decisions and domain terms |
 | [grilling](skills/grilling/SKILL.md) | Remote | stress-test a plan or design through questions |

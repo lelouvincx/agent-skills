@@ -1,13 +1,13 @@
-# govuk-style tests
+# clear-writing tests
 
-Use these fixtures to check whether the merged `govuk-style` skill routes writing tasks to the right mode and preserves the behaviour formerly split across `govuk-style`, `technical-precision` and `writing-for-agents`.
+Use these fixtures to check whether the merged `clear-writing` skill routes writing tasks to the right mode and preserves the behaviour formerly split across `govuk-style`, `technical-precision` and `writing-for-agents`.
 
 ## Run prompt
 
 Paste one fixture into a fresh agent turn with this prompt:
 
 ```text
-Use /govuk-style on this fixture.
+Use /clear-writing on this fixture.
 
 Return:
 1. the selected writing mode and a one-sentence diagnosis

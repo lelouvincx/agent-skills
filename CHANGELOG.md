@@ -7,6 +7,10 @@ and this project does not currently use versioned releases.
 
 ## [Unreleased]
 
+### Changed
+
+- Rename `govuk-style` to `clear-writing` while keeping `govuk-style` as a compatibility alias. [#239](https://github.com/lelouvincx/agent-skills/pull/239)
+
 ### Added
 
 - Add Claude Fable 5.1 and Claude Opus 4.6 Amp agent modes that extend high mode and override only the model. [#237](https://github.com/lelouvincx/agent-skills/pull/237)

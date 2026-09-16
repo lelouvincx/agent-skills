@@ -11,7 +11,7 @@ The leading word is evidence spine. Use it as the spine of every rewrite and pru
 
 ## Process
 
-1. Check the document shape. Use this skill when the document explains what happened and what should change. Use `govuk-style` instead for customer replies, Slack updates, guidance and answer-first status notes. Done when the document goal is clear.
+1. Check the document shape. Use this skill when the document explains what happened and what should change. Use `clear-writing` instead for customer replies, Slack updates, guidance and answer-first status notes. Done when the document goal is clear.
 2. Build the evidence spine. Put the sections in this order:
    - trigger
    - problem statement
@@ -29,7 +29,7 @@ The leading word is evidence spine. Use it as the spine of every rewrite and pru
    - validation or next step: how we know the change works, what to monitor or what remains open
    Done when each fact has exactly one home.
 4. Prune the document. Delete repeated root causes, duplicated sections and long SQL, log or runbook detail unless the reader needs them to decide. Link to supporting detail when a short finding is enough. Done when each meaning has one source of truth.
-5. Polish the prose. Use `govuk-style` for plain English without changing the evidence-first order. Done when the document is clear, short and still evidence-first.
+5. Polish the prose. Use `clear-writing` for plain English without changing the evidence-first order. Done when the document is clear, short and still evidence-first.
 
 ## Answer-first exception
 
@@ -46,4 +46,4 @@ Replace this with the evidence spine from the process.
 
 ## Extra pruning trigger
 
-If the document still feels long or repetitive after the process, load `govuk-style` and apply its agent-facing duplication, no-op and sprawl checks.
+If the document still feels long or repetitive after the process, load `clear-writing` and apply its agent-facing duplication, no-op and sprawl checks.
