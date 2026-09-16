@@ -4,9 +4,9 @@
 
 ## Working style
 
-- When Chinh's response shows that an explanation did not land, load `govuk-style` and use its technical explanation mode.
+- When Chinh's response shows that an explanation did not land, load `clear-writing` and use its technical explanation mode.
 - For plans, separate the actions for the agent and Chinh, then state the expected outcome.
-- Before drafting text that Chinh will send to someone else, including Slack messages and emails, load `govuk-style`.
+- Before drafting text that Chinh will send to someone else, including Slack messages and emails, load `clear-writing`.
 - Store screenshots, recordings, and other visual artifacts under `.amp/in/artifacts/`.
 - When creating a subdirectory under `.amp/in/artifacts/`, add a `.thread-metadata` file in that subdirectory containing the current Amp thread ID.
 - When Chinh asks to create an Amp runner for a directory path, run `amp-runner install --workdir <path> macbook.<directory-basename>` and verify it is running with `amp-runner status macbook.<directory-basename>`.
