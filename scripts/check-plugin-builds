@@ -39,6 +39,7 @@ trap 'rm -rf "$out_dir"' EXIT
 	bun test amp/scripts/git-diff-mcp.test.ts
 	bun test amp/scripts/github-thread-events.test.ts
 	bun test amp/scripts/logseq-manual-log.test.ts
+	bun test amp/scripts/rtk-rewrite.test.ts
 )
 
 echo "Amp plugin build check passed (${#plugins[@]} plugins)"
