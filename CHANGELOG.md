@@ -9,6 +9,7 @@ and this project does not currently use versioned releases.
 
 ### Changed
 
+- Route the local Claude CLIProxyAPI mapping from Claude Opus 4.7 to Claude Opus 4.6 while keeping Fable 5.1 and Opus 5 documented. [#241](https://github.com/lelouvincx/agent-skills/pull/241)
 - Rename `govuk-style` to `clear-writing` while keeping `govuk-style` as a compatibility alias. [#239](https://github.com/lelouvincx/agent-skills/pull/239)
 
 ### Added
