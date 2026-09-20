@@ -74,6 +74,7 @@ skills:
       - guides/forms/custom-select-picker-layouts.md
       - guides/forms/form-fields-automatically-fit-contents.md
       - guides/forms/forms.md
+      - guides/forms/ime-safe-enter-submit.md
       - guides/forms/required-field-feedback.md
       - guides/forms/rich-media-picker.md
       - guides/forms/select-menu-interaction.md
@@ -161,6 +162,9 @@ skills:
       - guides/ui-components/navigation-drawer.md
       - guides/ui-components/persistent-app-tours.md
       - guides/ui-components/persistent-toast-notifications.md
+      - guides/ui-components/progress-ring.md
+      - guides/ui-components/scrollspy.md
+      - guides/ui-components/spinner.md
       - guides/ui-components/stack-drill-down.md
       - guides/visual-design/adapt-scrollbar-to-contrast-preferences.md
       - guides/visual-design/apply-webgl-shaders.md
