@@ -63,6 +63,7 @@ class AgentSecretPolicyValidationTests(unittest.TestCase):
         policy = self.read_identity_policy()
         self.assertEqual(
             [
+                "lelouvincx-bot/smartclass",
                 "lelouvincx/agent-skills",
                 "lelouvincx/dotfiles",
                 "lelouvincx/lms-leitner-material",

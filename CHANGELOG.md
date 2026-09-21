@@ -9,6 +9,7 @@ and this project does not currently use versioned releases.
 
 ### Changed
 
+- Allow audited bot-owned repositories in the shared bot access policy, including the SmartClass bot-owned repository. [#243](https://github.com/lelouvincx/agent-skills/pull/243)
 - Align the `modern-web-guidance` companion manifest with upstream v0.0.189. [#242](https://github.com/lelouvincx/agent-skills/pull/242)
 - Route the local Claude CLIProxyAPI mapping from Claude Opus 4.7 to Claude Opus 4.6 while keeping Fable 5.1 and Opus 5 documented. [#241](https://github.com/lelouvincx/agent-skills/pull/241)
 - Rename `govuk-style` to `clear-writing` while keeping `govuk-style` as a compatibility alias. [#239](https://github.com/lelouvincx/agent-skills/pull/239)

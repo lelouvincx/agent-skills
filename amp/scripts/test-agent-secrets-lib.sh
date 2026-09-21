@@ -58,7 +58,7 @@ mkdir "$SNAPSHOT_REPO"
 grep -Eq '^[[:xdigit:]]{64}[[:space:]]+\-\.png$' "$TMP_DIR/snapshot.manifest"
 grep -Eq '^[[:xdigit:]]{64}[[:space:]]+\-\-sample\.jpg$' "$TMP_DIR/snapshot.manifest"
 
-EXPECTED_REPOSITORIES=$'lelouvincx/agent-skills\nlelouvincx/dotfiles\nlelouvincx/lms-leitner-material\nlelouvincx/nvim\nlelouvincx/second-brain-logseq\nlelouvincx/smartclass'
+EXPECTED_REPOSITORIES=$'lelouvincx-bot/smartclass\nlelouvincx/agent-skills\nlelouvincx/dotfiles\nlelouvincx/lms-leitner-material\nlelouvincx/nvim\nlelouvincx/second-brain-logseq\nlelouvincx/smartclass'
 AGENT_BOT_GITHUB_LOGIN=lelouvincx-bot
 [[ "$(agent_bot_repository_allowlist)" == "$EXPECTED_REPOSITORIES" ]]
 
