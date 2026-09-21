@@ -3,6 +3,7 @@
   "identities": {
     "lelouvincx-bot": {
       "repositoryAllowlist": [
+        "lelouvincx-bot/smartclass",
         "lelouvincx/agent-skills",
         "lelouvincx/dotfiles",
         "lelouvincx/lms-leitner-material",

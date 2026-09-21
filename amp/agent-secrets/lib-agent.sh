@@ -587,7 +587,7 @@ PY
 			return 1
 		fi
 		admin=$(agent_gh "$token" api "repos/$accessible_repository" --jq '.permissions.admin // false' 2>/dev/null) || return 1
-		if [[ "$push" != "true" || "$admin" != "false" ]]; then
+		if [[ "$push" != "true" || ( "$admin" != "false" && "$accessible_repository" != "$AGENT_BOT_GITHUB_LOGIN/"* ) ]]; then
 			echo "ERROR: Bot must have write access, but not admin access, to $accessible_repository" >&2
 			return 1
 		fi
