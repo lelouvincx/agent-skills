@@ -58,7 +58,7 @@ amp config model-providers add-router custom-url \
   --api-format anthropic-messages \
   --base-url 'https://your-public-url.example' \
   --api-key-file "$HOME/.local/share/amp-cliproxy/api-key.txt" \
-  --model-mapping 'anthropic/claude-opus-4-6 -> claude-opus-4-6,anthropic/claude-fable-5-1 -> claude-fable-5-1,anthropic/claude-opus-5 -> claude-opus-5'
+  --model-mapping 'anthropic/claude-opus-4-7 -> claude-opus-4-7,anthropic/claude-fable-5-1 -> claude-fable-5-1,anthropic/claude-opus-5 -> claude-opus-5'
 ```
 
 Verify each mapped model:
@@ -66,7 +66,7 @@ Verify each mapped model:
 ```bash
 amp config model-providers test <provider-id>
 amp config model-providers check-access --provider-model anthropic/claude-fable-5-1 --thread <thread-url>
-amp config model-providers check-access --provider-model anthropic/claude-opus-4-6 --thread <thread-url>
+amp config model-providers check-access --provider-model anthropic/claude-opus-4-7 --thread <thread-url>
 amp config model-providers check-access --provider-model anthropic/claude-opus-5 --thread <thread-url>
 ```
 
