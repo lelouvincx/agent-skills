@@ -161,6 +161,62 @@ class ReadAITest(unittest.TestCase):
                 {"fields": [{"id": "credential", "type": "STRING", "value": "x"}]}
             )
 
+    def test_keychain_load_reads_stored_credentials(self):
+        with mock.patch.object(
+            readai.subprocess,
+            "run",
+            return_value=command_result(json.dumps(valid_credentials()) + "\n"),
+        ) as run:
+            credentials = readai.MacOSKeychainStore().load()
+        self.assertEqual("refresh", credentials["refresh_token"])
+        self.assertEqual("find-generic-password", run.call_args.args[0][1])
+
+    def test_keychain_save_updates_stored_credentials(self):
+        with mock.patch.object(
+            readai.subprocess, "run", return_value=command_result("")
+        ) as run:
+            readai.MacOSKeychainStore().save(valid_credentials(refresh_token="rotated"))
+        arguments = run.call_args.args[0]
+        self.assertEqual("add-generic-password", arguments[1])
+        self.assertIn("-U", arguments)
+
+    def test_credential_store_falls_back_to_onepassword_reads(self):
+        store = readai.CredentialStore.__new__(readai.CredentialStore)
+        store.primary = mock.Mock(
+            load=mock.Mock(side_effect=readai.AuthenticationError("missing"))
+        )
+        store.fallback = FakeStore(valid_credentials(refresh_token="legacy"))
+        self.assertEqual("legacy", store.load()["refresh_token"])
+
+    def test_credential_store_writes_only_to_keychain(self):
+        store = readai.CredentialStore.__new__(readai.CredentialStore)
+        store.primary = mock.Mock()
+        store.fallback = mock.Mock()
+        credentials = valid_credentials(refresh_token="rotated")
+        store.save(credentials)
+        store.primary.save.assert_called_once_with(credentials)
+        store.fallback.save.assert_not_called()
+
+    def test_onepassword_service_account_mode_reads_bootstrap_token(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            token_path = Path(temporary_directory) / "token"
+            token_path.write_text("service-token\n")
+            with (
+                mock.patch.object(readai, "SERVICE_ACCOUNT_TOKEN_PATH", token_path),
+                mock.patch.dict(
+                    os.environ,
+                    {"AGENT_SECRET_AUTH": readai.SERVICE_ACCOUNT_AUTH},
+                    clear=True,
+                ),
+                mock.patch.object(
+                    readai.subprocess, "run", return_value=command_result("[]")
+                ) as run,
+            ):
+                readai.OnePasswordStore()._find_item_id()
+            self.assertEqual(
+                "service-token", run.call_args.kwargs["env"]["OP_SERVICE_ACCOUNT_TOKEN"]
+            )
+
     def test_onepassword_ignores_a_label_only_credential_field(self):
         field = readai.OnePasswordStore._credential_field(
             {
@@ -278,6 +334,7 @@ class ReadAITest(unittest.TestCase):
             mock.patch.object(
                 readai, "wait_for_authorization", return_value="authorization-code"
             ) as wait,
+            mock.patch.dict(os.environ, {}, clear=True),
             mock.patch("builtins.print"),
         ):
             readai.authenticate(store, http)
@@ -307,10 +364,36 @@ class ReadAITest(unittest.TestCase):
             mock.patch.object(
                 readai, "wait_for_authorization", side_effect=KeyboardInterrupt
             ),
+            mock.patch.dict(os.environ, {}, clear=True),
             self.assertRaises(KeyboardInterrupt),
         ):
             readai.authenticate(store, http)
         self.assertEqual([], store.saved)
+
+    def test_auth_can_save_outside_onepassword_in_service_account_mode(self):
+        store = FakeStore(None)
+        http = FakeHTTP(
+            [
+                {"client_id": "client", "scope": readai.SCOPES},
+                token_response(),
+            ]
+        )
+        callback = mock.MagicMock()
+        callback.__enter__.return_value = (mock.Mock(), REDIRECT_URI)
+        with (
+            mock.patch.dict(
+                os.environ,
+                {"AGENT_SECRET_AUTH": readai.SERVICE_ACCOUNT_AUTH},
+                clear=True,
+            ),
+            mock.patch.object(readai, "oauth_callback_server", return_value=callback),
+            mock.patch.object(
+                readai, "wait_for_authorization", return_value="authorization-code"
+            ),
+            mock.patch("builtins.print"),
+        ):
+            readai.authenticate(store, http)
+        self.assertEqual("new-refresh", store.saved[-1]["refresh_token"])
 
     def test_meetings_paginates_with_last_meeting_id(self):
         http = FakeHTTP(
@@ -396,6 +479,14 @@ class ReadAITest(unittest.TestCase):
             "Bearer new-access", http.requests[1][2]["headers"]["Authorization"]
         )
 
+    def test_invalid_refresh_token_requires_reauthentication(self):
+        client = readai.ReadAIClient(
+            FakeStore(valid_credentials(expires_at=0)),
+            FakeHTTP([readai.HTTPFailure(400, error="invalid_grant")]),
+        )
+        with self.assertRaisesRegex(readai.AuthenticationError, "expired or was revoked"):
+            client.meetings(since_ms=None, until_ms=None, limit=1)
+
     def test_unauthorized_request_refreshes_once_and_retries(self):
         store = FakeStore(valid_credentials())
         http = FakeHTTP(
@@ -473,7 +564,7 @@ class ReadAITest(unittest.TestCase):
     def test_cli_returns_distinct_unavailable_status(self):
         with (
             mock.patch.object(
-                readai, "OnePasswordStore", return_value=FakeStore(valid_credentials())
+                readai, "CredentialStore", return_value=FakeStore(valid_credentials())
             ),
             mock.patch.object(
                 readai, "HTTPClient", return_value=FakeHTTP([{"id": ULID}])

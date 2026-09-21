@@ -9,6 +9,7 @@ and this project does not currently use versioned releases.
 
 ### Changed
 
+- Store readai OAuth credentials in macOS Keychain while keeping 1Password as the default vault for other secrets. [#245](https://github.com/lelouvincx/agent-skills/pull/245)
 - Allow audited bot-owned repositories in the shared bot access policy, including the SmartClass bot-owned repository. [#243](https://github.com/lelouvincx/agent-skills/pull/243)
 - Align the `modern-web-guidance` companion manifest with upstream v0.0.189. [#242](https://github.com/lelouvincx/agent-skills/pull/242)
 - Route the local Claude CLIProxyAPI mapping from Claude Opus 4.7 to Claude Opus 4.6 while keeping Fable 5.1 and Opus 5 documented. [#241](https://github.com/lelouvincx/agent-skills/pull/241)

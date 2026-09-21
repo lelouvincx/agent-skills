@@ -8,6 +8,7 @@ import base64
 import contextlib
 import datetime as dt
 import fcntl
+import getpass
 import hashlib
 import http.server
 import json
@@ -45,6 +46,10 @@ SCOPES = " ".join(sorted(EXPECTED_SCOPES))
 ITEM_TITLE = "Read AI CLI"
 ITEM_VAULT = "Agent Secrets"
 OP_ACCOUNT = "my.1password.com"
+SERVICE_ACCOUNT_AUTH = "service-account"
+SERVICE_ACCOUNT_TOKEN_PATH = Path.home() / ".local/share/agent-secrets/op-service-account-token"
+KEYCHAIN_SERVICE = "readai-cli"
+KEYCHAIN_ACCOUNT = getpass.getuser()
 ULID_PATTERN = re.compile(r"^[0-9A-HJKMNP-TV-Z]{26}$", re.IGNORECASE)
 ALLOWED_MEETING_HOSTS = frozenset({"app.read.ai", "read.ai", "www.read.ai"})
 TIMEOUT_SECONDS = 30
@@ -63,9 +68,12 @@ class TranscriptUnavailable(ReadAIError):
 
 
 class HTTPFailure(ReadAIError):
-    def __init__(self, status: int, retry_after: str | None = None):
+    def __init__(
+        self, status: int, retry_after: str | None = None, error: str | None = None
+    ):
         self.status = status
         self.retry_after = retry_after
+        self.error = error
         super().__init__(f"Read AI returned HTTP {status}")
 
 
@@ -99,7 +107,11 @@ class HTTPClient:
             with urllib.request.urlopen(request, timeout=TIMEOUT_SECONDS) as response:
                 payload = json.load(response)
         except urllib.error.HTTPError as error:
-            raise HTTPFailure(error.code, error.headers.get("Retry-After")) from None
+            raise HTTPFailure(
+                error.code,
+                error.headers.get("Retry-After"),
+                response_error(error),
+            ) from None
         except urllib.error.URLError as error:
             raise ReadAIError(f"cannot reach Read AI: {error.reason}") from None
         except (json.JSONDecodeError, UnicodeDecodeError):
@@ -110,7 +122,108 @@ class HTTPClient:
         return payload
 
 
+def response_error(error: urllib.error.HTTPError) -> str | None:
+    try:
+        payload = json.loads(error.read().decode("utf-8"))
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        return None
+    value = payload.get("error") if isinstance(payload, dict) else None
+    return value if isinstance(value, str) else None
+
+
+def parse_stored_credentials(value: str, source: str) -> dict[str, Any]:
+    try:
+        credentials = json.loads(value)
+    except (TypeError, json.JSONDecodeError):
+        raise AuthenticationError(f"the Read AI credential in {source} is invalid") from None
+    if not isinstance(credentials, dict) or credentials.get("version") != 1:
+        raise AuthenticationError(
+            f"the Read AI credential in {source} has an unsupported format"
+        )
+    return credentials
+
+
+class MacOSKeychainStore:
+    def _run(self, arguments: list[str]) -> subprocess.CompletedProcess[str]:
+        try:
+            return subprocess.run(
+                ["security", *arguments],
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+        except FileNotFoundError:
+            raise AuthenticationError("macOS Keychain CLI is not installed") from None
+
+    def load(self) -> dict[str, Any]:
+        result = self._run(
+            [
+                "find-generic-password",
+                "-a",
+                KEYCHAIN_ACCOUNT,
+                "-s",
+                KEYCHAIN_SERVICE,
+                "-w",
+            ]
+        )
+        if result.returncode != 0:
+            raise AuthenticationError("Read AI is not authenticated; run `readai auth`")
+        return parse_stored_credentials(result.stdout.rstrip("\n"), "macOS Keychain")
+
+    def save(self, credentials: dict[str, Any]) -> None:
+        credential_json = json.dumps(credentials, separators=(",", ":"))
+        result = self._run(
+            [
+                "add-generic-password",
+                "-a",
+                KEYCHAIN_ACCOUNT,
+                "-s",
+                KEYCHAIN_SERVICE,
+                "-w",
+                credential_json,
+                "-U",
+            ]
+        )
+        if result.returncode != 0:
+            raise AuthenticationError("macOS Keychain could not save Read AI credentials")
+
+
+class CredentialStore:
+    def __init__(self) -> None:
+        self.primary = MacOSKeychainStore()
+        self.fallback = OnePasswordStore()
+
+    def load(self) -> dict[str, Any]:
+        try:
+            return self.primary.load()
+        except AuthenticationError:
+            return self.fallback.load()
+
+    def save(self, credentials: dict[str, Any]) -> None:
+        self.primary.save(credentials)
+
+
 class OnePasswordStore:
+    @staticmethod
+    def _op_environment() -> dict[str, str] | None:
+        if os.environ.get("AGENT_SECRET_AUTH") != SERVICE_ACCOUNT_AUTH:
+            return None
+        environment = os.environ.copy()
+        if environment.get("OP_SERVICE_ACCOUNT_TOKEN"):
+            return environment
+        try:
+            token = SERVICE_ACCOUNT_TOKEN_PATH.read_text().rstrip("\n")
+        except OSError as error:
+            raise AuthenticationError(
+                f"cannot read 1Password service-account bootstrap: {error.strerror}"
+            ) from None
+        if not token or "\n" in token or "\r" in token or "=" in token:
+            raise AuthenticationError(
+                "1Password service-account bootstrap is invalid"
+            )
+        environment["OP_SERVICE_ACCOUNT_TOKEN"] = token
+        return environment
+
     def _run(
         self, arguments: list[str], *, input_text: str | None = None
     ) -> subprocess.CompletedProcess[str]:
@@ -121,6 +234,7 @@ class OnePasswordStore:
                 text=True,
                 capture_output=True,
                 check=False,
+                env=self._op_environment(),
             )
         except FileNotFoundError:
             raise AuthenticationError("1Password CLI is not installed") from None
@@ -199,17 +313,7 @@ class OnePasswordStore:
         field = self._credential_field(self._get_item(item_id))
         if field is None or not field.get("value"):
             raise AuthenticationError("the Read AI credential item is empty")
-        try:
-            credentials = json.loads(field["value"])
-        except (TypeError, json.JSONDecodeError):
-            raise AuthenticationError(
-                "the Read AI credential item is invalid"
-            ) from None
-        if not isinstance(credentials, dict) or credentials.get("version") != 1:
-            raise AuthenticationError(
-                "the Read AI credential item has an unsupported format"
-            )
-        return credentials
+        return parse_stored_credentials(field["value"], "1Password")
 
     def save(self, credentials: dict[str, Any]) -> None:
         credential_json = json.dumps(credentials, separators=(",", ":"))
@@ -331,6 +435,10 @@ class ReadAIClient:
                 },
             )
         except HTTPFailure as error:
+            if error.status == 400 and error.error == "invalid_grant":
+                raise AuthenticationError(
+                    "Read AI login has expired or was revoked; run `readai auth`"
+                ) from None
             raise AuthenticationError(
                 f"Read AI token refresh failed with HTTP {error.status}; run `readai auth`"
             ) from None
@@ -664,7 +772,7 @@ def authenticate(store: OnePasswordStore, http: HTTPClient) -> None:
                 f"Read AI login failed with HTTP {error.status}; run `readai auth` again"
             ) from None
     store.save(updated_credentials(credentials, response))
-    print("Read AI authentication saved in 1Password.")
+    print("Read AI authentication saved in macOS Keychain.")
 
 
 def positive_limit(value: str) -> int:
@@ -697,7 +805,7 @@ def build_parser() -> argparse.ArgumentParser:
 def main(arguments: list[str] | None = None) -> int:
     parser = build_parser()
     options = parser.parse_args(arguments)
-    store = OnePasswordStore()
+    store = CredentialStore()
     http = HTTPClient()
     try:
         with credential_lock():
