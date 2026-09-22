@@ -14,6 +14,8 @@ export default function (amp: PluginAPI) {
 	const agent = amp.experimental.createAgent({
 		extends: 'high',
 		model: 'anthropic/claude-opus-4-7',
+		oracle: { model: 'openai/gpt-6-astra', effort: 'medium' },
+		subagents: { model: 'openai/gpt-5.6-sol', effort: 'medium' },
 		display: { label: 'Claude Opus 4.7', color: '#c2410c' },
 	})
 

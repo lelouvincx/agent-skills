@@ -3,7 +3,7 @@ doc_schema: "amp-artifact/v2"
 title: "Claude Opus 4.7"
 slug: "claude-opus-4-7"
 status: "active"
-summary: "Registers an experimental Amp high-mode agent that uses Claude Opus 4.7."
+summary: "Registers an Amp high-mode agent that uses Claude Opus 4.7, GPT-6 Astra for Oracle, and GPT-5.6 Sol for subagents."
 artifact:
   id: "claude-opus-4-7"
   type: "agent_mode"
@@ -23,7 +23,7 @@ amp:
   docs_sources:
     api_docs: "amp plugins show-docs"
     agent_options: "amp plugins show-agent-options --json"
-  last_verified: "2026-09-15"
+  last_verified: "2026-09-22"
 contract:
   input_kind: "user_prompt"
   output_kind: "agent_thread"
@@ -38,9 +38,13 @@ runtime:
     - "amp.experimental.createAgent"
     - "amp.experimental.registerAgentMode"
     - "Amp high-mode prompt and tools"
+    - "CreateAgentConfig.oracle model and effort pin"
+    - "CreateAgentConfig.subagents model and effort pin"
   dependencies:
     - "experimental plugin API"
     - "anthropic/claude-opus-4-7 model availability"
+    - "openai/gpt-6-astra model availability"
+    - "openai/gpt-5.6-sol model availability"
   env: []
   reads:
     - "workspace files through selected tools"
@@ -49,6 +53,8 @@ runtime:
     - "shell side effects when Amp permissions allow them"
   network:
     - "Anthropic Claude Opus 4.7 through Amp"
+    - "OpenAI GPT-6 Astra through Amp for Oracle calls"
+    - "OpenAI GPT-5.6 Sol through Amp for subagent calls"
     - "web and MCP tools when the agent uses them"
   logs:
     - "plugin logger when the experimental API is unavailable"
@@ -57,7 +63,9 @@ safety:
   user_gate: "user selects agent mode"
   constraints:
     - "Requires amp.experimental."
-    - "Extends Amp high mode and overrides only the model."
+    - "Extends Amp high mode and overrides the main model."
+    - "Pins Oracle to openai/gpt-6-astra with medium effort."
+    - "Pins Task, Finder, Read Thread, and Librarian to openai/gpt-5.6-sol with medium effort."
   risks:
     - "The experimental agent-mode API may change."
     - "The mode can edit files and run shell commands."
@@ -73,7 +81,7 @@ tags:
 
 ## Summary
 
-`claude-opus-4-7` adds Claude Opus 4.7 to Amp's mode picker. It keeps Amp high mode's prompt, tools, and reasoning effort, and changes only the model.
+`claude-opus-4-7` adds Claude Opus 4.7 to Amp's mode picker. It keeps Amp high mode's prompt, tools, and main-agent reasoning effort. It pins Oracle to GPT-6 Astra with medium effort and the other built-in subagents to GPT-5.6 Sol with medium effort.
 
 ## Invocation
 
@@ -85,11 +93,11 @@ tags:
 
 ## Contract
 
-The mode uses `anthropic/claude-opus-4-7` and the `Claude Opus 4.7` display label. It extends Amp high mode, so it inherits that mode's system prompt, tool list, and reasoning effort. It accepts a normal user prompt and starts an agent thread.
+The main agent uses `anthropic/claude-opus-4-7` and the `Claude Opus 4.7` display label. It extends Amp high mode, so it inherits that mode's system prompt, tool list, and main-agent reasoning effort. Oracle uses `openai/gpt-6-astra` with medium effort. Task, Finder, Read Thread, and Librarian use `openai/gpt-5.6-sol` with medium effort. The mode accepts a normal user prompt and starts an agent thread.
 
 ## Behavior
 
-The plugin creates and registers this mode when `amp.experimental` is available. Otherwise, it logs a message and does not register the mode.
+The plugin creates and registers this mode when `amp.experimental` is available. Otherwise, it logs a message and does not register the mode. If a pinned Oracle or subagent model is unavailable, Amp falls back to automatic routing at runtime.
 
 ## Permissions and side effects
 
@@ -102,8 +110,8 @@ Select `Claude Opus 4.7` when starting a thread, then enter a normal coding requ
 ## Troubleshooting
 
 - If the mode is missing, check that the plugin loaded and `amp.experimental` is available.
-- If the model fails, check that `anthropic/claude-opus-4-7` appears in `amp plugins show-agent-options --json`.
+- If a model fails, check that `anthropic/claude-opus-4-7`, `openai/gpt-6-astra`, and `openai/gpt-5.6-sol` appear in `amp plugins show-agent-options --json`.
 
 ## Maintenance notes
 
-Keep the `@amp-agent-mode` metadata in sync with the registered key and label. Keep the model override in `plugins/claude-opus-4-7.ts`. Do not copy a static high-mode prompt into the plugin; the mode should keep extending Amp high mode.
+Keep the `@amp-agent-mode` metadata in sync with the registered key and label. Keep the main, Oracle, and subagent routing in `plugins/claude-opus-4-7.ts`. Do not copy a static high-mode prompt into the plugin; the mode should keep extending Amp high mode.
