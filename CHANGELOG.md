@@ -9,6 +9,7 @@ and this project does not currently use versioned releases.
 
 ### Changed
 
+- Keep delegated child threads on the parent's runner and project by preserving the exact working directory. [#249](https://github.com/lelouvincx/agent-skills/pull/249)
 - Remove the redundant Grok 4.6 Max, Deep Classic, and Smart Classic modes, and pin Claude Opus 4.7 Oracle and subagent routing. [#248](https://github.com/lelouvincx/agent-skills/pull/248)
 - Migrate the Claude Opus Amp agent mode from Claude Opus 4.6 to Claude Opus 4.7. [#247](https://github.com/lelouvincx/agent-skills/pull/247)
 - Route the local Claude CLIProxyAPI mapping from Claude Opus 4.6 to Claude Opus 4.7 while keeping Fable 5.1 and Opus 5 documented. [#246](https://github.com/lelouvincx/agent-skills/pull/246)

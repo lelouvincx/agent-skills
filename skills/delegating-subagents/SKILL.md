@@ -28,7 +28,7 @@ Otherwise route by the work:
 4. Use `Task` for independent concurrent work or a bounded unit whose intermediate detail would crowd the parent context.
 5. Use `create_thread` when work needs its own addressable thread, cross-turn reporting or later follow-up.
 
-Before creating or managing a native child thread, read the [native-thread contract](../../amp/docs/tools/delegating-subagents.md#use-create_thread-for-addressable-work). It owns runner placement, reply-versus-wait selection, follow-up and archive rules.
+Before creating or managing a native child thread, read the [native-thread contract](../../amp/docs/tools/delegating-subagents.md#use-create_thread-for-addressable-work). Create the child with the parent's exact live `runner_id` and exact `working_directory`; the directory preserves the parent project. The contract owns verification, reply-versus-wait selection, follow-up and archive rules.
 
 ## Brief and verify
 

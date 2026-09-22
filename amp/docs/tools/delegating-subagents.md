@@ -21,7 +21,7 @@ amp:
   docs_sources:
     api_docs: null
     agent_options: null
-  last_verified: "2026-08-19"
+  last_verified: "2026-09-22"
 contract:
   input_kind: "natural_language"
   output_kind: "instructions"
@@ -61,7 +61,7 @@ safety:
     - "Prefer direct or specialist tools when delegation overhead exceeds the task."
     - "Give every delegated task a bounded brief with scope, constraints, non-goals, success criteria, validation, and a completion contract."
     - "Use Task for bounded work whose result is needed in the current parent turn."
-    - "create_thread may create a child only when its runner_id exactly matches the verified live parent runner ID; otherwise ask the user."
+    - "create_thread may create a child only on the verified live parent runner and in the parent's exact working directory; otherwise ask the user."
     - "Choose exactly one create_thread result path: asynchronous reply or blocking wait."
     - "Use available native thread tools for follow-up and user-authorized metadata operations."
     - "Use wait_for_threads and read_thread when the parent must block for and inspect a complete child result."
@@ -70,7 +70,7 @@ safety:
     - "The parent remains responsible for synthesis, integration, and final verification."
   risks:
     - "Choosing a cross-turn child thread for ordinary in-turn work adds unnecessary coordination overhead."
-    - "Choosing another runner gives the child a different checkout or workspace state."
+    - "Choosing another runner or another served directory gives the child a different project, checkout, or workspace state."
     - "Concurrent agents editing overlapping files can create conflicting changes."
     - "Archiving does not prove an active turn stopped."
 related:
@@ -142,11 +142,13 @@ Use `create_thread` when the work should continue across turns or needs an addre
 
 Before `create_thread`:
 
-1. Obtain the parent thread's runner ID from thread or runtime context, or from explicit user input. A matching repository, working directory, or machine is insufficient evidence.
-2. Immediately before creation, call `list_runners` and confirm that exact ID is live.
-3. Call `create_thread` with `executor: "runner"` and `runner_id` equal to that exact ID.
+1. Obtain the parent thread's runner ID and absolute working directory from thread or runtime context, or from explicit user input. A matching repository or machine is insufficient evidence.
+2. Immediately before creation, call `list_runners`. Confirm that the exact runner ID is live and that it serves the parent's working directory.
+3. Call `create_thread` with `executor: "runner"`, `runner_id` equal to that exact ID, and `working_directory` equal to the parent's exact working directory.
 
-Runner placement is complete only when the passed `runner_id` exactly matches the verified live parent runner ID. If the ID is unknown or is not live, ask the user to identify or restart the parent runner and leave the child uncreated.
+On a runner, Amp resolves the project from the thread's directory. Preserving both `runner_id` and `working_directory` therefore keeps the child on the parent's runner and in the parent's project. Do not use the `project` argument to move a runner child to another project.
+
+Placement is complete only when both values match the verified parent context. If either value is unknown, the runner is not live, or it does not serve that directory, ask the user to identify or restart the parent runner and leave the child uncreated.
 
 Choose exactly one completion path:
 
@@ -221,6 +223,7 @@ Loading the skill only adds instructions to agent context. Side effects begin wh
 
 ## Troubleshooting
 
+- A child opens on the right runner but in the wrong project: check that `working_directory` was passed and exactly matched the parent's directory. The runner ID alone does not select a project.
 - Native completion is ambiguous: choose either an asynchronous reply or a blocking `wait_for_threads` join, never both. Use `read_thread` for the complete result.
 - A child needs more context: send one focused follow-up through the native messaging tool.
 - A child is active but should stop: check the available native cancellation contract. Do not claim archive cancels it.
