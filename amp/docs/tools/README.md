@@ -49,6 +49,7 @@ All active documents use `amp-artifact/v2`, which supports skills, local CLIs, a
 
 - [Claude Fable 5.1](./claude-fable-5-1.md)
 - [Claude Opus 4.7](./claude-opus-4-7.md)
+- [Claude Opus 5.5](./claude-opus-5-5.md)
 
 ### Commands
 

@@ -9,7 +9,8 @@
 - Add a `CHANGELOG.md` entry for every pull request. Wait until the pull request is open, then add the entry with its number and link in a separate commit.
 - Check `CHANGELOG.md` before searching Git or pull-request history for a historical change.
 - When Chinh says "open bot PR", open the pull request with the bot identity in the current worktree.
-- When Chinh says "PR merged", sync the local Git repository, switch back to the branch that was active before the bot PR work, prune opened worktree, run `./sync-skills.sh`, reload Amp plugins, clear the schedule, and archive the working thread.
+- After opening a bot PR, watch it. When `lelouvincx-bot` merges it, every required check has passed, and no uncommitted or unpushed work remains outside the PR, run cleanup: sync the local Git repository, switch back to the branch active before the bot PR work, prune the thread's worktree, run `./sync-skills.sh`, reload Amp plugins, close any agent browser session this thread started, clear this thread's schedule, and archive this thread.
+- When this thread owns more requested work, continue from `origin/main` after switching branches and archive only after the final task. Leave unrelated work alone.
 
 ## Source and projection
 
