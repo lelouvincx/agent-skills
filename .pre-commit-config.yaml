@@ -109,7 +109,14 @@ repos:
         language: python
         additional_dependencies: [jsonschema==4.25.1]
         pass_filenames: false
-        files: ^(?:bin/agent-browser-lifecycle$|amp/agent-browser-lifecycle/|scripts/test_agent_browser_(?:lifecycle(?:_managed|_sharing|_sweep)?|process_identity|retired_cleanup)\.py$|\.github/workflows/ci\.yml$|\.pre-commit-config\.yaml$)
+        files: ^(?:bin/agent-browser-lifecycle$|amp/agent-browser-(?:annotations|lifecycle)/|scripts/(?:check-agent-browser-annotations|test_agent_browser_(?:annotations|lifecycle(?:_managed|_sharing|_sweep)?|process_identity|retired_cleanup)\.(?:mjs|py))$|\.github/workflows/ci\.yml$|\.pre-commit-config\.yaml$)
+
+      - id: test-agent-browser-annotations
+        name: Test Agent Browser visual annotations
+        entry: scripts/check-agent-browser-annotations
+        language: system
+        pass_filenames: false
+        files: ^(?:amp/agent-browser-annotations/|bin/agent-browser-lifecycle$|scripts/(?:check-agent-browser-annotations|test_agent_browser_annotations\.(?:mjs|py))$|\.github/workflows/ci\.yml$|\.pre-commit-config\.yaml$)
 
       - id: check-amp-runner
         name: Test Amp runner LaunchAgent manager

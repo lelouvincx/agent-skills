@@ -17,6 +17,8 @@ mkdir -p "$tmp_home/.config/amp/agent-secrets"
 touch "$tmp_home/.config/amp/agent-secrets/stale.json"
 mkdir -p "$tmp_home/.config/amp/agent-browser-lifecycle"
 touch "$tmp_home/.config/amp/agent-browser-lifecycle/stale.json"
+mkdir -p "$tmp_home/.config/amp/agent-browser-annotations"
+touch "$tmp_home/.config/amp/agent-browser-annotations/stale.json"
 mkdir -p "$tmp_home/.config/amp/conventions"
 touch "$tmp_home/.config/amp/conventions/stale.md"
 mkdir -p "$tmp_home/.config/amp/state"
@@ -85,6 +87,9 @@ for path in \
 	".config/amp/agent-secrets/github-identities.schema.json" \
 	".config/amp/agent-secrets/lib-agent.sh" \
 	".config/amp/agent-browser-lifecycle/schema.json" \
+	".config/amp/agent-browser-annotations/annotation.schema.json" \
+	".config/amp/agent-browser-annotations/toolkit-core.js" \
+	".config/amp/agent-browser-annotations/toolkit.js" \
 	".config/amp/github-thread-events/config.json" \
 	".config/amp/github-thread-events/config.schema.json" \
 	".config/amp/github-thread-events/policy-set.schema.json" \
@@ -177,6 +182,16 @@ fi
 
 if [ -e "$tmp_home/.config/amp/agent-browser-lifecycle/stale.json" ]; then
 	echo "error: projection did not delete a stale agent browser lifecycle file" >&2
+	exit 1
+fi
+
+if ! diff -qr "$REPO_DIR/amp/agent-browser-annotations" "$tmp_home/.config/amp/agent-browser-annotations"; then
+	echo "error: agent browser annotation projection differs from its source" >&2
+	exit 1
+fi
+
+if [ -e "$tmp_home/.config/amp/agent-browser-annotations/stale.json" ]; then
+	echo "error: projection did not delete a stale agent browser annotation file" >&2
 	exit 1
 fi
 
