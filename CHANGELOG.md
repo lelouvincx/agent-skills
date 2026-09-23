@@ -21,6 +21,7 @@ and this project does not currently use versioned releases.
 
 ### Added
 
+- Add experimental managed-browser visual annotations with element and region comments, private validated artifacts, and documented complex-site limitations. [#250](https://github.com/lelouvincx/agent-skills/pull/250)
 - Add personal Notion shortcut links to the Notion skill overlay. [#244](https://github.com/lelouvincx/agent-skills/pull/244)
 - Rewrite compatible Bash `git diff` commands to `sem diff` before `rtk rewrite`, and verify the overlay against rtk 0.49.0. [#240](https://github.com/lelouvincx/agent-skills/pull/240)
 - Add Claude Fable 5.1 and Claude Opus 4.6 Amp agent modes that extend high mode and override only the model. [#237](https://github.com/lelouvincx/agent-skills/pull/237)
