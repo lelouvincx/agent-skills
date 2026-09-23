@@ -228,6 +228,7 @@ Run the relevant repository command directly:
 | [Pi Code subagent](amp/docs/tools/pi-code-subagent.md) | Agent tool | Agent | ask Pi Coding Agent for read-only advice |
 | [Claude Fable 5.1](amp/docs/tools/claude-fable-5-1.md) | Agent mode | Mode picker | run Amp high mode on Claude Fable 5.1 |
 | [Claude Opus 4.7](amp/docs/tools/claude-opus-4-7.md) | Agent mode | Mode picker | run Amp high mode on Claude Opus 4.7 |
+| [Claude Opus 5.5](amp/docs/tools/claude-opus-5-5.md) | Agent mode | Mode picker | run Amp high mode on Claude Opus 5.5 |
 | [Local Claude CLIProxyAPI runtime](amp/docs/tools/local-claude-cliproxy.md) | Command | Command palette | open and review the projected local Claude proxy runtime |
 | [Logseq log current task](amp/docs/tools/logseq-log-current-task-command.md) | Command | Command palette | log the current Amp task into Logseq |
 | [Track event](amp/docs/tools/track-event.md) | Command | Command palette | record skill or plugin usage manually |
