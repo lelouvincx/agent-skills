@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_dir="$(cd "$(dirname "$0")/.." && pwd)"
+
+python3 -m py_compile "$repo_dir/bin/agent-browser-lifecycle"
+python3 -m unittest "$repo_dir/scripts/test_agent_browser_annotations.py"
+node --check "$repo_dir/amp/agent-browser-annotations/toolkit-core.js"
+node --check "$repo_dir/amp/agent-browser-annotations/toolkit.js"
+node --test "$repo_dir/scripts/test_agent_browser_annotations.mjs"

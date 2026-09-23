@@ -203,6 +203,7 @@ Run the relevant repository command directly:
 | Test Agent Browser configuration merge | `python3 -m unittest amp/scripts/test_merge_agent_browser_config.py` |
 | Test installed Agent Browser config precedence without Chrome | `scripts/check-agent-browser-config` |
 | Test lifecycle replay, sharing, gated launch and retired cleanup without Chrome | `uvx --with jsonschema==4.25.1 python -B -m unittest scripts/test_agent_browser_lifecycle.py scripts/test_agent_browser_lifecycle_managed.py scripts/test_agent_browser_process_identity.py scripts/test_agent_browser_lifecycle_sharing.py scripts/test_agent_browser_retired_cleanup.py scripts/test_agent_browser_lifecycle_sweep.py` |
+| Test Agent Browser visual annotations without Chrome | `scripts/check-agent-browser-annotations` |
 | Build and test the destination-safe agent-browser | `AGENT_BROWSER_RUN_TESTS=1 amp/agent-browser-custom/build` |
 | Test the GitHub thread event validator | `python3 -m unittest amp/scripts/test_validate_github_thread_events.py` |
 | Validate GitHub thread event configuration | `python3 amp/scripts/validate-github-thread-events.py` |

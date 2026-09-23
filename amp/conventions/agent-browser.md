@@ -9,6 +9,8 @@ Use the `agent-browser` skill for page commands and the rules below for local po
 
 Before session work, read [lifecycle rules](agent-browser-lifecycle.md). Use the lifecycle controller, not direct browser launches or reconstructed flags.
 
+For visual review in headed Chrome, use the lifecycle controller's [annotation workflow](../agent-browser-lifecycle/reference.md#visual-annotations). The agent turns annotation mode on and off; Chinh can mark elements or regions and leave comments in the current tab.
+
 ### Explicit Agent Browser identity
 
 Each session uses a fresh browser process and loopback endpoint with exclusive ownership of a private profile. Profiles are ephemeral by default; opt into a named profile for login reuse. Keep authentication in the profile, never in journal records or exported cookies.

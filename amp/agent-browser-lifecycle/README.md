@@ -19,6 +19,9 @@ agent-browser-lifecycle start --owner-thread-id "$thread" --workspace "$PWD"
 agent-browser-lifecycle exec --session-id "$session" --actor-thread-id "$thread" -- open https://example.com
 agent-browser-lifecycle exec --session-id "$session" --actor-thread-id "$thread" -- tab new https://example.com
 agent-browser-lifecycle exec --session-id "$session" --actor-thread-id "$thread" --tab-id "$tab_id" -- snapshot -i
+agent-browser-lifecycle annotate start --session-id "$session" --actor-thread-id "$thread" --tab-id "$tab_id"
+agent-browser-lifecycle annotate collect --session-id "$session" --actor-thread-id "$thread" --tab-id "$tab_id"
+agent-browser-lifecycle annotate stop --session-id "$session" --actor-thread-id "$thread" --tab-id "$tab_id"
 agent-browser-lifecycle stop --session-id "$session" --owner-thread-id "$thread"
 agent-browser-lifecycle recover --session-id "$session" --owner-thread-id "$thread"
 agent-browser-lifecycle show --session-id "$session"
@@ -39,6 +42,8 @@ agent-browser-lifecycle detach --session-id "$session" --actor-thread-id "$child
 Each child opens its own tab, then reads its `tabId` (such as `t2`) or CDP `targetId` using `tab list --json`. Pass that ID as `--tab-id` to every tab-specific command. Selection and action execute under one session lock. Do not rely on numeric tab positions. Shared daemon snapshot refs can be invalidated by other tabs or commands; prefer semantic selectors and coordinate snapshot-to-ref use.
 
 Supported commands include `open`, `snapshot`, `screenshot`, `click`, `fill`, `eval`, `get`, `wait`, `press`, `scroll`, `tab` and `auth login`. Unsupported flags and command containers such as `batch` are refused before execution. Credential login remains `auth login <alias> --credential-provider onepassword`.
+
+Headed sessions also support an experimental trusted, tab-scoped visual annotation overlay through `annotate start|collect|stop`. The subcommands accept no JavaScript or output path. Collection writes a validated owner-only artifact below `.amp/in/artifacts/browser-annotations/`, then acknowledges the exact page revision. Collect before navigation or reload. Complex applications with global event interception can prevent overlay controls from working; stop annotation mode instead of repeatedly retrying. See the [visual annotation procedure](reference.md#visual-annotations).
 
 The helper holds a per-session lock while executing a command or requesting shutdown. It verifies saved process births, profile identity, config/build digests and daemon status before execution. Native managed mode cannot replace a missing daemon, reconnect a dead browser or replay a failed send. Streaming is disabled at daemon creation. Readiness also checks the CDP listener owner, Unix socket peer PID and absence of daemon TCP listeners.
 

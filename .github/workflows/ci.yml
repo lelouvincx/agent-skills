@@ -49,8 +49,11 @@ jobs:
               - ".github/workflows/ci.yml"
             amp:
               - "amp/agent-secrets/**"
+              - "amp/agent-browser-annotations/**"
               - "amp/agent-browser-lifecycle/**"
               - "bin/agent-browser-lifecycle"
+              - "scripts/check-agent-browser-annotations"
+              - "scripts/test_agent_browser_annotations.*"
               - "scripts/test_agent_browser_lifecycle*.py"
               - "scripts/test_agent_browser_process_identity.py"
               - "scripts/test_agent_browser_retired_cleanup.py"
@@ -118,6 +121,10 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
       - name: Install validation dependencies
         run: >-
           python -m pip install
@@ -144,6 +151,10 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
       - name: Install Amp validator dependencies
         run: >-
           python -m pip install
@@ -167,6 +178,9 @@ jobs:
 
       - name: Test lifecycle replay and gated launch
         run: python -B -m unittest scripts/test_agent_browser_lifecycle.py scripts/test_agent_browser_lifecycle_managed.py scripts/test_agent_browser_process_identity.py scripts/test_agent_browser_lifecycle_sharing.py scripts/test_agent_browser_retired_cleanup.py scripts/test_agent_browser_lifecycle_sweep.py
+
+      - name: Test browser visual annotations
+        run: scripts/check-agent-browser-annotations
 
       - name: Test Amp documentation validator
         run: python -m unittest amp/scripts/test_validate_plugin_docs.py

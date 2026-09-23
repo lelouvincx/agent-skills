@@ -1,0 +1,117 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ampcode.com/schemas/browser-annotations/v1.json",
+  "title": "Amp browser annotations",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "toolkitVersion", "collectedAt", "viewport", "annotations"],
+  "properties": {
+    "schema": { "const": "amp-browser-annotations/v1" },
+    "toolkitVersion": { "const": "1" },
+    "collectedAt": { "type": "string", "format": "date-time" },
+    "viewport": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["width", "height", "devicePixelRatio"],
+      "properties": {
+        "width": { "type": "integer", "minimum": 0, "maximum": 2147483647 },
+        "height": { "type": "integer", "minimum": 0, "maximum": 2147483647 },
+        "devicePixelRatio": { "type": "number", "exclusiveMinimum": 0 }
+      }
+    },
+    "annotations": {
+      "type": "array",
+      "maxItems": 50,
+      "items": { "$ref": "#/$defs/annotation" }
+    }
+  },
+  "$defs": {
+    "geometry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["x", "y", "width", "height"],
+      "properties": {
+        "x": { "type": "integer", "minimum": 0, "maximum": 2147483647 },
+        "y": { "type": "integer", "minimum": 0, "maximum": 2147483647 },
+        "width": { "type": "integer", "minimum": 0, "maximum": 2147483647 },
+        "height": { "type": "integer", "minimum": 0, "maximum": 2147483647 }
+      }
+    },
+    "domPath": {
+      "type": "array",
+      "maxItems": 20,
+      "items": { "type": "integer", "minimum": 0, "maximum": 2147483647 }
+    },
+    "safeIdentifier": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9._:-]{1,64}$"
+    },
+    "anchor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tag", "domPath"],
+      "properties": {
+        "tag": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+        "domPath": { "$ref": "#/$defs/domPath" },
+        "testId": { "$ref": "#/$defs/safeIdentifier" },
+        "test": { "$ref": "#/$defs/safeIdentifier" },
+        "qa": { "$ref": "#/$defs/safeIdentifier" },
+        "id": { "$ref": "#/$defs/safeIdentifier" }
+      },
+      "oneOf": [
+        { "not": { "anyOf": [{ "required": ["testId"] }, { "required": ["test"] }, { "required": ["qa"] }, { "required": ["id"] }] } },
+        { "required": ["testId"] },
+        { "required": ["test"] },
+        { "required": ["qa"] },
+        { "required": ["id"] }
+      ]
+    },
+    "annotationBase": {
+      "type": "object",
+      "required": ["id", "kind", "comment", "geometry"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^a[1-9][0-9]*$" },
+        "kind": { "enum": ["element", "region"] },
+        "comment": { "type": "string", "minLength": 1, "maxLength": 2000 },
+        "geometry": { "$ref": "#/$defs/geometry" }
+      }
+    },
+    "annotation": {
+      "oneOf": [
+        {
+          "allOf": [
+            { "$ref": "#/$defs/annotationBase" },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["id", "kind", "comment", "geometry", "anchor"],
+              "properties": {
+                "id": true,
+                "kind": { "const": "element" },
+                "comment": true,
+                "geometry": true,
+                "anchor": { "$ref": "#/$defs/anchor" }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            { "$ref": "#/$defs/annotationBase" },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["id", "kind", "comment", "geometry"],
+              "properties": {
+                "id": true,
+                "kind": { "const": "region" },
+                "comment": true,
+                "geometry": true
+              }
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
