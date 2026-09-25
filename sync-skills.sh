@@ -6,13 +6,14 @@ SKILLS_DIR="${SKILLS_DIR:-$REPO_DIR/skills}"
 BIN_DIR="$REPO_DIR/bin"
 AMP_DIR="$REPO_DIR/amp"
 REMOTE_SKILLS_CONFIG="${REMOTE_SKILLS_CONFIG:-$REPO_DIR/remote-skills.yaml}"
-CLAUDE_SKILLS_DIR="$HOME/.claude/skills"
+# Claude Desktop local Code sessions and the Claude Code CLI share this path.
+CLAUDE_DESKTOP_SKILLS_DIR="$HOME/.claude/skills"
 AGENTS_SKILLS_DIR="$HOME/.agents/skills"
 AMP_CONFIG_DIR="${AMP_CONFIG_DIR:-$HOME/.config/amp}"
 LOCAL_BIN="$HOME/.local/bin"
 LOCAL_SHARE="$HOME/.local/share"
 
-mkdir -p "$CLAUDE_SKILLS_DIR" "$AGENTS_SKILLS_DIR" "$LOCAL_BIN"
+mkdir -p "$CLAUDE_DESKTOP_SKILLS_DIR" "$AGENTS_SKILLS_DIR" "$LOCAL_BIN"
 
 # --- Parse YAML (simple parser for our needs) ---
 
@@ -581,7 +582,7 @@ ensure_skill_dependencies
 sync_amp_artifacts
 sync_local_runtime_artifacts
 
-for target in "$CLAUDE_SKILLS_DIR" "$AGENTS_SKILLS_DIR"; do
+for target in "$CLAUDE_DESKTOP_SKILLS_DIR" "$AGENTS_SKILLS_DIR"; do
 	remove_stale_skill_links "$target"
 	sync_skill_links "$target"
 done
