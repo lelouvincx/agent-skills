@@ -9,6 +9,7 @@ and this project does not currently use versioned releases.
 
 ### Changed
 
+- Make skill projection explicitly support Claude Desktop local Code sessions and document the Cowork and cloud-session boundary. [#252](https://github.com/lelouvincx/agent-skills/pull/252)
 - Add the Claude Opus 5.5 Amp agent mode and make bot PR cleanup run automatically on merge. [#251](https://github.com/lelouvincx/agent-skills/pull/251)
 - Keep delegated child threads on the parent's runner and project by preserving the exact working directory. [#249](https://github.com/lelouvincx/agent-skills/pull/249)
 - Remove the redundant Grok 4.6 Max, Deep Classic, and Smart Classic modes, and pin Claude Opus 4.7 Oracle and subagent routing. [#248](https://github.com/lelouvincx/agent-skills/pull/248)
