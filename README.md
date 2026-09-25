@@ -18,6 +18,7 @@ cd agent-skills
 ```
 
 This copies the runtime files into `~/.config/amp` and fetches remote skills.
+It symlinks every skill into `~/.agents/skills` and `~/.claude/skills`. The latter makes the skills available to Claude Desktop local Code sessions and the Claude Code CLI. Claude Desktop Cowork and cloud sessions use skills synced through the claude.ai **Customize** settings instead of local filesystem skills.
 It also symlinks scripts from `bin/` into `~/.local/bin`, so they can be used from any project when `~/.local/bin` is on `PATH`.
 
 ## Use the project registry
