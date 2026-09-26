@@ -212,6 +212,24 @@ projects:
       - data prefect
     description: Holistics Prefect project.
 
+  snowplow:
+    github: holistics/snowplow
+    owner: holistics
+    dir: holistics/data/snowplow
+    aliases:
+      - holistics snowplow
+      - snowplow pipeline
+    description: Holistics Snowplow pipeline configuration and scripts.
+
+  snowplow-schemas:
+    github: holistics/snowplow-schemas
+    owner: holistics
+    dir: holistics/data/snowplow/snowplow-schemas
+    aliases:
+      - snowplow schemas
+      - holistics snowplow schemas
+    description: Holistics Snowplow event schemas and validation project.
+
   demo4:
     github: holistics/data-demo4
     owner: holistics
