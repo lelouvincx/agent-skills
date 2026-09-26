@@ -107,8 +107,22 @@ class AgentSecretPolicyValidationTests(unittest.TestCase):
                 "amp-runner-r2",
                 "smartclass-cohere",
                 "openrouter",
+                "toanthaythanh-teacher",
             },
             set(manifest["bundles"]),
+        )
+        self.assertEqual(
+            {
+                "audience": "agent",
+                "owner": "lelouvincx/smartclass",
+                "variables": [
+                    "TOANTHAYTHANH_TEACHER_PHONE",
+                    "TOANTHAYTHANH_TEACHER_PASSWORD",
+                ],
+                "compatibleBundles": [],
+                "allowedCommandClasses": ["smartclass-teacher-api"],
+            },
+            manifest["bundles"]["toanthaythanh-teacher"],
         )
         self.assertEqual(
             {

@@ -39,6 +39,11 @@
     },
     "github-cli": {
       "executablePaths": ["/opt/homebrew/bin/gh"]
+    },
+    "smartclass-teacher-api": {
+      "executablePaths": [
+        "/Users/lelouvincx/.local/share/mise/installs/node/26.8.1/bin/node"
+      ]
     }
   },
   "bundles": {
@@ -100,6 +105,16 @@
         "smartclass-openrouter-poc",
         "smartclass-wrangler-dev"
       ]
+    },
+    "toanthaythanh-teacher": {
+      "audience": "agent",
+      "owner": "lelouvincx/smartclass",
+      "variables": [
+        "TOANTHAYTHANH_TEACHER_PHONE",
+        "TOANTHAYTHANH_TEACHER_PASSWORD"
+      ],
+      "compatibleBundles": [],
+      "allowedCommandClasses": ["smartclass-teacher-api"]
     }
   }
 }
