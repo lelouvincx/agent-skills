@@ -15,10 +15,21 @@ mkdir -p "$tmp_home/.config/amp/github-thread-events/policies"
 touch "$tmp_home/.config/amp/github-thread-events/policies/stale.json"
 mkdir -p "$tmp_home/.config/amp/agent-secrets"
 touch "$tmp_home/.config/amp/agent-secrets/stale.json"
+# Last commit containing the retired lifecycle and annotation projections.
+legacy_commit=d5038c908dec29b5b9c2381bc1653e48ec0d2c22
+if ! git -C "$REPO_DIR" cat-file -e "$legacy_commit^{commit}" 2>/dev/null; then
+	git -C "$REPO_DIR" fetch --quiet --depth=1 origin "$legacy_commit"
+fi
 mkdir -p "$tmp_home/.config/amp/agent-browser-lifecycle"
-touch "$tmp_home/.config/amp/agent-browser-lifecycle/stale.json"
+for file in README.md process_identity.py reference.md retired_cleanup.py schema.json; do
+	git -C "$REPO_DIR" show "$legacy_commit:amp/agent-browser-lifecycle/$file" \
+		> "$tmp_home/.config/amp/agent-browser-lifecycle/$file"
+done
 mkdir -p "$tmp_home/.config/amp/agent-browser-annotations"
-touch "$tmp_home/.config/amp/agent-browser-annotations/stale.json"
+for file in README.md annotation.schema.json toolkit-core.js toolkit.js; do
+	git -C "$REPO_DIR" show "$legacy_commit:amp/agent-browser-annotations/$file" \
+		> "$tmp_home/.config/amp/agent-browser-annotations/$file"
+done
 mkdir -p "$tmp_home/.config/amp/conventions"
 touch "$tmp_home/.config/amp/conventions/stale.md"
 mkdir -p "$tmp_home/.config/amp/state"
@@ -28,6 +39,15 @@ printf '%s\n' 'pre-existing-api-key' > "$tmp_home/.local/share/amp-cliproxy/api-
 printf '%s\n' 'pre-existing-config' > "$tmp_home/.local/share/amp-cliproxy/config.yaml"
 printf '%s\n' 'pre-existing-auth' > "$tmp_home/.local/share/amp-cliproxy/auth/claude-existing.json"
 mkdir -p "$tmp_home/.agent-browser"
+mkdir -p "$tmp_home/.local/bin"
+ln -s "$REPO_DIR/bin/agent-browser-lifecycle" "$tmp_home/.local/bin/agent-browser-lifecycle"
+ln -s "$REPO_DIR/bin/definitely-retired" "$tmp_home/.local/bin/owned-broken-link"
+ln -s /tmp/foreign-plugin "$tmp_home/.local/bin/agent-browser-plugin-onepassword"
+printf '%s\n' 'foreign regular file' > "$tmp_home/.local/bin/agent-browser-credential-response"
+mkdir -p "$tmp_home/.local/libexec/agent-browser-rfc0011/agent-browser"
+mkdir -p "$tmp_home/.local/libexec/agent-browser-rfc0011/skill-data"
+touch "$tmp_home/.local/libexec/agent-browser-rfc0011/build-input.sha256"
+touch "$tmp_home/.local/libexec/agent-browser-rfc0011/skill-data.sha256"
 cat > "$tmp_home/.agent-browser/config.json" <<'JSON'
 {
   "headed": false,
@@ -36,14 +56,55 @@ cat > "$tmp_home/.agent-browser/config.json" <<'JSON'
       "name": "unrelated",
       "command": "/usr/bin/true",
       "capabilities": ["command.run"]
+    },
+    {
+      "name": "onepassword",
+      "command": "HOME_PLACEHOLDER/.local/bin/agent-browser-plugin-onepassword",
+      "capabilities": ["credential.read"]
     }
   ]
 }
 JSON
+python3 - "$tmp_home/.agent-browser/config.json" "$tmp_home" <<'PY'
+import pathlib, sys
+path = pathlib.Path(sys.argv[1])
+path.write_text(path.read_text().replace("HOME_PLACEHOLDER", sys.argv[2]))
+PY
 
 HOME="$tmp_home" \
 	AMP_CONFIG_DIR="$tmp_home/.config/amp" \
-	"$REPO_DIR/sync-skills.sh"
+	AGENT_SKILLS_SKIP_AGENT_BROWSER_INSTALL=1 \
+	"$REPO_DIR/sync-skills.sh" 2>"$tmp_home/first-sync.stderr"
+
+for path in \
+	"$tmp_home/.local/bin/agent-browser-lifecycle" \
+	"$tmp_home/.local/bin/owned-broken-link" \
+	"$tmp_home/.config/amp/agent-browser-lifecycle" \
+	"$tmp_home/.config/amp/agent-browser-annotations" \
+	"$tmp_home/.local/libexec/agent-browser-rfc0011"; do
+	if [ -e "$path" ] || [ -L "$path" ]; then
+		echo "error: migration did not remove owned legacy path $path" >&2
+		exit 1
+	fi
+done
+if [ ! -L "$tmp_home/.local/bin/agent-browser-plugin-onepassword" ] \
+	|| [ "$(readlink "$tmp_home/.local/bin/agent-browser-plugin-onepassword")" != /tmp/foreign-plugin ]; then
+	echo "error: migration changed a foreign legacy symlink" >&2
+	exit 1
+fi
+if [ ! -f "$tmp_home/.local/bin/agent-browser-credential-response" ] \
+	|| [ "$(cat "$tmp_home/.local/bin/agent-browser-credential-response")" != "foreign regular file" ]; then
+	echo "error: migration changed a foreign legacy regular file" >&2
+	exit 1
+fi
+python3 - "$tmp_home/.agent-browser/config.json" <<'PY'
+import json
+import sys
+
+config = json.load(open(sys.argv[1]))
+assert config["headed"] is False
+assert [plugin["name"] for plugin in config["plugins"]] == ["unrelated"]
+PY
 
 agent_browser_config_once="$tmp_home/agent-browser-config.once"
 cp "$tmp_home/.agent-browser/config.json" "$agent_browser_config_once"
@@ -54,9 +115,39 @@ cp "$tmp_home/.local/share/amp-cliproxy/api-key.txt" "$cliproxy_api_key_once"
 cp "$tmp_home/.local/share/amp-cliproxy/config.yaml" "$cliproxy_config_once"
 cp "$tmp_home/.local/share/amp-cliproxy/auth/claude-existing.json" "$cliproxy_auth_once"
 
+mkdir -p "$tmp_home/.config/amp/agent-browser-lifecycle"
+git -C "$REPO_DIR" show "$legacy_commit":amp/agent-browser-lifecycle/README.md \
+	> "$tmp_home/.config/amp/agent-browser-lifecycle/README.md"
+printf '%s\n' modified >> "$tmp_home/.config/amp/agent-browser-lifecycle/README.md"
+mkdir -p "$tmp_home/.config/amp/agent-browser-annotations"
+git -C "$REPO_DIR" show "$legacy_commit":amp/agent-browser-annotations/README.md \
+	> "$tmp_home/.config/amp/agent-browser-annotations/README.md"
+touch "$tmp_home/.config/amp/agent-browser-annotations/extra-file"
+mkdir -p "$tmp_home/.local/libexec/agent-browser-rfc0011/agent-browser"
+mkdir -p "$tmp_home/.local/libexec/agent-browser-rfc0011/skill-data"
+touch "$tmp_home/.local/libexec/agent-browser-rfc0011/build-input.sha256"
+touch "$tmp_home/.local/libexec/agent-browser-rfc0011/skill-data.sha256"
+touch "$tmp_home/.local/libexec/agent-browser-rfc0011/extra-file"
+
 HOME="$tmp_home" \
 	AMP_CONFIG_DIR="$tmp_home/.config/amp" \
-	"$REPO_DIR/sync-skills.sh" >/dev/null
+	AGENT_SKILLS_SKIP_AGENT_BROWSER_INSTALL=1 \
+	"$REPO_DIR/sync-skills.sh" >/dev/null 2>"$tmp_home/second-sync.stderr"
+
+for path in \
+	"$tmp_home/.config/amp/agent-browser-lifecycle/README.md" \
+	"$tmp_home/.config/amp/agent-browser-annotations/extra-file" \
+	"$tmp_home/.local/libexec/agent-browser-rfc0011/extra-file"; do
+	if [ ! -e "$path" ]; then
+		echo "error: migration removed modified legacy path $path" >&2
+		exit 1
+	fi
+done
+if ! grep -q 'preserving modified or unrecognized legacy directory' "$tmp_home/second-sync.stderr" \
+	|| ! grep -q 'preserving modified legacy directory' "$tmp_home/second-sync.stderr"; then
+	echo "error: migration did not warn about preserved legacy directories" >&2
+	exit 1
+fi
 
 if ! cmp -s "$agent_browser_config_once" "$tmp_home/.agent-browser/config.json"; then
 	echo "error: projection changed serialized agent-browser configuration on repeated sync" >&2
@@ -86,10 +177,6 @@ for path in \
 	".config/amp/agent-secrets/github-identities.json" \
 	".config/amp/agent-secrets/github-identities.schema.json" \
 	".config/amp/agent-secrets/lib-agent.sh" \
-	".config/amp/agent-browser-lifecycle/schema.json" \
-	".config/amp/agent-browser-annotations/annotation.schema.json" \
-	".config/amp/agent-browser-annotations/toolkit-core.js" \
-	".config/amp/agent-browser-annotations/toolkit.js" \
 	".config/amp/github-thread-events/config.json" \
 	".config/amp/github-thread-events/config.schema.json" \
 	".config/amp/github-thread-events/policy-set.schema.json" \
@@ -175,26 +262,6 @@ if [ -e "$tmp_home/.credentials/agent-secrets" ] \
 	exit 1
 fi
 
-if ! diff -qr "$REPO_DIR/amp/agent-browser-lifecycle" "$tmp_home/.config/amp/agent-browser-lifecycle"; then
-	echo "error: agent browser lifecycle projection differs from its source" >&2
-	exit 1
-fi
-
-if [ -e "$tmp_home/.config/amp/agent-browser-lifecycle/stale.json" ]; then
-	echo "error: projection did not delete a stale agent browser lifecycle file" >&2
-	exit 1
-fi
-
-if ! diff -qr "$REPO_DIR/amp/agent-browser-annotations" "$tmp_home/.config/amp/agent-browser-annotations"; then
-	echo "error: agent browser annotation projection differs from its source" >&2
-	exit 1
-fi
-
-if [ -e "$tmp_home/.config/amp/agent-browser-annotations/stale.json" ]; then
-	echo "error: projection did not delete a stale agent browser annotation file" >&2
-	exit 1
-fi
-
 if ! diff -qr "$REPO_DIR/amp/github-thread-events" "$tmp_home/.config/amp/github-thread-events"; then
 	echo "error: GitHub thread event projection differs from its source" >&2
 	exit 1
@@ -242,129 +309,6 @@ if [ ! -L "$agent_browser" ] || [ "$(readlink "$agent_browser")" != "$REPO_DIR/b
 	echo "error: projection did not create the agent-browser wrapper link" >&2
 	exit 1
 fi
-
-if HOME="$tmp_home" AGENT_BROWSER_SKILLS_DIR=/tmp/unrelated "$agent_browser" --version >"$tmp_home/agent-browser.stdout" 2>"$tmp_home/agent-browser.stderr"; then
-	echo "error: projected agent-browser wrapper accepted a missing custom install" >&2
-	exit 1
-fi
-if ! grep -q 'run amp/agent-browser-custom/build' "$tmp_home/agent-browser.stderr"; then
-	echo "error: projected agent-browser wrapper missing-install failure did not include rebuild action" >&2
-	exit 1
-fi
-
-onepassword_plugin="$tmp_home/.local/bin/agent-browser-plugin-onepassword"
-if [ ! -L "$onepassword_plugin" ] || [ "$(readlink "$onepassword_plugin")" != "$REPO_DIR/bin/agent-browser-plugin-onepassword" ] || [ ! -x "$onepassword_plugin" ]; then
-	echo "error: projection did not create the onepassword plugin link" >&2
-	exit 1
-fi
-
-credential_handler="$tmp_home/.local/bin/agent-browser-credential-response"
-if [ ! -L "$credential_handler" ] || [ "$(readlink "$credential_handler")" != "$REPO_DIR/bin/agent-browser-credential-response" ] || [ ! -x "$credential_handler" ]; then
-	echo "error: projection did not create the browser credential handler link" >&2
-	exit 1
-fi
-
-python3 - "$tmp_home/.agent-browser/config.json" "$onepassword_plugin" <<'PY'
-import json
-import sys
-
-config = json.load(open(sys.argv[1]))
-assert config["headed"] is False
-assert config["$schema"] == "https://agent-browser.dev/schema.json"
-assert config["contentBoundaries"] is True
-assert config["maxOutput"] == 50000
-assert config["autoConnect"] is False
-assert [plugin["name"] for plugin in config["plugins"]] == ["unrelated", "onepassword"]
-assert config["plugins"][1] == {
-    "name": "onepassword",
-    "command": sys.argv[2],
-    "capabilities": ["credential.read"],
-}
-PY
-
-preferences_home="$tmp_home/preferences-home"
-mkdir -p "$preferences_home/.agent-browser"
-cat > "$preferences_home/.agent-browser/config.json" <<'JSON'
-{
-  "$schema": "https://example.invalid/custom-agent-browser.schema.json",
-  "contentBoundaries": false,
-  "maxOutput": 0,
-  "autoConnect": true,
-  "plugins": []
-}
-JSON
-HOME="$preferences_home" AMP_CONFIG_DIR="$preferences_home/.config/amp" "$REPO_DIR/sync-skills.sh" >/dev/null
-python3 - "$preferences_home/.agent-browser/config.json" <<'PY'
-import json
-import sys
-
-config = json.load(open(sys.argv[1]))
-assert config["$schema"] == "https://example.invalid/custom-agent-browser.schema.json"
-assert config["contentBoundaries"] is False
-assert config["maxOutput"] == 0
-assert config["autoConnect"] is True
-PY
-rm -rf "$preferences_home"
-
-conflict_home="$(mktemp -d)"
-mkdir -p "$conflict_home/.agent-browser"
-printf '%s\n' '{"plugins":[{"name":"onepassword","command":"/tmp/not-owned","capabilities":["credential.read"]}]}' > "$conflict_home/.agent-browser/config.json"
-if HOME="$conflict_home" AMP_CONFIG_DIR="$conflict_home/.config/amp" "$REPO_DIR/sync-skills.sh" >/dev/null 2>&1; then
-	echo "error: projection accepted a conflicting onepassword plugin" >&2
-	rm -rf "$conflict_home"
-	exit 1
-fi
-if ! grep -q '"command":"/tmp/not-owned"' "$conflict_home/.agent-browser/config.json"; then
-	echo "error: projection changed a conflicting onepassword plugin" >&2
-	rm -rf "$conflict_home"
-	exit 1
-fi
-rm -rf "$conflict_home"
-
-invalid_home="$(mktemp -d)"
-mkdir -p "$invalid_home/.agent-browser"
-printf '%s\n' '{ invalid' > "$invalid_home/.agent-browser/config.json"
-if HOME="$invalid_home" AMP_CONFIG_DIR="$invalid_home/.config/amp" "$REPO_DIR/sync-skills.sh" >/dev/null 2>&1; then
-	echo "error: projection accepted invalid agent-browser configuration" >&2
-	rm -rf "$invalid_home"
-	exit 1
-fi
-if [ "$(cat "$invalid_home/.agent-browser/config.json")" != "{ invalid" ]; then
-	echo "error: projection changed invalid agent-browser configuration" >&2
-	rm -rf "$invalid_home"
-	exit 1
-fi
-rm -rf "$invalid_home"
-
-duplicate_home="$(mktemp -d)"
-mkdir -p "$duplicate_home/.agent-browser"
-printf '%s\n' '{"plugins":[],"plugins":[]}' > "$duplicate_home/.agent-browser/config.json"
-if HOME="$duplicate_home" AMP_CONFIG_DIR="$duplicate_home/.config/amp" "$REPO_DIR/sync-skills.sh" >/dev/null 2>&1; then
-	echo "error: projection accepted duplicate agent-browser configuration keys" >&2
-	rm -rf "$duplicate_home"
-	exit 1
-fi
-if [ "$(cat "$duplicate_home/.agent-browser/config.json")" != '{"plugins":[],"plugins":[]}' ]; then
-	echo "error: projection changed duplicate-key agent-browser configuration" >&2
-	rm -rf "$duplicate_home"
-	exit 1
-fi
-rm -rf "$duplicate_home"
-
-symlink_home="$(mktemp -d)"
-mkdir -p "$symlink_home/.agent-browser"
-ln -s "$symlink_home/missing-config" "$symlink_home/.agent-browser/config.json"
-if HOME="$symlink_home" AMP_CONFIG_DIR="$symlink_home/.config/amp" "$REPO_DIR/sync-skills.sh" >/dev/null 2>&1; then
-	echo "error: projection accepted a symbolic-link agent-browser configuration" >&2
-	rm -rf "$symlink_home"
-	exit 1
-fi
-if [ ! -L "$symlink_home/.agent-browser/config.json" ]; then
-	echo "error: projection replaced a symbolic-link agent-browser configuration" >&2
-	rm -rf "$symlink_home"
-	exit 1
-fi
-rm -rf "$symlink_home"
 
 smartclass_wrangler_dev="$tmp_home/.local/bin/smartclass-wrangler-dev"
 if [ ! -L "$smartclass_wrangler_dev" ] || [ "$(readlink "$smartclass_wrangler_dev")" != "$REPO_DIR/bin/smartclass-wrangler-dev" ] || [ ! -x "$smartclass_wrangler_dev" ]; then

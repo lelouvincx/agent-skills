@@ -39,11 +39,6 @@
     },
     "github-cli": {
       "executablePaths": ["/opt/homebrew/bin/gh"]
-    },
-    "agent-browser-credential-handler": {
-      "executablePaths": [
-        "/Users/lelouvincx/.local/bin/agent-browser-credential-response"
-      ]
     }
   },
   "bundles": {
@@ -72,38 +67,8 @@
         "amp",
         "claude-code",
         "pi",
-        "logseq-agent-preflight",
-        "agent-browser-credential-handler"
-      ],
-      "browserLogins": {
-        "demo4": {
-          "usernameVariable": "HOLISTICS_DEMO4_USERNAME",
-          "passwordVariable": "HOLISTICS_DEMO4_PASSWORD",
-          "loginUrl": "https://demo4.holistics.io/users/sign_in",
-          "credentialOrigin": "https://demo4.holistics.io",
-          "usernameSelector": "#user_email",
-          "passwordSelector": "#user_password",
-          "submitSelector": "input[name=\"commit\"]",
-          "otpVariable": "HOLISTICS_DEMO4_OTP",
-          "otpSelector": "input[name=\"otp\"]",
-          "otpSubmitSelector": "button.hui-btn-primary-highlight",
-          "expectedPostLoginUrl": "https://demo4.holistics.io/home",
-          "accountMarkerSelector": "body",
-          "accountMarkerVariable": "HOLISTICS_DEMO4_USERNAME"
-        },
-        "testing4": {
-          "usernameVariable": "HOLISTICS_TESTING4_USERNAME",
-          "passwordVariable": "HOLISTICS_TESTING4_PASSWORD",
-          "loginUrl": "https://testing4.holistics.io/users/sign_in",
-          "credentialOrigin": "https://testing4.holistics.io",
-          "usernameSelector": "#user_email",
-          "passwordSelector": "#user_password",
-          "submitSelector": "input[name=\"commit\"]",
-          "expectedPostLoginUrl": "https://testing4.holistics.io/home",
-          "accountMarkerSelector": "head",
-          "accountMarkerVariable": "HOLISTICS_TESTING4_USERNAME"
-        }
-      }
+        "logseq-agent-preflight"
+      ]
     },
     "lelouvincx-bot": {
       "audience": "publisher",

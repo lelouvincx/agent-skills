@@ -115,7 +115,7 @@ Repository instructions require agents to consider delegation before non-trivial
 
 `amp/AGENTS.md` points to the skill for delegation decisions and explicit triggers. The skill owns the concise routing and briefing workflow. Load this document's native-thread section only before using `create_thread` or managing a child thread.
 
-For browser handoffs, load the [browser conventions](../../conventions/agent-browser.md), then the [subagent-sharing workflow](../../conventions/agent-browser-lifecycle.md#subagent-sharing). Keep attachment, tab ownership, draining and detachment instructions there rather than duplicating them in the skill.
+A subagent that needs a browser uses its own session with the parent's `AB_THREAD` and a unique `AB_AGENT=<suffix>`; work in a logged-in named profile stays with the parent.
 
 Every delegated brief must state:
 

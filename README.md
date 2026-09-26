@@ -50,7 +50,7 @@ agent-secrets run \
 agent-secrets doctor
 ```
 
-The [agent-secrets guide](amp/agent-secrets/README.md) covers policy, private references and browser-login profile registration.
+The [agent-secrets guide](amp/agent-secrets/README.md) covers capability policy and private references.
 `./sync-skills.sh` validates and projects them, then links the resolver into `~/.local/bin`.
 The shared GitHub identity policy records the complete repository access expected for bot accounts.
 Each consuming repository separately restricts which targets and operations its automation may use.
@@ -73,7 +73,7 @@ agent-bot-pr checks
 
 The helper reuses the hardened bot SSH identity for commits and pushes. GitHub writes go through `agent-secrets` and the `lelouvincx-bot` bundle. The approved repository set lives in `amp/agent-secrets/github-identities.json`.
 
-RFC-0011 browser login uses a temporary pinned native `agent-browser` patch. Build and install it with `amp/agent-browser-custom/build`; the projected wrapper refuses missing or stale builds and mismatched skill content. The [custom-build guide](amp/agent-browser-custom/README.md) covers the bundled version-matched skills and rebuild procedure. Remove `amp/agent-browser-custom` when an official agent-browser release supports destination-checked credential login.
+Agent Browser uses a pinned stock release (version in `amp/agent-browser/version`) installed by `sync-skills.sh` under `~/.local/libexec/agent-browser-stock` and wrapped by `bin/agent-browser` (RFC-0013).
 
 ## Run a background Amp runner
 
@@ -197,15 +197,11 @@ Run the relevant repository command directly:
 | Test the Amp documentation validator | `python3 -m unittest amp/scripts/test_validate_plugin_docs.py` |
 | Validate Amp capability and issue docs | `python3 amp/scripts/validate-plugin-docs.py` |
 | Validate Amp RFCs | `python3 amp/scripts/validate-rfcs.py` |
-| Test the agent secret resolver and browser credential plugin | `uvx --with jsonschema==4.25.1 python -m unittest amp/scripts/test_validate_agent_secrets.py amp/scripts/test_agent_secrets.py amp/scripts/test_agent_secrets_good_outcomes.py amp/scripts/test_agent_browser_plugin_onepassword.py` |
+| Test the agent secret resolver | `uvx --with jsonschema==4.25.1 python -m unittest amp/scripts/test_validate_agent_secrets.py amp/scripts/test_agent_secrets.py amp/scripts/test_agent_secrets_good_outcomes.py` |
 | Test shared agent helper contracts | `amp/scripts/test-agent-secrets-lib.sh` |
 | Validate agent secret policy | `uvx --with jsonschema==4.25.1 python amp/scripts/validate-agent-secrets.py` |
-| Test pinned Agent Browser skill packaging without Chrome | `scripts/check-agent-browser-custom` |
-| Test Agent Browser configuration merge | `python3 -m unittest amp/scripts/test_merge_agent_browser_config.py` |
-| Test installed Agent Browser config precedence without Chrome | `scripts/check-agent-browser-config` |
-| Test lifecycle replay, sharing, gated launch and retired cleanup without Chrome | `uvx --with jsonschema==4.25.1 python -B -m unittest scripts/test_agent_browser_lifecycle.py scripts/test_agent_browser_lifecycle_managed.py scripts/test_agent_browser_process_identity.py scripts/test_agent_browser_lifecycle_sharing.py scripts/test_agent_browser_retired_cleanup.py scripts/test_agent_browser_lifecycle_sweep.py` |
-| Test Agent Browser visual annotations without Chrome | `scripts/check-agent-browser-annotations` |
-| Build and test the destination-safe agent-browser | `AGENT_BROWSER_RUN_TESTS=1 amp/agent-browser-custom/build` |
+| Test the agent-browser wrapper without Chrome | `python3 -m unittest scripts/test_agent_browser_wrapper.py` |
+| Test legacy agent-browser config migration | `python3 -m unittest amp/scripts/test_migrate_agent_browser_config.py` |
 | Test the GitHub thread event validator | `python3 -m unittest amp/scripts/test_validate_github_thread_events.py` |
 | Validate GitHub thread event configuration | `python3 amp/scripts/validate-github-thread-events.py` |
 | Validate the project registry | `scripts/check-project-registry` |

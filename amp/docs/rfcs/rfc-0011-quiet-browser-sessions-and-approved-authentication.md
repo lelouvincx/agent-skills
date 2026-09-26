@@ -4,10 +4,10 @@ code: "RFC-0011"
 title: "Quiet browser sessions and approved authentication"
 slug: "quiet-browser-sessions-and-approved-authentication"
 file: "rfc-0011-quiet-browser-sessions-and-approved-authentication.md"
-status: "Accepted"
+status: "Superseded"
 summary: "Use isolated headless sessions and a destination-checked agent-browser credential plugin backed by agent-secrets."
 created: "2026-09-05"
-updated: "2026-09-07"
+updated: "2026-09-26"
 amp_thread_id:
   T-01a06fe4-8468-755a-911b-48950a722cb9: "defined contracts with Oracle; human typing reproduced the missing dot; approved headless work and fresh headed human sign-in"
   T-01a06f94-14b9-71dd-9d12-c9f538a4a257: "compared local browser automation with TinyFish and examined profile persistence and headed operation"
@@ -50,7 +50,11 @@ outputs:
     kind: "verified identity or request for assistance"
     purpose: "Continue only after verifying the intended account and destination."
 supersedes: []
-superseded_by: null
+superseded_by:
+  type: "rfc"
+  code: "RFC-0013"
+  title: "Stock agent-browser sessions"
+  path: "./rfc-0013-stock-agent-browser-sessions.md"
 related: []
 tags:
   - "agent-browser"
@@ -62,6 +66,8 @@ tags:
 # RFC-0011: Quiet browser sessions and approved authentication
 
 ## Summary
+
+Superseded by RFC-0013.
 
 Local browser automation interrupts Chinh's desktop and lacks an automatic path for approved 1Password logins. This proposal keeps Amp and local Chrome, with headless operation as the default.
 

@@ -12,6 +12,161 @@ AGENTS_SKILLS_DIR="$HOME/.agents/skills"
 AMP_CONFIG_DIR="${AMP_CONFIG_DIR:-$HOME/.config/amp}"
 LOCAL_BIN="$HOME/.local/bin"
 LOCAL_SHARE="$HOME/.local/share"
+LOCAL_LIBEXEC="$HOME/.local/libexec"
+
+migration_remove() {
+	local path="$1"
+	if [ "${AGENT_SKILLS_MIGRATION_DRY_RUN:-}" = "1" ]; then
+		echo "would remove: $path"
+	else
+		rm -rf "$path"
+		echo "removed: $path"
+	fi
+}
+
+legacy_digest_matches() {
+	local path="$1"
+	local relative="$2"
+	local digest
+	digest="$(shasum -a 256 "$path" | awk '{print $1}')"
+	case "$relative:$digest" in
+		README.md:994767eac90abe089de80c3bfebc011b65913afedd25fba9c4646b02f4a292ef | README.md:ba3e0ada90ed23c5dcc9a11a57d640adcf1067827e8e9ad42417135417571f0c | README.md:415504f9fc986037165652c0376c1f5837d7fb3087909850f4986f14bb44b79b | README.md:e256c89dbdc1c1db0fb557f50db367b89befaa484fc10513a47f96945bc85c48 | process_identity.py:532128fe3eee32308018c891bc29db3416bbd180315c2894c493d2408847d631 | reference.md:d50725e786c4d208b2f2eb199f0aa81711e2df283d8edf24153ac1d6d91eec70 | reference.md:be9a45bbaed45dc0ca8fe30bfb8dc79205ee291ce3875903e025c03e155eb476 | reference.md:bd6a5d3e85bdcc1f12ba6ab496423871055a88d5e8c1d29bf32508d565125e7c | reference.md:6acdd481c37bedcfd46a2aa1a3fde53b0112af8bd307a53ba2062d1c7dca4c6f | reference.md:f388a0b33c0608d3134028f522c4aa7de56f0aef362a67e65074feac0e6ac68e | retired_cleanup.py:d2638af3d0b482c7b143f2b4ae79e3e5c2a3f696c4619adcd8a41ff815831d01 | retired_cleanup.py:a7665998118afc51f8164eca4a722bddffc37045485dbeae6b8023e4a109e41d | schema.json:dbf91cd629f8cbed5aee0f3b9fcd59419f736ed3768080a5024e132a8a44dab5 | schema.json:1d4e2b0391b54a7418843df4b25fe635edeaa8f4e9c120dbddf66e70f28f03ab | schema.json:34a9d61f45b42ee92861ff19eef75e8cfa7adad7fa92fd74228bcb9af3e02bc7)
+			return 0
+			;;
+		*) return 1 ;;
+	esac
+}
+
+annotation_digest_matches() {
+	local path="$1"
+	local relative="$2"
+	local digest
+	digest="$(shasum -a 256 "$path" | awk '{print $1}')"
+	case "$relative:$digest" in
+		README.md:055c260f47e3c2e75017e72f8ca1808c238983bc8a05eee13a4bd8610cee8927 | annotation.schema.json:989a1c802f0e589b495f716cebc50595f92cc57dc4064e073615554ac26dfc81 | toolkit-core.js:ae52da154696a8501cf10a742a075f04b090625864a3bc2dfc139126e9d7343d | toolkit.js:9baeeea697093b44ac3d8b34dc104aa6ed1cbee933c4b85f758a147579bfb635)
+			return 0
+			;;
+		*) return 1 ;;
+	esac
+}
+
+cleanup_legacy_projection_dir() {
+	local directory="$1"
+	local kind="$2"
+	local path relative tracked_count=0 safe=true
+	[ -e "$directory" ] || [ -L "$directory" ] || return 0
+	if [ -L "$directory" ] || [ ! -d "$directory" ]; then
+		echo "warning: preserving non-owned legacy path: $directory" >&2
+		return 0
+	fi
+	if find "$directory" -mindepth 1 \( -type l -o \( ! -type d ! -type f \) \) -print -quit | grep -q .; then
+		safe=false
+	fi
+	while IFS= read -r path; do
+		relative="${path#"$directory"/}"
+		if [ "$kind" = "lifecycle" ] && [[ "$relative" == __pycache__/*.pyc ]]; then
+			continue
+		fi
+		tracked_count=$((tracked_count + 1))
+		if [ "$kind" = "lifecycle" ]; then
+			legacy_digest_matches "$path" "$relative" || safe=false
+		else
+			annotation_digest_matches "$path" "$relative" || safe=false
+		fi
+	done < <(find "$directory" -type f -print)
+	if [ "$safe" = true ] && [ "$tracked_count" -gt 0 ]; then
+		migration_remove "$directory"
+	else
+		echo "warning: preserving modified or unrecognized legacy directory: $directory" >&2
+	fi
+}
+
+cleanup_agent_browser_migration() {
+	local name link target legacy_libexec entries
+	for name in agent-browser-lifecycle agent-browser-plugin-onepassword agent-browser-credential-response; do
+		link="$LOCAL_BIN/$name"
+		if [ -L "$link" ] && [ "$(readlink "$link")" = "$BIN_DIR/$name" ]; then
+			migration_remove "$link"
+		elif [ -e "$link" ] || [ -L "$link" ]; then
+			echo "warning: preserving non-owned path: $link" >&2
+		fi
+	done
+	if [ -d "$LOCAL_BIN" ]; then
+		for link in "$LOCAL_BIN"/*; do
+			[ -L "$link" ] || continue
+			case "$(basename "$link")" in
+				agent-browser-lifecycle | agent-browser-plugin-onepassword | agent-browser-credential-response) continue ;;
+			esac
+			target="$(readlink "$link")"
+			if [[ "$target" == "$BIN_DIR"/* ]] && [ ! -e "$link" ]; then
+				migration_remove "$link"
+			fi
+		done
+	fi
+
+	cleanup_legacy_projection_dir "$AMP_CONFIG_DIR/agent-browser-lifecycle" lifecycle
+	cleanup_legacy_projection_dir "$AMP_CONFIG_DIR/agent-browser-annotations" annotations
+
+	legacy_libexec="$LOCAL_LIBEXEC/agent-browser-rfc0011"
+	if [ -e "$legacy_libexec" ] || [ -L "$legacy_libexec" ]; then
+		if [ -d "$legacy_libexec" ] && [ ! -L "$legacy_libexec" ] \
+			&& ! find "$legacy_libexec" -type l -print -quit | grep -q .; then
+			entries="$(find "$legacy_libexec" -mindepth 1 -maxdepth 1 -exec basename {} \; | LC_ALL=C sort)"
+			if [ "$entries" = $'agent-browser\nbuild-input.sha256\nskill-data\nskill-data.sha256' ]; then
+				migration_remove "$legacy_libexec"
+			else
+				echo "warning: preserving modified legacy directory: $legacy_libexec" >&2
+			fi
+		else
+			echo "warning: preserving non-owned legacy path: $legacy_libexec" >&2
+		fi
+	fi
+
+	python3 "$AMP_DIR/scripts/migrate-agent-browser-config.py" \
+		"$HOME/.agent-browser/config.json" \
+		"$LOCAL_BIN/agent-browser-plugin-onepassword"
+}
+
+install_stock_agent_browser() {
+	local version_file="$AMP_DIR/agent-browser/version"
+	local package_file="$LOCAL_LIBEXEC/agent-browser-stock/node_modules/agent-browser/package.json"
+	local version installed_version=""
+	if [ ! -f "$version_file" ]; then
+		echo "warning: agent-browser stock version file is missing: $version_file" >&2
+		return 0
+	fi
+	version="$(tr -d '[:space:]' < "$version_file")"
+	if [ -z "$version" ]; then
+		echo "warning: agent-browser stock version file is empty: $version_file" >&2
+		return 0
+	fi
+	if [ -f "$package_file" ]; then
+		installed_version="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["version"])' "$package_file" 2>/dev/null || true)"
+	fi
+	if [ "$installed_version" = "$version" ]; then
+		echo "ok: agent-browser stock $version"
+		return 0
+	fi
+	if [ "${AGENT_SKILLS_SKIP_AGENT_BROWSER_INSTALL:-}" = "1" ]; then
+		echo "skipped: agent-browser stock $version install"
+		return 0
+	fi
+	if ! command -v npm >/dev/null 2>&1; then
+		echo "warning: npm is unavailable; agent-browser stock $version was not installed" >&2
+		return 0
+	fi
+	echo "installing: agent-browser stock $version"
+	if npm install --prefix "$LOCAL_LIBEXEC/agent-browser-stock" --no-audit --no-fund "agent-browser@$version"; then
+		echo "installed: agent-browser stock $version"
+	else
+		echo "warning: failed to install agent-browser stock $version" >&2
+	fi
+}
+
+if [ "${AGENT_SKILLS_MIGRATION_ONLY:-}" = "1" ]; then
+	cleanup_agent_browser_migration
+	exit 0
+fi
 
 mkdir -p "$CLAUDE_DESKTOP_SKILLS_DIR" "$AGENTS_SKILLS_DIR" "$LOCAL_BIN"
 
@@ -430,24 +585,6 @@ sync_amp_artifacts() {
 		echo "synced: amp/agent-secrets/ -> $AMP_CONFIG_DIR/agent-secrets/"
 	fi
 
-	if [ -d "$AMP_DIR/agent-browser-lifecycle" ]; then
-		if [ -L "$AMP_CONFIG_DIR/agent-browser-lifecycle" ]; then
-			rm "$AMP_CONFIG_DIR/agent-browser-lifecycle"
-		fi
-		mkdir -p "$AMP_CONFIG_DIR/agent-browser-lifecycle"
-		rsync -a --delete "$AMP_DIR/agent-browser-lifecycle/" "$AMP_CONFIG_DIR/agent-browser-lifecycle/"
-		echo "synced: amp/agent-browser-lifecycle/ -> $AMP_CONFIG_DIR/agent-browser-lifecycle/"
-	fi
-
-	if [ -d "$AMP_DIR/agent-browser-annotations" ]; then
-		if [ -L "$AMP_CONFIG_DIR/agent-browser-annotations" ]; then
-			rm "$AMP_CONFIG_DIR/agent-browser-annotations"
-		fi
-		mkdir -p "$AMP_CONFIG_DIR/agent-browser-annotations"
-		rsync -a --delete "$AMP_DIR/agent-browser-annotations/" "$AMP_CONFIG_DIR/agent-browser-annotations/"
-		echo "synced: amp/agent-browser-annotations/ -> $AMP_CONFIG_DIR/agent-browser-annotations/"
-	fi
-
 	if [ -f "$AMP_DIR/AGENTS.md" ]; then
 		mkdir -p "$AMP_CONFIG_DIR"
 		cp "$AMP_DIR/AGENTS.md" "$AMP_CONFIG_DIR/AGENTS.md"
@@ -579,6 +716,8 @@ if [[ "${1:-}" == "--remote" ]]; then
 fi
 
 ensure_skill_dependencies
+cleanup_agent_browser_migration
+install_stock_agent_browser
 sync_amp_artifacts
 sync_local_runtime_artifacts
 
@@ -602,13 +741,6 @@ if [ -d "$BIN_DIR" ]; then
 			echo "linked: bin/$name -> $script"
 		fi
 	done
-fi
-
-if [ -f "$BIN_DIR/agent-browser-plugin-onepassword" ]; then
-	python3 "$AMP_DIR/scripts/merge-agent-browser-plugin.py" \
-		"$HOME/.agent-browser/config.json" \
-		"$LOCAL_BIN/agent-browser-plugin-onepassword"
-	echo "registered: agent-browser plugin onepassword"
 fi
 
 # Symlink skill scripts that should be CLI-accessible

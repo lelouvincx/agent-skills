@@ -57,15 +57,15 @@ repos:
         language: python
         additional_dependencies: [jsonschema==4.25.1]
         pass_filenames: false
-        files: ^(?:amp/agent-secrets/|amp/scripts/test-agent-secrets-lib\.sh$|amp/scripts/(?:merge-agent-browser-plugin|test_agent_browser_plugin_onepassword|test_agent_secrets|test_validate_agent_secrets|validate-agent-secrets)\.py$|bin/(?:agent-browser-credential-response|agent-browser-plugin-onepassword|agent-secrets|smartclass-wrangler-dev)$|sync-skills\.sh$|scripts/check-projection$|\.github/workflows/ci\.yml$|\.pre-commit-config\.yaml$)
+        files: ^(?:amp/agent-secrets/|amp/scripts/test-agent-secrets-lib\.sh$|amp/scripts/(?:test_agent_secrets(?:_good_outcomes)?|test_validate_agent_secrets|validate-agent-secrets)\.py$|bin/(?:agent-secrets|smartclass-wrangler-dev)$|sync-skills\.sh$|scripts/check-projection$|\.github/workflows/ci\.yml$|\.pre-commit-config\.yaml$)
 
       - id: test-agent-secrets
         name: Test agent secret capability resolver
-        entry: bash -c 'amp/scripts/test-agent-secrets-lib.sh && python -m unittest amp/scripts/test_validate_agent_secrets.py amp/scripts/test_agent_secrets.py amp/scripts/test_agent_browser_plugin_onepassword.py'
+        entry: bash -c 'amp/scripts/test-agent-secrets-lib.sh && python -m unittest amp/scripts/test_validate_agent_secrets.py amp/scripts/test_agent_secrets.py amp/scripts/test_agent_secrets_good_outcomes.py'
         language: python
         additional_dependencies: [jsonschema==4.25.1]
         pass_filenames: false
-        files: ^(?:amp/agent-secrets/|amp/scripts/test-agent-secrets-lib\.sh$|amp/scripts/(?:merge-agent-browser-plugin|test_agent_browser_plugin_onepassword|test_agent_secrets|test_validate_agent_secrets|validate-agent-secrets)\.py$|bin/(?:agent-browser-credential-response|agent-browser-plugin-onepassword|agent-secrets|smartclass-wrangler-dev)$|sync-skills\.sh$|scripts/check-projection$|\.github/workflows/ci\.yml$|\.pre-commit-config\.yaml$)
+        files: ^(?:amp/agent-secrets/|amp/scripts/test-agent-secrets-lib\.sh$|amp/scripts/(?:test_agent_secrets(?:_good_outcomes)?|test_validate_agent_secrets|validate-agent-secrets)\.py$|bin/(?:agent-secrets|smartclass-wrangler-dev)$|sync-skills\.sh$|scripts/check-projection$|\.github/workflows/ci\.yml$|\.pre-commit-config\.yaml$)
 
       - id: validate-github-thread-events
         name: Validate GitHub thread event configuration
@@ -89,34 +89,12 @@ repos:
         language: system
         types: [shell]
 
-      - id: check-agent-browser-custom
-        name: Test pinned Agent Browser skill packaging
-        entry: scripts/check-agent-browser-custom
+      - id: test-agent-browser-wrapper
+        name: Test the agent-browser wrapper and config migration
+        entry: python3 -m unittest scripts/test_agent_browser_wrapper.py amp/scripts/test_migrate_agent_browser_config.py
         language: system
         pass_filenames: false
-        files: ^(?:amp/agent-browser-custom/|bin/agent-browser$|scripts/check-agent-browser-custom$|\.pre-commit-config\.yaml$)
-
-      - id: test-agent-browser-config
-        name: Test Agent Browser configuration merge
-        entry: python3 -m unittest amp/scripts/test_merge_agent_browser_config.py
-        language: system
-        pass_filenames: false
-        files: ^(?:amp/scripts/(?:merge-agent-browser-plugin|test_merge_agent_browser_config)\.py$|scripts/check-projection$|\.github/workflows/ci\.yml$|\.pre-commit-config\.yaml$)
-
-      - id: test-agent-browser-lifecycle
-        name: Test Agent Browser lifecycle and gated launch
-        entry: python -B -m unittest scripts/test_agent_browser_lifecycle.py scripts/test_agent_browser_lifecycle_managed.py scripts/test_agent_browser_process_identity.py scripts/test_agent_browser_lifecycle_sharing.py scripts/test_agent_browser_retired_cleanup.py scripts/test_agent_browser_lifecycle_sweep.py
-        language: python
-        additional_dependencies: [jsonschema==4.25.1]
-        pass_filenames: false
-        files: ^(?:bin/agent-browser-lifecycle$|amp/agent-browser-(?:annotations|lifecycle)/|scripts/(?:check-agent-browser-annotations|test_agent_browser_(?:annotations|lifecycle(?:_managed|_sharing|_sweep)?|process_identity|retired_cleanup)\.(?:mjs|py))$|\.github/workflows/ci\.yml$|\.pre-commit-config\.yaml$)
-
-      - id: test-agent-browser-annotations
-        name: Test Agent Browser visual annotations
-        entry: scripts/check-agent-browser-annotations
-        language: system
-        pass_filenames: false
-        files: ^(?:amp/agent-browser-annotations/|bin/agent-browser-lifecycle$|scripts/(?:check-agent-browser-annotations|test_agent_browser_annotations\.(?:mjs|py))$|\.github/workflows/ci\.yml$|\.pre-commit-config\.yaml$)
+        files: ^(?:bin/agent-browser$|amp/agent-browser/|scripts/test_agent_browser_wrapper\.py$|amp/scripts/(?:migrate-agent-browser-config|test_migrate_agent_browser_config)\.py$)
 
       - id: check-amp-runner
         name: Test Amp runner LaunchAgent manager
