@@ -65,7 +65,11 @@ cat > "$tmp_home/.agent-browser/config.json" <<'JSON'
   ]
 }
 JSON
-sed -i '' "s|HOME_PLACEHOLDER|$tmp_home|" "$tmp_home/.agent-browser/config.json"
+python3 - "$tmp_home/.agent-browser/config.json" "$tmp_home" <<'PY'
+import pathlib, sys
+path = pathlib.Path(sys.argv[1])
+path.write_text(path.read_text().replace("HOME_PLACEHOLDER", sys.argv[2]))
+PY
 
 HOME="$tmp_home" \
 	AMP_CONFIG_DIR="$tmp_home/.config/amp" \
