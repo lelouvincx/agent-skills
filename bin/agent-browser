@@ -1,33 +1,345 @@
-#!/usr/bin/env bash
-set -euo pipefail
+#!/usr/bin/env python3
+"""Run pinned stock agent-browser with Amp session ownership policy."""
 
-script="${BASH_SOURCE[0]}"
-if [ -L "$script" ]; then
-  target="$(readlink "$script")"
-  if [[ "$target" = /* ]]; then
-    script="$target"
-  else
-    script="$(dirname "$script")/$target"
-  fi
-fi
-repo_root="$(cd "$(dirname "$script")/.." && pwd)"
-install_dir="${AGENT_BROWSER_CUSTOM_INSTALL_DIR:-$HOME/.local/libexec/agent-browser-rfc0011}"
-binary="$install_dir/agent-browser"
-receipt="$install_dir/build-input.sha256"
-fingerprint="$repo_root/amp/agent-browser-custom/fingerprint"
-source "$repo_root/amp/agent-browser-custom/lib.sh"
+from __future__ import annotations
 
-if [ ! -x "$binary" ] || [ ! -f "$receipt" ]; then
-  echo "agent-browser: RFC-0011 custom build is not installed; run amp/agent-browser-custom/build" >&2
-  exit 1
-fi
-expected="$($fingerprint)"
-actual="$(tr -d '[:space:]' <"$receipt")"
-if [ "$actual" != "$expected" ]; then
-  echo "agent-browser: RFC-0011 custom build is stale; run amp/agent-browser-custom/build" >&2
-  exit 1
-fi
-agent_browser_custom_verify_skill_data "$install_dir" "$repo_root"
+import fcntl
+import json
+import os
+import re
+import shutil
+import signal
+import subprocess
+import sys
+import time
+from pathlib import Path
+from typing import Any
 
-export AGENT_BROWSER_SKILLS_DIR="$install_dir/skill-data"
-exec "$binary" "$@"
+THREAD_RE = re.compile(r"^T-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
+AGENT_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,15}$")
+PROFILE_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,47}$")
+KEPT_ENV = ("PATH", "HOME", "USER", "LOGNAME", "SHELL", "LANG", "LC_ALL", "TERM", "TMPDIR")
+RESERVED = {
+    "--config", "--session", "--session-name", "--namespace", "--profile",
+    "--executable-path", "--headed", "--idle-timeout", "--cdp", "--auto-connect",
+    "--extension", "--init-script", "--enable", "--args", "--user-agent", "--proxy",
+    "--proxy-bypass", "--ignore-https-errors", "--ca-cert", "--no-ca-cert",
+    "--allow-file-access", "-p", "--provider", "--device", "--engine", "--state",
+    "--restore", "--restore-save", "--restore-check-url", "--restore-check-text",
+    "--restore-check-fn", "--allowed-domains", "--action-policy", "--confirm-actions",
+    "--confirm-interactive", "--webgpu", "--no-webmcp", "--hide-scrollbars",
+    "--download-path", "--input-mode", "--debug",
+}
+PASSTHROUGH = {"-h", "--help", "help", "-V", "--version"}
+# Global options that take a separate value; used to find the command word.
+VALUE_FLAGS = {
+    "--max-output", "--color-scheme", "--headers", "--screenshot-dir",
+    "--screenshot-quality", "--screenshot-format", "--model",
+}
+CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+
+
+def fail(message: str, code: int) -> int:
+    print(f"agent-browser: {message}", file=sys.stderr)
+    return code
+
+
+def child_env() -> dict[str, str]:
+    return {key: os.environ[key] for key in KEPT_ENV if key in os.environ}
+
+
+def run_child(argv: list[str], env: dict[str, str], *, capture: bool = False) -> subprocess.CompletedProcess[bytes]:
+    if capture:
+        return subprocess.run(argv, env=env, capture_output=True, check=False)
+
+    process = subprocess.Popen(argv, env=env, start_new_session=True)
+    old_handlers: dict[int, Any] = {}
+
+    def forward(signum: int, _frame: Any) -> None:
+        if process.poll() is None:
+            process.send_signal(signum)
+
+    try:
+        for signum in (signal.SIGINT, signal.SIGTERM):
+            old_handlers[signum] = signal.signal(signum, forward)
+        returncode = process.wait()
+    finally:
+        for signum, handler in old_handlers.items():
+            signal.signal(signum, handler)
+    return subprocess.CompletedProcess(argv, returncode)
+
+
+def before_separator(args: list[str]) -> list[str]:
+    return args[: args.index("--")] if "--" in args else args
+
+
+def command(args: list[str]) -> str | None:
+    visible = before_separator(args)
+    skip = False
+    for arg in visible:
+        if skip:
+            skip = False
+        elif arg in VALUE_FLAGS:
+            skip = True
+        elif not arg.startswith("-"):
+            return arg
+    return None
+
+
+def validate_args(args: list[str]) -> int | None:
+    visible = before_separator(args)
+    for arg in visible:
+        flag = arg.split("=", 1)[0]
+        if flag in RESERVED:
+            return fail(f"option {flag} is managed by the wrapper", 2)
+
+    cmd = command(args)
+    if cmd in {"connect", "install", "upgrade"}:
+        return fail(f"command {cmd} is not allowed", 2)
+    if cmd == "close" and any(arg in {"--all", "-a"} for arg in visible):
+        return fail("option --all is not allowed with close", 2)
+    if cmd == "dashboard" and not any(
+        arg == "--port" or arg.startswith("--port=") for arg in visible
+    ):
+        return fail("dashboard requires an explicit --port", 2)
+    return None
+
+
+def chmod_private(path: Path, mode: int) -> None:
+    path.chmod(mode)
+
+
+def make_dir(path: Path) -> None:
+    path.mkdir(parents=True, exist_ok=True, mode=0o700)
+    chmod_private(path, 0o700)
+
+
+def write_state(path: Path, state: dict[str, Any]) -> None:
+    temporary = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+    fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as stream:
+            json.dump(state, stream, separators=(",", ":"))
+            stream.write("\n")
+        os.replace(temporary, path)
+        chmod_private(path, 0o600)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def load_state(path: Path) -> dict[str, Any] | None:
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
+        return None
+    return value if isinstance(value, dict) else None
+
+
+def chrome_pids(profile_dir: Path, env: dict[str, str]) -> list[int]:
+    ps = os.environ.get("AB_WRAPPER_PS", "/bin/ps")
+    result = subprocess.run(
+        [ps, "-axo", "pid=,command="],
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+        check=False,
+        text=True,
+    )
+    marker = f"--user-data-dir={profile_dir}"
+    pids: list[int] = []
+    for line in result.stdout.splitlines():
+        fields = line.strip().split(maxsplit=1)
+        if len(fields) == 2 and re.search(rf"(?:^|\s){re.escape(marker)}(?:\s|$)", fields[1]):
+            try:
+                pids.append(int(fields[0]))
+            except ValueError:
+                pass
+    return pids
+
+
+def wait_for_chrome_exit(profile_dir: Path, env: dict[str, str]) -> list[int]:
+    deadline = time.monotonic() + 10
+    while True:
+        pids = chrome_pids(profile_dir, env)
+        if not pids or time.monotonic() >= deadline:
+            return pids
+        time.sleep(0.1)
+
+
+def stop_orphans(profile_dir: Path, env: dict[str, str]) -> list[int]:
+    """Stop Chrome left on this wrapper-owned profile after its daemon died."""
+    pids = chrome_pids(profile_dir, env)
+    if not pids:
+        return []
+    print(f"agent-browser: stopping orphaned Chrome on {profile_dir}: {', '.join(map(str, pids))}", file=sys.stderr)
+    for pid in pids:
+        try:
+            os.kill(pid, signal.SIGTERM)
+        except ProcessLookupError:
+            pass
+    return wait_for_chrome_exit(profile_dir, env)
+
+
+def remove_ephemeral(profile_dir: Path, env: dict[str, str]) -> bool:
+    if chrome_pids(profile_dir, env):
+        return False
+    shutil.rmtree(profile_dir, ignore_errors=True)
+    return True
+
+
+def main() -> int:
+    repo = Path(__file__).resolve().parent.parent
+    config = repo / "amp" / "agent-browser" / "config.json"
+    version = (repo / "amp" / "agent-browser" / "version").read_text(encoding="utf-8").strip()
+    env = child_env()
+
+    stock_hook = os.environ.get("AB_WRAPPER_STOCK")
+    if stock_hook:
+        stock = Path(stock_hook)
+    else:
+        install = Path.home() / ".local" / "libexec" / "agent-browser-stock"
+        stock = install / "node_modules" / ".bin" / "agent-browser"
+        package = install / "node_modules" / "agent-browser" / "package.json"
+        try:
+            installed = json.loads(package.read_text(encoding="utf-8")).get("version")
+        except (FileNotFoundError, json.JSONDecodeError, OSError):
+            installed = None
+        if installed != version or not stock.is_file() or not os.access(stock, os.X_OK):
+            return fail(f"stock {version} is not installed; run ./sync-skills.sh", 1)
+
+    args = sys.argv[1:]
+    if not args or args[0] in PASSTHROUGH or args[0] == "skills":
+        os.execve(stock, [str(stock), "--config", str(config), *args], env)
+
+    invalid = validate_args(args)
+    if invalid is not None:
+        return invalid
+
+    thread = os.environ.get("AB_THREAD", "")
+    agent = os.environ.get("AB_AGENT")
+    profile = os.environ.get("AB_PROFILE")
+    if not THREAD_RE.fullmatch(thread):
+        return fail("set AB_THREAD to the current Amp thread ID (T-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx)", 2)
+    if agent is not None and not AGENT_RE.fullmatch(agent):
+        return fail("AB_AGENT must be 1-16 lowercase letters, digits, or hyphens", 2)
+    if profile is not None and not PROFILE_RE.fullmatch(profile):
+        return fail("AB_PROFILE must be 1-48 lowercase letters, digits, or hyphens", 2)
+
+    owner = thread + (f"/{agent}" if agent else "")
+    session = f"p-{profile}" if profile else f"t-{thread[-12:]}" + (f"-{agent}" if agent else "")
+    state_root = Path(os.environ.get("AB_WRAPPER_STATE_DIR", Path.home() / ".local/state/agent-browser"))
+    profile_dir = state_root / (f"profiles/{profile}" if profile else f"ephemeral/{session}")
+    wrapper_dir = state_root / "wrapper"
+    make_dir(state_root)
+    make_dir(profile_dir.parent)
+    make_dir(profile_dir)
+    make_dir(wrapper_dir)
+    state_path = wrapper_dir / f"{session}.json"
+    lock_path = wrapper_dir / f"{session}.lock"
+    lock_fd = os.open(lock_path, os.O_RDWR | os.O_CREAT, 0o600)
+    os.chmod(lock_path, 0o600)
+
+    mode = "headed" if os.environ.get("AB_HEADED") == "1" else "headless"
+    chrome = os.environ.get("AB_WRAPPER_CHROME", CHROME)
+    canonical = [
+        str(stock), "--config", str(config), "--namespace", "amp", "--session", session,
+        "--profile", str(profile_dir), "--executable-path", chrome, "--idle-timeout", "8h",
+    ]
+    if mode == "headed":
+        canonical.append("--headed")
+
+    try:
+        fcntl.flock(lock_fd, fcntl.LOCK_EX)
+        probe = run_child([*canonical, "session", "info", "--json"], env, capture=True)
+        try:
+            probe_data = json.loads(probe.stdout)
+            alive = probe_data.get("data", {}).get("active") is True
+        except (json.JSONDecodeError, AttributeError):
+            alive = False
+
+        state = load_state(state_path)
+        was_stale = False
+        if state is not None and alive:
+            if state.get("owner") != owner:
+                return fail(
+                    f"session {session} is owned by {state.get('owner')}; ask the owner to close it or use a different AB_PROFILE",
+                    3,
+                )
+            if state.get("mode") != mode:
+                return fail(
+                    f"session {session} is running {state.get('mode')}; run 'agent-browser close' first to switch",
+                    5,
+                )
+        elif state is not None:
+            state_path.unlink(missing_ok=True)
+            if state.get("ephemeral") is True:
+                remove_ephemeral(Path(state.get("profile_dir", profile_dir)), env)
+            was_stale = True
+            state = None
+        elif alive:
+            return fail(
+                f"session {session} is already running without wrapper ownership; close it via 'agent-browser close' by its owner",
+                3,
+            )
+
+        cmd = command(args)
+        if cmd == "close":
+            if not alive:
+                leftover = stop_orphans(profile_dir, env)
+                if leftover:
+                    return fail(f"Chrome processes still use {profile_dir}: {', '.join(map(str, leftover))}", 1)
+                state_path.unlink(missing_ok=True)
+                if not profile:
+                    remove_ephemeral(profile_dir, env)
+                print(f"agent-browser: session {session} is not running")
+                return 0
+            result = run_child([*canonical, *args], env)
+            if result.returncode != 0:
+                return result.returncode
+            pids = wait_for_chrome_exit(profile_dir, env)
+            if pids:
+                return fail(f"Chrome processes still use {profile_dir}: {', '.join(map(str, pids))}", 1)
+            state_path.unlink(missing_ok=True)
+            if not profile:
+                shutil.rmtree(profile_dir, ignore_errors=True)
+            return 0
+
+        if cmd in {"open", "goto", "navigate"} and not alive:
+            leftover = stop_orphans(profile_dir, env)
+            if leftover:
+                return fail(f"Chrome processes still use {profile_dir}: {', '.join(map(str, leftover))}", 1)
+            make_dir(profile_dir)
+            state = {
+                "owner": owner,
+                "mode": mode,
+                "profile_dir": str(profile_dir),
+                "ephemeral": profile is None,
+                "created": int(time.time()),
+            }
+            write_state(state_path, state)
+            result = run_child([*canonical, *args], env)
+            if result.returncode == 0:
+                stream = run_child([*canonical, "stream", "disable"], env, capture=True)
+                if stream.returncode != 0:
+                    print("agent-browser: warning: failed to disable streaming", file=sys.stderr)
+                return 0
+            run_child([*canonical, "close"], env, capture=True)
+            state_path.unlink(missing_ok=True)
+            if profile is None:
+                remove_ephemeral(profile_dir, env)
+            return result.returncode
+
+        if not alive:
+            detail = " (it expired, was closed, or its browser exited; page state is lost)" if was_stale else ""
+            return fail(
+                f"session {session} is not running{detail}. Run 'agent-browser open <url>' to start it.",
+                4,
+            )
+
+        return run_child([*canonical, *args], env).returncode
+    finally:
+        os.close(lock_fd)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

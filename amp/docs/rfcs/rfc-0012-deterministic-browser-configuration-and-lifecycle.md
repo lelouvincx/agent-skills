@@ -4,10 +4,10 @@ code: "RFC-0012"
 title: "Deterministic browser configuration and lifecycle"
 slug: "deterministic-browser-configuration-and-lifecycle"
 file: "rfc-0012-deterministic-browser-configuration-and-lifecycle.md"
-status: "Implemented"
+status: "Superseded"
 summary: "Use validated defaults and a lifecycle controller for browser mechanics while keeping task interpretation with the agent."
 created: "2026-09-07"
-updated: "2026-09-08"
+updated: "2026-09-26"
 amp_thread_id:
   T-01a070b7-4cf5-76f3-a833-96c78deacde7: "researched current configuration, consulted Oracle and converted the implementation plan into an RFC"
   T-01a07c05-b8b1-763d-a505-dca738e97aac: "validated session closure, browser-free tests and actual post-reboot cleanup"
@@ -52,7 +52,11 @@ outputs:
     kind: "durable events and structured status"
     purpose: "Report readiness, completed cleanup or explicit recovery uncertainty."
 supersedes: []
-superseded_by: null
+superseded_by:
+  type: "rfc"
+  code: "RFC-0013"
+  title: "Stock agent-browser sessions"
+  path: "./rfc-0013-stock-agent-browser-sessions.md"
 related: []
 tags:
   - "agent-browser"
@@ -64,6 +68,8 @@ tags:
 # RFC-0012: Deterministic browser configuration and lifecycle
 
 ## Summary
+
+Superseded by RFC-0013.
 
 Use config for stable defaults, a lifecycle controller for session mechanics, and agent instructions for task judgment. Extend the existing helper rather than introduce a resident supervisor. Preserve RFC-0011's fresh profiles, quiet operation and approved authentication.
 

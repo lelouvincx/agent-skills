@@ -1,23 +1,60 @@
 # Browser conventions
 
-Use the `agent-browser` skill for page commands and the rules below for local policy.
+Use `agent-browser`, the policy wrapper, with the `agent-browser` skill for page commands. The wrapper keeps one browser session across shell calls and fixes its launch settings.
 
-- Testing: use browser-free fixtures. No Chrome tests or silent Chromium substitutes. Ask the human for an alternative when live validation is necessary; distinguish mock coverage from live coverage.
-- Launch mode: headless by default; headed is pre-approved when needed. For headed Chrome, choose a named persistent profile before launch, reuse the active headed session, and keep the page agent-controlled through thread commands. Pause only for truly human-only steps such as password manager, Touch ID, OTP or passkey input. Do not reopen Chrome unless no active session exists or verified closure is required. Changing mode requires verified closure and a new session. To retain login, use the same [named persistent profile](../agent-browser-lifecycle/reference.md#persistent-profiles).
+## Session identity
 
-## Managed macOS workflow
+Set the identity on every session command:
 
-Before session work, read [lifecycle rules](agent-browser-lifecycle.md). Use the lifecycle controller, not direct browser launches or reconstructed flags.
+```bash
+AB_THREAD=<actual-Amp-thread-ID> agent-browser open https://example.com
+```
 
-For visual review in headed Chrome, use the lifecycle controller's [annotation workflow](../agent-browser-lifecycle/reference.md#visual-annotations). The agent turns annotation mode on and off; Chinh can mark elements or regions and leave comments in the current tab.
+Each shell tool call starts a fresh shell. Prefix every command, or `export` the variables within the same shell call. Amp does not provide the thread ID as an environment variable.
 
-### Explicit Agent Browser identity
+Use these optional variables only when needed:
 
-Each session uses a fresh browser process and loopback endpoint with exclusive ownership of a private profile. Profiles are ephemeral by default; opt into a named profile for login reuse. Keep authentication in the profile, never in journal records or exported cookies.
+- `AB_AGENT=<short-suffix>` gives a subagent its own ephemeral session.
+- `AB_PROFILE=<site-account-env>` selects a named profile, for example `holistics-us-support`.
+- `AB_HEADED=1` starts a headed session. Headless is the default.
 
-## Authentication
+Keep the session open across turns. Do not close it between page commands or conversational turns. After choosing the intended tab, use `--pin-tab` so a missing tab fails instead of selecting another tab.
 
-Before login or authentication escalation, read the [login procedure](../agent-browser-lifecycle/reference.md#authentication).
+One agent owns each session and each logged-in profile. Subagents use their own ephemeral sessions with `AB_AGENT`; they do not drive the parent's session or named profile.
+
+## Manual login
+
+Use a named profile whenever a login must survive session closure:
+
+1. Start headed Chrome with `AB_THREAD`, `AB_PROFILE` and `AB_HEADED=1`.
+2. Drive the page yourself. Pause only when Chinh must use a password manager, Touch ID, OTP or passkey.
+3. Verify the signed-in account before continuing.
+4. Keep driving the page after the human-only step.
+5. To return to headless mode, run `close` with the same headed identity. Reopen with the same `AB_THREAD` and `AB_PROFILE`, without `AB_HEADED`.
+
+A login survives `close` only when the site sets a persistent cookie. Tick the site's "Remember me" option before sign-in; session-only cookies are dropped whenever the browser closes or expires.
+
+Never capture, export or log credentials, one-time codes, passkeys or cookies.
+
+## Failures and recovery
+
+A failed selector, stale reference or wait timeout is a normal page failure. Take a new snapshot, inspect the current page and retry the page command. Do not replace the browser session.
+
+After an ambiguous consequential action, such as submit, payment or delete, inspect page and server-visible state before repeating it. The wrapper does not promise exactly-once execution.
+
+Wrapper policy failures use these exit codes:
+
+- exit 3: another thread owns the session or profile. Use a different profile or ask the owner to close it.
+- exit 4: the session is not running. Page state is lost; reopen it explicitly with `open`.
+- exit 5: the live session uses the other display mode. Run `close`, then reopen with the intended mode.
+
+Run `close` at the end of the task. Closure is complete when it exits 0. Never use `close --all`. Never launch Chrome directly or pass launch flags; the wrapper owns and rejects those flags.
+
+Enable the stream or dashboard only when the task needs a live view. The dashboard requires an explicit port.
+
+## Testing
+
+Keep repository tests browser-free. Use fixtures and mocks without substituting an unreported browser runtime. Live Chrome validation requires Chinh's approval. Report mock coverage and live coverage separately.
 
 ## Timing browser workflows
 
