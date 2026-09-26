@@ -63,6 +63,8 @@ AGENTS_REGISTRY_ENV=vps project-resolve prefect --path
 | `data-us` | `holistics` | `~/Developer/holistics/data/data-us` | `holistics/data-us` |
 | `dbt` | `holistics` | `~/Developer/holistics/data/dbt` | `holistics/dbt` |
 | `prefect` | `holistics` | `~/Developer/holistics/data/prefect` | `holistics/prefect` |
+| `snowplow` | `holistics` | `~/Developer/holistics/data/snowplow` | `holistics/snowplow` |
+| `snowplow-schemas` | `holistics` | `~/Developer/holistics/data/snowplow/snowplow-schemas` | `holistics/snowplow-schemas` |
 | `demo4` | `holistics` | `~/Developer/holistics/presales/demo4` | `holistics/data-demo4` |
 | `testing4` | `holistics` | `~/Developer/holistics/presales/testing4` | `holistics/data-testing4` |
 | `duty-support` | `lelouvincx` | `~/Developer/holistics/duty-support` | `lelouvincx/duty-support` |
