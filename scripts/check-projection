@@ -15,14 +15,19 @@ mkdir -p "$tmp_home/.config/amp/github-thread-events/policies"
 touch "$tmp_home/.config/amp/github-thread-events/policies/stale.json"
 mkdir -p "$tmp_home/.config/amp/agent-secrets"
 touch "$tmp_home/.config/amp/agent-secrets/stale.json"
+# Last commit containing the retired lifecycle and annotation projections.
+legacy_commit=d5038c908dec29b5b9c2381bc1653e48ec0d2c22
+if ! git -C "$REPO_DIR" cat-file -e "$legacy_commit^{commit}" 2>/dev/null; then
+	git -C "$REPO_DIR" fetch --quiet --depth=1 origin "$legacy_commit"
+fi
 mkdir -p "$tmp_home/.config/amp/agent-browser-lifecycle"
 for file in README.md process_identity.py reference.md retired_cleanup.py schema.json; do
-	git -C "$REPO_DIR" show "origin/main:amp/agent-browser-lifecycle/$file" \
+	git -C "$REPO_DIR" show "$legacy_commit:amp/agent-browser-lifecycle/$file" \
 		> "$tmp_home/.config/amp/agent-browser-lifecycle/$file"
 done
 mkdir -p "$tmp_home/.config/amp/agent-browser-annotations"
 for file in README.md annotation.schema.json toolkit-core.js toolkit.js; do
-	git -C "$REPO_DIR" show "origin/main:amp/agent-browser-annotations/$file" \
+	git -C "$REPO_DIR" show "$legacy_commit:amp/agent-browser-annotations/$file" \
 		> "$tmp_home/.config/amp/agent-browser-annotations/$file"
 done
 mkdir -p "$tmp_home/.config/amp/conventions"
@@ -107,11 +112,11 @@ cp "$tmp_home/.local/share/amp-cliproxy/config.yaml" "$cliproxy_config_once"
 cp "$tmp_home/.local/share/amp-cliproxy/auth/claude-existing.json" "$cliproxy_auth_once"
 
 mkdir -p "$tmp_home/.config/amp/agent-browser-lifecycle"
-git -C "$REPO_DIR" show origin/main:amp/agent-browser-lifecycle/README.md \
+git -C "$REPO_DIR" show "$legacy_commit":amp/agent-browser-lifecycle/README.md \
 	> "$tmp_home/.config/amp/agent-browser-lifecycle/README.md"
 printf '%s\n' modified >> "$tmp_home/.config/amp/agent-browser-lifecycle/README.md"
 mkdir -p "$tmp_home/.config/amp/agent-browser-annotations"
-git -C "$REPO_DIR" show origin/main:amp/agent-browser-annotations/README.md \
+git -C "$REPO_DIR" show "$legacy_commit":amp/agent-browser-annotations/README.md \
 	> "$tmp_home/.config/amp/agent-browser-annotations/README.md"
 touch "$tmp_home/.config/amp/agent-browser-annotations/extra-file"
 mkdir -p "$tmp_home/.local/libexec/agent-browser-rfc0011/agent-browser"
