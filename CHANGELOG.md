@@ -9,6 +9,7 @@ and this project does not currently use versioned releases.
 
 ### Changed
 
+- Document the Holistics sync session log and state location under `~/.holistics/sync/<session-id>/`. [#257](https://github.com/lelouvincx/agent-skills/pull/257)
 - Point the Holistics convention to the current LLM-friendly documentation index. [#256](https://github.com/lelouvincx/agent-skills/pull/256)
 - Replace the agent-browser lifecycle controller, custom build, visual annotations and 1Password browser login with pinned stock agent-browser 0.38.1 behind a session-ownership wrapper (RFC-0013). [#253](https://github.com/lelouvincx/agent-skills/pull/253)
 - Make skill projection explicitly support Claude Desktop local Code sessions and document the Cowork and cloud-session boundary. [#252](https://github.com/lelouvincx/agent-skills/pull/252)
