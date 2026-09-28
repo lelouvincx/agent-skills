@@ -18,6 +18,7 @@
 - Code sync skips files larger than 5 MiB.
 - Leave the process running through transient timeout and connection errors so it can recover automatically. Treat a failed session refresh as terminal.
 - When cloud and local changes conflict, stop code sync, resolve the conflict locally, then restart code sync.
+- Find each sync session's `sync.log` and `state.json` under `~/.holistics/sync/<session-id>/`.
 - After stopping sync, inspect `git status` and `git diff`, confirm the end of the session’s `sync.log` shows the expected final events and stop, and verify `state.json` reports `dirty_count: 0`, `conflicts: []`, and `last_error: null`.
 
 ## Publish
