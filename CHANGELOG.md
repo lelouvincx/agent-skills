@@ -9,6 +9,7 @@ and this project does not currently use versioned releases.
 
 ### Changed
 
+- Rewrite the Logseq: Log Current Task parent prompt for agent readers without changing the logging contract. [#262](https://github.com/lelouvincx/agent-skills/pull/262)
 - Let the bot ship pull requests without manual approval through `agent-bot-pr merge`, and align post-merge cleanup with SmartClass. [#261](https://github.com/lelouvincx/agent-skills/pull/261)
 - Use choice dialogs for every decision in the personal grilling skill. [#259](https://github.com/lelouvincx/agent-skills/pull/259)
 - Prefer Cloudflare's self-discovering `cf` CLI through a concise global convention. [#258](https://github.com/lelouvincx/agent-skills/pull/258)
