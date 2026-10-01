@@ -1,44 +1,21 @@
-## Round and question format
+## Round and question workflow
 
-Use these round and option rules:
+Keep the dependency-aware frontier-round workflow above. Number rounds from `Round 1`, and number questions globally from `Q1` across the whole session without restarting in a new round. Identify every currently answerable frontier question at the start of a round, then ask them sequentially under that same round number because each tool call waits for an answer.
 
-- keep the dependency-aware frontier-round workflow above
-- number rounds from `Round 1`
-- number questions globally from `Q1` across the whole session
-- keep question numbering continuous across rounds
-- ask every currently answerable frontier question in the same numbered round
-- label each option for question `QN` as `QN.1`, `QN.2`, `QN.3`, and so on
-- end every option list with `QN.+` so the user can add an option when none fits
-- treat `QN.+` as an input code, not an option the agent can recommend
+Use `ask_user_choice` for every decision question. Do not present decision questions as plain-text option lists. For question `QN`:
 
-The following plain-text format replaces the upstream question and recommendation example. Use it for every question:
+- set `question` to `Round R · Question QN: <decision question>`, followed by why the answer matters and `Recommendation: QN.x: <reason>`
+- pass two to five concrete `options`, each beginning `QN.1:`, `QN.2:`, and so on
+- recommend one listed option, never the free-text alternative
+- set `allowOther` to `true` so the user can enter an option that is not listed
 
-```
-**Question QN:** <decision question>
-
-**Why I am asking:** <how the answer affects the plan or a later decision>
-
-**Options:**
-- **QN.1:** <option>
-- **QN.2:** <option>
-- **QN.+:** Add another option: `<describe it>`
-
-**Recommendation:** <recommended QN.x option and why it best fits the current context>
-```
-
-When the user replies `QN.+: <new option>`:
-
-- add their text under the next available numeric label for that question
-- state the assigned label when acknowledging the addition, for example `Q3.3`
-- if the same reply selects a numbered option, treat the new option as add-only and keep the numbered selection
-- otherwise, treat the newly numbered option as their selection unless they only want to add it
-- if they only want to add it, present the updated options and wait for their selection
+When the user enters a free-text answer, assign it the next available `QN.x` label, state that label when acknowledging the answer, and treat it as the selected option. Then continue with the next question already identified for the current round. After all questions in the round are answered, recompute the frontier before starting the next round.
 
 ## Persisting decisions
 
 When asked to persist a grilling session, create one decision record for every asked `QN`, in question order. Record the round in which it was asked and start each record with the complete original question text exactly as asked. Populate:
 
-- **Outcome:** Record `Selected — QN.x: <option text>`, including any adjustment the user made, or record `Deferred`.
+- **Outcome:** Record `Selected: QN.x: <option text>`, including any adjustment the user made, or record `Deferred`.
 - **User rationale (verbatim):** Quote the user's exact words explaining the outcome or adjustment, including every rationale sentence or clause introduced by "because". Record `Not provided` when the user gave no rationale.
 - **Validated evidence:** Record every fact checked during the discussion that informed this question, its validated finding, and the evidence used. Record `None validated` when no evidence was checked.
 - **Other options at that point:** For a selected outcome, list every other `QN.x` option presented and every additional option introduced by the user that is not represented by a `QN.x` label. For each, record the reason established during the discussion for setting it aside at that time, preserving the user's wording verbatim; record `Reason not established` when no reason was established. For a deferred outcome, list every option as `Open`.
