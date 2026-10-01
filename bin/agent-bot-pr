@@ -17,6 +17,10 @@ Usage:
   agent-bot-pr open --title TITLE --body-file FILE [--base BRANCH] [--branch BRANCH]
   agent-bot-pr changelog --pr NUMBER --entry TEXT [--section SECTION]
   agent-bot-pr checks [BRANCH]
+  agent-bot-pr merge --pr NUMBER
+
+merge squash-merges only when every check run on the PR head has passed, and
+pins the merge to that head commit.
 
 Commits and pushes use the hardened bot SSH identity. GitHub writes go through
 agent-secrets with the lelouvincx-bot bundle, so the script never reads the bot
@@ -242,6 +246,36 @@ command_checks() {
 		--jq '{check_runs: [.check_runs[] | {name, status, conclusion}], pending: ([.check_runs[] | select(.status != "completed")] | length), failures: ([.check_runs[] | select(.status == "completed" and (.conclusion | IN("success", "skipped", "neutral") | not))] | length)}'
 }
 
+command_merge() {
+	local pr=""
+	while [[ $# -gt 0 ]]; do
+		case "$1" in
+		--pr)
+			[[ $# -ge 2 ]] || fail '--pr requires a value'
+			pr="$2"
+			shift 2
+			;;
+		*)
+			fail "unknown merge option: $1"
+			;;
+		esac
+	done
+	[[ "$pr" =~ ^[0-9]+$ ]] || fail 'merge requires --pr NUMBER'
+
+	local head blocked
+	head=$(bot_gh api "repos/$AGENT_GITHUB_REPOSITORY/pulls/$pr" --jq '.head.sha')
+	[[ -n "$head" ]] || fail "could not read head commit of PR #$pr"
+	blocked=$(bot_gh api "repos/$AGENT_GITHUB_REPOSITORY/commits/$head/check-runs" \
+		--jq 'if (.check_runs | length) == 0 then "no" else ([.check_runs[] | select(.status != "completed" or (.conclusion | IN("success", "skipped", "neutral") | not))] | length) end')
+	[[ "$blocked" != no ]] || fail "PR #$pr has no check runs on $head yet"
+	[[ "$blocked" == 0 ]] || fail "PR #$pr has $blocked pending or failed check runs on $head"
+
+	bot_gh api --method PUT "repos/$AGENT_GITHUB_REPOSITORY/pulls/$pr/merge" \
+		--raw-field merge_method=squash \
+		--raw-field "sha=$head" \
+		--jq '{merged, sha, message}'
+}
+
 main() {
 	[[ $# -gt 0 ]] || { usage; exit 2; }
 	local command="$1"
@@ -259,6 +293,7 @@ main() {
 	open) command_open "$@" ;;
 	changelog) command_changelog "$@" ;;
 	checks) command_checks "$@" ;;
+	merge) command_merge "$@" ;;
 	*) usage; fail "unknown command: $command" ;;
 	esac
 }

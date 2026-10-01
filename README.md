@@ -69,6 +69,7 @@ agent-bot-pr commit -m "fix: keep agent-secrets hot paths unattended" -- bin/age
 agent-bot-pr open --title "fix: keep agent-secrets hot paths unattended" --body-file /tmp/pr-body.md
 agent-bot-pr changelog --pr 233 --entry "Keep agent-secrets hot paths unattended."
 agent-bot-pr checks
+agent-bot-pr merge --pr 233
 ```
 
 The helper reuses the hardened bot SSH identity for commits and pushes. GitHub writes go through `agent-secrets` and the `lelouvincx-bot` bundle. The approved repository set lives in `amp/agent-secrets/github-identities.json`.
