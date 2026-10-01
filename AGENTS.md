@@ -8,9 +8,9 @@
 - Never expose bot publisher credentials to an agent shell or fall back to a personal identity. If the approved bot path is unavailable, stop and ask Chinh.
 - Add a `CHANGELOG.md` entry for every pull request. Wait until the pull request is open, then add the entry with its number and link in a separate commit.
 - Check `CHANGELOG.md` before searching Git or pull-request history for a historical change.
-- When Chinh says "open bot PR", open the pull request with the bot identity in the current worktree.
-- After opening a bot PR, watch it. When `lelouvincx-bot` merges it, every required check has passed, and no uncommitted or unpushed work remains outside the PR, run cleanup: sync the local Git repository, switch back to the branch active before the bot PR work, prune the thread's worktree, run `./sync-skills.sh`, reload Amp plugins, close any agent browser session this thread started, clear this thread's schedule, and archive this thread.
-- When this thread owns more requested work, continue from `origin/main` after switching branches and archive only after the final task. Leave unrelated work alone.
+- "Open bot PR": open it in the current worktree, then watch it until it merges.
+- "Ship": open the bot PR, then merge it with `agent-bot-pr merge --pr <number>` once every check passes. No approval is needed.
+- Clean up after the merge once the PR checks and the `main` CI run pass and no work remains outside the PR: sync, return to the previous branch, prune the worktree, run `./sync-skills.sh`, reload Amp plugins, remove this thread's `.amp/in/` files, stop this thread's browser and processes, clear its schedule, and archive it. If more requested work remains, continue from `origin/main` and archive after the last task.
 
 ## Source and projection
 

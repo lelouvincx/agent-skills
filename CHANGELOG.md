@@ -9,6 +9,7 @@ and this project does not currently use versioned releases.
 
 ### Changed
 
+- Let the bot ship pull requests without manual approval through `agent-bot-pr merge`, and align post-merge cleanup with SmartClass. [#261](https://github.com/lelouvincx/agent-skills/pull/261)
 - Use choice dialogs for every decision in the personal grilling skill. [#259](https://github.com/lelouvincx/agent-skills/pull/259)
 - Prefer Cloudflare's self-discovering `cf` CLI through a concise global convention. [#258](https://github.com/lelouvincx/agent-skills/pull/258)
 - Document the Holistics sync session log and state location under `~/.holistics/sync/<session-id>/`. [#257](https://github.com/lelouvincx/agent-skills/pull/257)
