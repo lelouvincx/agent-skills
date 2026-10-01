@@ -9,6 +9,7 @@ and this project does not currently use versioned releases.
 
 ### Changed
 
+- Use choice dialogs for every decision in the personal grilling skill. [#259](https://github.com/lelouvincx/agent-skills/pull/259)
 - Prefer Cloudflare's self-discovering `cf` CLI through a concise global convention. [#258](https://github.com/lelouvincx/agent-skills/pull/258)
 - Document the Holistics sync session log and state location under `~/.holistics/sync/<session-id>/`. [#257](https://github.com/lelouvincx/agent-skills/pull/257)
 - Point the Holistics convention to the current LLM-friendly documentation index. [#256](https://github.com/lelouvincx/agent-skills/pull/256)
