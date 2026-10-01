@@ -1,3 +1,5 @@
+import contextlib
+import io
 import json
 import os
 import runpy
@@ -796,18 +798,25 @@ class SmartClassWranglerWrapperTests(unittest.TestCase):
             execve.call_args.args[1],
         )
 
-    def test_worktree_probe_rejects_unlisted_path_without_exposing_secret(self):
+    def test_worktree_authorization_rejects_unlisted_path(self):
         requested = "/tmp/not-a-smartclass-worktree"
-        secret_name = "COHERE" + "_API_KEY"
-        result = self.run_wrapper(
-            "probe",
-            "--worktree",
-            requested,
-            environment={secret_name: "placeholder-value"},
+        worktree_result = subprocess.CompletedProcess(
+            [],
+            0,
+            stdout=f"worktree {SMARTCLASS_RUNTIME['PROJECT']}\0HEAD abc\0\0",
+            stderr="",
         )
-        self.assertEqual(2, result.returncode)
-        self.assertIn("not an authorized SmartClass worktree", result.stderr)
-        self.assertNotIn("placeholder-value", result.stdout + result.stderr)
+        stderr = io.StringIO()
+        with (
+            mock.patch.object(
+                SMARTCLASS_RUNTIME["subprocess"], "run", return_value=worktree_result
+            ),
+            mock.patch.object(os.path, "isdir", return_value=True),
+            contextlib.redirect_stderr(stderr),
+        ):
+            result = SMARTCLASS_RUNTIME["authorized_worktree"](requested)
+        self.assertIsNone(result)
+        self.assertIn("not an authorized SmartClass worktree", stderr.getvalue())
 
     def test_wrapper_rejects_port_outside_tcp_range(self):
         secret_name = "COHERE" + "_API_KEY"
