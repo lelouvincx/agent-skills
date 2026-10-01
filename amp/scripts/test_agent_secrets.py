@@ -1,3 +1,5 @@
+import contextlib
+import io
 import json
 import os
 import runpy
@@ -575,9 +577,9 @@ class AgentSecretsTests(unittest.TestCase):
 
 
 class SmartClassWranglerWrapperTests(unittest.TestCase):
-    def run_wrapper(self, mode, environment=None):
+    def run_wrapper(self, *arguments, environment=None):
         return subprocess.run(
-            [sys.executable, str(SMARTCLASS_WRAPPER), mode],
+            [sys.executable, str(SMARTCLASS_WRAPPER), *arguments],
             check=False,
             capture_output=True,
             text=True,
@@ -589,7 +591,7 @@ class SmartClassWranglerWrapperTests(unittest.TestCase):
         openrouter_secret = "OPENROUTER" + "_API_KEY"
         result = self.run_wrapper(
             "probe",
-            {
+            environment={
                 cohere_secret: "cohere-placeholder-value",
                 openrouter_secret: "openrouter-placeholder-value",
             },
@@ -604,7 +606,9 @@ class SmartClassWranglerWrapperTests(unittest.TestCase):
 
     def test_probe_accepts_openrouter_without_cohere(self):
         secret_name = "OPENROUTER" + "_API_KEY"
-        result = self.run_wrapper("probe", {secret_name: "placeholder-value"})
+        result = self.run_wrapper(
+            "probe", environment={secret_name: "placeholder-value"}
+        )
         self.assertEqual(0, result.returncode, result.stderr)
         self.assertEqual("OPENROUTER_API_KEY is present\n", result.stdout)
         self.assertNotIn("placeholder-value", result.stdout + result.stderr)
@@ -615,7 +619,9 @@ class SmartClassWranglerWrapperTests(unittest.TestCase):
         self.assertIn("no approved SmartClass provider secret", missing.stderr)
 
         secret_name = "COHERE" + "_API_KEY"
-        unapproved = self.run_wrapper("deploy", {secret_name: "placeholder-value"})
+        unapproved = self.run_wrapper(
+            "deploy", environment={secret_name: "placeholder-value"}
+        )
         self.assertEqual(2, unapproved.returncode)
         self.assertIn("{dev|probe}", unapproved.stderr)
         self.assertNotIn("placeholder-value", unapproved.stdout + unapproved.stderr)
@@ -669,6 +675,180 @@ class SmartClassWranglerWrapperTests(unittest.TestCase):
             },
             environment,
         )
+
+    def test_worktree_dev_uses_listed_worktree_wrangler_and_main_checkout_state(self):
+        worktree = "/Users/lelouvincx/Developer/smartclass/.amp/worktrees/feature"
+        secret_name = "OPENROUTER" + "_API_KEY"
+        inherited = {secret_name: "placeholder-value"}
+        worktree_result = subprocess.CompletedProcess(
+            [],
+            0,
+            stdout=(
+                f"worktree {SMARTCLASS_RUNTIME['PROJECT']}\0"
+                "HEAD abc\0branch refs/heads/main\0\0"
+                f"worktree {worktree}\0"
+                "HEAD def\0branch refs/heads/feature\0\0"
+            ),
+            stderr="",
+        )
+        with (
+            mock.patch.object(
+                sys,
+                "argv",
+                [
+                    str(SMARTCLASS_WRAPPER),
+                    "dev",
+                    "--worktree",
+                    worktree,
+                    "--port",
+                    "54321",
+                ],
+            ),
+            mock.patch.dict(os.environ, inherited, clear=True),
+            mock.patch.object(
+                SMARTCLASS_RUNTIME["subprocess"], "run", return_value=worktree_result
+            ) as run,
+            mock.patch.object(os.path, "isdir", return_value=True),
+            mock.patch.object(os.path, "isfile", return_value=True),
+            mock.patch.object(os, "access", return_value=True),
+            mock.patch.object(os, "chdir") as chdir,
+            mock.patch.object(os, "execve", side_effect=RuntimeError("exec called")) as execve,
+            self.assertRaisesRegex(RuntimeError, "exec called"),
+        ):
+            SMARTCLASS_RUNTIME["main"]()
+
+        run.assert_called_once_with(
+            [
+                SMARTCLASS_RUNTIME["GIT"],
+                "-C",
+                SMARTCLASS_RUNTIME["PROJECT"],
+                "worktree",
+                "list",
+                "--porcelain",
+                "-z",
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+            env={
+                "HOME": SMARTCLASS_RUNTIME["HOME"],
+                "PATH": "/usr/bin:/bin",
+            },
+        )
+        self.assertNotIn(secret_name, run.call_args.kwargs["env"])
+        chdir.assert_called_once_with(worktree)
+        executable, arguments, environment = execve.call_args.args
+        self.assertEqual(SMARTCLASS_RUNTIME["NODE"], executable)
+        self.assertEqual(
+            [
+                SMARTCLASS_RUNTIME["NODE"],
+                f"{worktree}/node_modules/wrangler/bin/wrangler.js",
+                "dev",
+                "--local",
+                "--env-file",
+                SMARTCLASS_RUNTIME["DEV_VARS"],
+                "--persist-to",
+                SMARTCLASS_RUNTIME["PERSISTENCE"],
+                "--port",
+                "54321",
+            ],
+            arguments,
+        )
+        self.assertEqual("placeholder-value", environment[secret_name])
+
+    def test_worktree_dev_can_use_isolated_state(self):
+        worktree = "/Users/lelouvincx/Developer/smartclass/.amp/worktrees/feature"
+        secret_name = "OPENROUTER" + "_API_KEY"
+        with (
+            mock.patch.object(
+                sys,
+                "argv",
+                [
+                    str(SMARTCLASS_WRAPPER),
+                    "dev",
+                    "--worktree",
+                    worktree,
+                    "--isolated-state",
+                ],
+            ),
+            mock.patch.dict(os.environ, {secret_name: "placeholder-value"}, clear=True),
+            mock.patch.dict(
+                SMARTCLASS_RUNTIME["main"].__globals__,
+                {"authorized_worktree": mock.Mock(return_value=worktree)},
+            ),
+            mock.patch.object(os.path, "isfile", return_value=True),
+            mock.patch.object(os, "access", return_value=True),
+            mock.patch.object(os, "chdir"),
+            mock.patch.object(os, "execve", side_effect=RuntimeError("exec called")) as execve,
+            self.assertRaisesRegex(RuntimeError, "exec called"),
+        ):
+            SMARTCLASS_RUNTIME["main"]()
+
+        self.assertEqual(
+            [
+                SMARTCLASS_RUNTIME["NODE"],
+                f"{worktree}/node_modules/wrangler/bin/wrangler.js",
+                "dev",
+                "--local",
+                "--env-file",
+                SMARTCLASS_RUNTIME["DEV_VARS"],
+                "--persist-to",
+                f"{worktree}/.wrangler/state",
+            ],
+            execve.call_args.args[1],
+        )
+
+    def test_worktree_authorization_rejects_unlisted_path(self):
+        requested = "/tmp/not-a-smartclass-worktree"
+        worktree_result = subprocess.CompletedProcess(
+            [],
+            0,
+            stdout=f"worktree {SMARTCLASS_RUNTIME['PROJECT']}\0HEAD abc\0\0",
+            stderr="",
+        )
+        stderr = io.StringIO()
+        with (
+            mock.patch.object(
+                SMARTCLASS_RUNTIME["subprocess"], "run", return_value=worktree_result
+            ),
+            mock.patch.object(os.path, "isdir", return_value=True),
+            contextlib.redirect_stderr(stderr),
+        ):
+            result = SMARTCLASS_RUNTIME["authorized_worktree"](requested)
+        self.assertIsNone(result)
+        self.assertIn("not an authorized SmartClass worktree", stderr.getvalue())
+
+    def test_wrapper_rejects_port_outside_tcp_range(self):
+        secret_name = "COHERE" + "_API_KEY"
+        result = self.run_wrapper(
+            "probe",
+            "--worktree",
+            "/tmp/not-reached",
+            "--port",
+            "65536",
+            environment={secret_name: "placeholder-value"},
+        )
+        self.assertEqual(2, result.returncode)
+        self.assertIn("port must be an integer from 1 to 65535", result.stderr)
+        self.assertNotIn("placeholder-value", result.stdout + result.stderr)
+
+    def test_wrapper_keeps_main_checkout_ports_restricted(self):
+        secret_name = "COHERE" + "_API_KEY"
+        result = self.run_wrapper(
+            "probe", "--port", "8799", environment={secret_name: "placeholder-value"}
+        )
+        self.assertEqual(2, result.returncode)
+        self.assertIn("port must be 8787 or 8788 without --worktree", result.stderr)
+        self.assertNotIn("placeholder-value", result.stdout + result.stderr)
+
+    def test_wrapper_rejects_isolated_state_without_worktree(self):
+        secret_name = "COHERE" + "_API_KEY"
+        result = self.run_wrapper(
+            "probe", "--isolated-state", environment={secret_name: "placeholder-value"}
+        )
+        self.assertEqual(2, result.returncode)
+        self.assertIn("--isolated-state requires --worktree", result.stderr)
+        self.assertNotIn("placeholder-value", result.stdout + result.stderr)
 
 
 if __name__ == "__main__":

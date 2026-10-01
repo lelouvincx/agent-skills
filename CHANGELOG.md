@@ -28,6 +28,7 @@ and this project does not currently use versioned releases.
 
 ### Added
 
+- Support isolated SmartClass Wrangler servers from authorized Git worktrees. [#260](https://github.com/lelouvincx/agent-skills/pull/260)
 - Register the Holistics Snowplow pipeline and nested schema repositories in the shared project registry. [#255](https://github.com/lelouvincx/agent-skills/pull/255)
 - Add the `toanthaythanh-teacher` agent-secrets bundle and `smartclass-teacher-api` command class for production SmartClass teacher API sign-in. [#254](https://github.com/lelouvincx/agent-skills/pull/254)
 - Add experimental managed-browser visual annotations with element and region comments, private validated artifacts, and documented complex-site limitations. [#250](https://github.com/lelouvincx/agent-skills/pull/250)
