@@ -79,19 +79,23 @@ export function buildParentTaskPrompt(
 	const today = localDateParts(now)
 	return `[logseq-log-current-task]
 
-The user manually selected Logseq: Log Current Task. Complete it now.
+The user ran Logseq: Log Current Task. Finish these steps in this turn:
 
-Call the built-in Task tool as your next action. Task starts with fresh context. Put one concise, self-contained handoff and the bounded execution contract directly in the Task prompt, using these sections in order:
+1. Call the built-in Task tool as your next action. Task starts with fresh context, so its prompt is the whole handoff. Build that prompt from the 5 sections below, in order.
+2. When Task returns, check its report against requirement 12. When evidence is missing or a safe local repair remains, call one focused Task with the Parent handoff, Runtime context, Optional user hint, prior report, and unmet requirements. That Task owns the file re-read or repair and returns a revised report.
+3. When the evidence is complete, reply in this thread with what was logged, the task UUID and state, whether both files passed read-back, whether parent metadata was updated, and any blocker.
+
+Keep Task calls serial.
 
 ### Parent handoff
 
-Synthesize from your live conversation context. Include each material fact once:
+Write this section from your live conversation context. Include each material fact once:
 - original user intent and any later redirect that changes it
-- latest coherent requested outcome
+- latest requested outcome
 - work completed and its durable result
-- current task state and one concrete next action when follow-up remains
+- current state and one concrete next action when follow-up remains
 - decisions, known blockers, and authority still required
-- actual task inputs and important deliverables, including relevant Slack, Notion, Linear, GitHub, Read AI, customer-document, design-document, or Amp-thread links
+- actual task inputs and important deliverables: Slack, Notion, Linear, GitHub, Read AI, customer-document, design-document, or Amp-thread links
 
 ### Runtime context
 
@@ -108,35 +112,41 @@ ${hint || '(none)'}
 
 ### Intent boundary
 
-Tell Task:
+Copy this paragraph:
 
-"Treat the Parent handoff as the primary intent source. If one named material intent fact required for safe logging is absent, use read_thread only to retrieve that fact when the tool is available. If the tool is unavailable, report the missing fact as the blocker. Continue from the Parent handoff for all other intent."
+"Treat the Parent handoff as the primary intent source. When one material fact needed for safe logging is missing, use read_thread only to retrieve that fact. When read_thread is unavailable, report the missing fact as the blocker."
 
 ### Logging contract
 
-Copy every numbered requirement below into the Task prompt:
-1. Read ${logseqRepo}/pages/Canonical Pages.md, then the relevant canonical project and rule pages, especially Projects.md and Backlog.md. Use them as the source of truth for project taxonomy, priority, task state, placement, and active Backlog matches.
-2. Search Backlog.md for every actionable task whose direct input:: contains ${parentThreadID}. If exactly one exists, update it. If none exists, create one. If several exist, reconcile them into one only when every durable fact can be preserved; otherwise stop and report the duplicate task locations as the blocker. Finish with exactly one actionable parent-linked task.
-3. Write the durable task or outcome to Backlog.md first. Preserve valid existing fields and surrounding indentation. Do not modify unrelated blocks.
-4. Every new task must have direct id:: <uuid>, project:: [[...]], priority:: #P..., input:: ..., and updated-at:: ${today.isoDate}. Generate a unique stable UUID. Use [[Personal]] only when no more specific canonical project applies.
-5. Preserve a Linear issue ID in direct linear:: when one exists. Treat only DAT-, PS-, and DOC- IDs as Linear team IDs.
-6. An active task must have one concrete direct next-action::. Add blocker:: only for a known blocker or waiting condition. A DONE task must have completed:: [[${today.isoDate}]] and no next-action:: or blocker::.
-7. Keep actual source and deliverable links in the task's direct input::. Always include [Ampcode](${parentThreadID}). Use numbered labels when there are multiple links, deduplicate equivalent links, and omit incidental research links.
-8. Record the durable result as a directly nested activity bullet with its own stable id:: <uuid>, observed-at:: ${today.isoDate}, and non-empty outcome::. Add decision:: and input:: when the parent brief supports them.
-9. Add or update one brief journal pointer to the same task UUID under ### Done when complete, ### Tasks when follow-up remains, or ### Notes when informational. Keep the journal entry as a pointer, not a duplicate task.
-10. Keep the Backlog task short. Do not paste the parent synthesis, transcript, or private reasoning.
-11. Re-read Backlog.md and today's journal after mutation. Report Backlog verified only after finding exactly one actionable parent-linked task with one unique UUID, all required direct fields, valid state-specific fields, and today's directly nested activity. Report journal verified only after finding a block reference to that same task UUID.
-12. Before finishing, check that a fresh agent could understand every recorded fact, answer status and history questions, and take the next action without asking the user to repeat known context. Repair missing durable context before final read-back.
-13. Only after both files pass read-back, update parent thread ${parentThreadID}. Derive the exact title as [Project] task title and preserve any Linear ID immediately after the project prefix. Add a normalized label for the Backlog project, plus customer-... when applicable. When Parent workspace is not (none), also add a working-project label: resolve its directory name with project-resolve <directory-name> --json and use the registry key, falling back to the normalized directory name. Normalize labels to lowercase words joined with hyphens, omit punctuation, limit each label to 32 characters, remove trailing hyphens and duplicates, preserve existing labels, and add no priority or task-state label. Run amp threads rename and amp threads label. Report parent metadata verified only when both commands succeed.
-14. Do not commit, push, run weekly report automation, or make unrelated changes.
-15. Return a compact evidence report containing:
-- task UUID, title, state, Backlog path, journal path, and concise outcome
-- Backlog verification: parent-linked task count, UUID uniqueness result, required direct-field result, state-specific-field result, and today's activity UUID and date
-- journal verification: the task UUID referenced by the journal pointer
-- parent metadata: separate rename and label command results
-If blocked, name the exact blocker and the smallest parent or user input needed. Return this report as Task's final result to the parent.
+Copy these requirements verbatim. The parent-linked task is an actionable Backlog task whose direct input:: contains ${parentThreadID}.
 
-After Task returns, verify that its report contains every item required by requirement 15 and that each successful verification includes the listed evidence. When the evidence is complete, reply in this parent thread with what was logged, the task UUID and state, whether both files were verified, whether parent metadata was updated, and any blocker. If evidence is missing or a safe local repair remains, call one focused Task with the Parent handoff, Runtime context, Optional user hint, prior report, and unmet requirements. That Task owns the file re-read or repair and returns a revised report. Keep Task calls serial.`
+1. Read ${logseqRepo}/pages/Canonical Pages.md, then the relevant project and rule pages, especially Projects.md and Backlog.md. Follow them for project taxonomy, priority, task state, placement, and Backlog matches.
+2. Search Backlog.md for parent-linked tasks. If exactly one exists, update it. If none exists, create one. If several exist, reconcile them into one only when every durable fact survives; otherwise stop and report their locations as the blocker. Finish with exactly one actionable parent-linked task.
+3. Write the durable task or outcome to Backlog.md first. In Backlog.md, edit only parent-linked tasks and their children, and keep valid existing fields and indentation.
+4. Give the task these direct fields:
+   - id:: <uuid>, unique and stable
+   - project:: [[...]], using [[Personal]] only when no more specific canonical project applies
+   - priority:: #P...
+   - input:: with the actual source and deliverable links, always including [Ampcode](${parentThreadID}); number multiple links, deduplicate them, and leave out incidental research links
+   - updated-at:: ${today.isoDate}
+   - linear:: when a Linear ID exists; only DAT-, PS-, and DOC- are Linear team IDs
+5. Set the state fields. An active task has one concrete direct next-action::, plus blocker:: only for a known blocker or wait. A DONE task has completed:: [[${today.isoDate}]] and drops next-action:: and blocker::.
+6. Nest one activity bullet directly under the task with its own id:: <uuid>, observed-at:: ${today.isoDate}, and non-empty outcome::. Add decision:: and input:: when the handoff supports them.
+7. Keep the task to the durable facts a fresh agent needs to answer status and history questions and take the next action without asking the user again. Leave the handoff text, transcript, and private reasoning out.
+8. Add or update one journal pointer to the same task UUID in today's journal: under ### Done when complete, ### Tasks when follow-up remains, or ### Notes when informational. The pointer is a block reference, not a copy of the task.
+9. Re-read Backlog.md and today's journal after mutation. Backlog passes read-back when requirements 2 to 7 hold. The journal passes read-back when it holds a block reference to the task UUID. Repair any failure, then re-read.
+10. Only after both files pass read-back, update parent thread ${parentThreadID}:
+   - title: [Project] task title, with any Linear ID right after the project prefix
+   - labels: the Backlog project; customer-... when applicable; and, unless Parent workspace is (none), the working project from project-resolve <directory-name> --json, falling back to the normalized directory name
+   - label format: lowercase words joined with hyphens, no punctuation, at most 32 characters, no trailing hyphen; keep existing labels, skip duplicates, and add only project and customer labels
+   Run amp threads rename and amp threads label. Metadata passes when both commands succeed.
+11. Limit changes to the Logseq task, the journal pointer, and parent thread metadata. Leave commits, pushes, and weekly report automation to the user.
+12. Return a compact evidence report:
+   - task UUID, title, state, Backlog path, journal path, and concise outcome
+   - Backlog verification: parent-linked task count, UUID uniqueness result, required direct-field result, state-specific-field result, and today's activity UUID and date
+   - journal verification: the task UUID referenced by the journal pointer
+   - parent metadata: rename and label results, reported separately
+   - when blocked: the exact blocker and the smallest parent or user input needed`
 }
 
 function localDateParts(now: Date): { isoDate: string; journalFile: string } {

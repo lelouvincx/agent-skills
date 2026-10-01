@@ -22,7 +22,7 @@ amp:
   docs_sources:
     api_docs: "amp plugins show-docs"
     agent_options: "amp plugins show-agent-options --json"
-  last_verified: "2026-09-03"
+  last_verified: "2026-10-02"
 contract:
   input_kind: "ui_prompt"
   output_kind: "queued_parent_thread_turn"
