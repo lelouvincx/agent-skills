@@ -2,6 +2,7 @@
 """Start SmartClass's local Wrangler dev server with approved provider secrets."""
 
 import os
+import subprocess
 import sys
 
 
@@ -11,13 +12,97 @@ NODE_DIRECTORY = f"{HOME}/.local/share/mise/installs/node/latest/bin"
 NODE = f"{NODE_DIRECTORY}/node"
 WRANGLER = f"{PROJECT}/node_modules/wrangler/bin/wrangler.js"
 DEV_VARS = f"{PROJECT}/.dev.vars"
+PERSISTENCE = f"{PROJECT}/.wrangler/state"
+GIT = "/usr/bin/git"
 SECRETS = ("COHERE_API_KEY", "OPENROUTER_API_KEY")
+MAIN_CHECKOUT_PORTS = {"8787", "8788"}
+
+
+def usage():
+    print(
+        "usage: smartclass-wrangler-dev {dev|probe} "
+        "[--worktree PATH] [--port PORT] [--isolated-state]",
+        file=sys.stderr,
+    )
+
+
+def parse_arguments(arguments):
+    if not arguments or arguments[0] not in {"dev", "probe"}:
+        usage()
+        return None
+    mode = arguments[0]
+    options = arguments[1:]
+    worktree = None
+    port = None
+    isolated_state = False
+    while options:
+        option = options.pop(0)
+        if option == "--worktree" and options and worktree is None:
+            worktree = options.pop(0)
+        elif option == "--port" and options and port is None:
+            port = options.pop(0)
+        elif option == "--isolated-state" and not isolated_state:
+            isolated_state = True
+        else:
+            usage()
+            return None
+    if port is not None:
+        if not port.isascii() or not port.isdigit() or not 1 <= int(port) <= 65535:
+            print("smartclass-wrangler-dev: port must be an integer from 1 to 65535", file=sys.stderr)
+            return None
+        if worktree is None and port not in MAIN_CHECKOUT_PORTS:
+            print(
+                "smartclass-wrangler-dev: port must be 8787 or 8788 without --worktree",
+                file=sys.stderr,
+            )
+            return None
+    if isolated_state and worktree is None:
+        print("smartclass-wrangler-dev: --isolated-state requires --worktree", file=sys.stderr)
+        return None
+    return mode, worktree, port, isolated_state
+
+
+def authorized_worktree(requested_path):
+    if not os.path.isabs(requested_path):
+        print("smartclass-wrangler-dev: worktree path must be absolute", file=sys.stderr)
+        return None
+    environment = {
+        "HOME": HOME,
+        "PATH": "/usr/bin:/bin",
+    }
+    try:
+        result = subprocess.run(
+            [GIT, "-C", PROJECT, "worktree", "list", "--porcelain", "-z"],
+            check=True,
+            capture_output=True,
+            text=True,
+            env=environment,
+        )
+    except (OSError, subprocess.CalledProcessError):
+        print("smartclass-wrangler-dev: cannot read authorized SmartClass worktrees", file=sys.stderr)
+        return None
+    requested = os.path.realpath(requested_path)
+    listed = {
+        os.path.realpath(field.removeprefix("worktree "))
+        for field in result.stdout.split("\0")
+        if field.startswith("worktree ")
+    }
+    if requested not in listed or not os.path.isdir(requested):
+        print("smartclass-wrangler-dev: path is not an authorized SmartClass worktree", file=sys.stderr)
+        return None
+    return requested
 
 
 def main():
-    if len(sys.argv) != 2 or sys.argv[1] not in {"dev", "probe"}:
-        print("usage: smartclass-wrangler-dev {dev|probe}", file=sys.stderr)
+    parsed = parse_arguments(sys.argv[1:])
+    if parsed is None:
         return 2
+    mode, requested_worktree, port, isolated_state = parsed
+    worktree = PROJECT
+    if requested_worktree is not None:
+        worktree = authorized_worktree(requested_worktree)
+        if worktree is None:
+            return 2
     available_secrets = [name for name in SECRETS if os.environ.get(name)]
     if not available_secrets:
         print(
@@ -25,14 +110,15 @@ def main():
             file=sys.stderr,
         )
         return 1
-    if sys.argv[1] == "probe":
+    if mode == "probe":
         for name in available_secrets:
             print(f"{name} is present")
         return 0
+    wrangler = f"{worktree}/node_modules/wrangler/bin/wrangler.js"
     if (
         not os.path.isfile(NODE)
         or not os.access(NODE, os.X_OK)
-        or not os.path.isfile(WRANGLER)
+        or not os.path.isfile(wrangler)
     ):
         print("smartclass-wrangler-dev: local Node or Wrangler is unavailable", file=sys.stderr)
         return 1
@@ -47,10 +133,16 @@ def main():
     for name in available_secrets:
         environment[name] = os.environ[name]
     environment["CLOUDFLARE_INCLUDE_PROCESS_ENV"] = "true"
-    os.chdir(PROJECT)
+    arguments = [NODE, wrangler, "dev", "--local", "--env-file", DEV_VARS]
+    if requested_worktree is not None:
+        persistence = f"{worktree}/.wrangler/state" if isolated_state else PERSISTENCE
+        arguments.extend(["--persist-to", persistence])
+    if port is not None:
+        arguments.extend(["--port", port])
+    os.chdir(worktree)
     os.execve(
         NODE,
-        [NODE, WRANGLER, "dev", "--local", "--env-file", DEV_VARS],
+        arguments,
         environment,
     )
 
