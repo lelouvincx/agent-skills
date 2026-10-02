@@ -11,6 +11,18 @@
 - When creating a subdirectory under `.amp/in/artifacts/`, add a `.thread-metadata` file in that subdirectory containing the current Amp thread ID.
 - When Chinh asks to create an Amp runner for a directory path, run `amp-runner install --workdir <path> macbook.<directory-basename>` and verify it is running with `amp-runner status macbook.<directory-basename>`.
 
+## Decisions
+
+This section is Chinh's standing request to ask decision questions with `ask_user_choice`. Skills with their own question workflow, such as `grilling`, take precedence.
+
+- Ask Chinh about each judgement call before acting on it. A judgement call has at least 2 viable options, evidence cannot settle it, and it depends on Chinh's preferences, product direction or taste, or is expensive to reverse, such as a public interface, data schema, scope change, deletion or anything visible to others.
+- Settle facts yourself from code, docs, tests and tools. Decide yourself when evidence, convention or an existing instruction settles the choice, or when reversing it is cheap.
+- Collect judgement calls before implementation and ask the 3 with the highest impact. Decide the rest yourself.
+- For each question, put the decision, why it matters and your recommendation in `question`. Pass 2 to 5 concrete `options` with the recommended option first, and set `allowOther` to `true`.
+- Chinh can set the ask level for a thread: `ask: low` means ask only about irreversible or externally visible choices; `ask: high` means ask every judgement call with no cap.
+- End each task that changed something with a "Decisions I made" list. It is complete when every judgement call you settled alone appears with its choice and a one-line reason.
+- When Chinh says a question was unnecessary or a decision should have been asked, add an observation to `amp/docs/experiments/experiment-0001-decision-balance.md` in the `agent-skills` repository.
+
 ## Delegation
 
 - Before non-trivial work, consider whether it contains independent, bounded workstreams. Keep simple reads, exact searches, localized edits, and unresolved product or design decisions in the parent.

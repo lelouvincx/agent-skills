@@ -112,5 +112,42 @@ class IssueValidationTests(unittest.TestCase):
         self.assertTrue(any("H2 headings must be exactly" in error for error in errors))
 
 
+class ExperimentValidationTests(unittest.TestCase):
+    def data(self):
+        return {
+            "doc_schema": "amp-experiment/v1", "code": "EXPERIMENT-0001", "title": "Test experiment",
+            "slug": "test-experiment", "file": "experiment-0001-test-experiment.md", "status": "Running",
+            "summary": "Test experiment summary.", "owner": "Chinh", "start": "2026-10-02",
+            "end": "2026-10-16", "updated": "2026-10-02", "amp_thread_id": {"T-test": "designed the experiment"},
+            "changes": [], "related": [], "tags": ["test"],
+        }
+
+    def validate(self, data, headings=None):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "experiment-0001-test-experiment.md"
+            path.write_text("\n".join(f"## {heading}" for heading in headings or validator.EXPERIMENT_REQUIRED_H2S))
+            errors = []
+            validator.validate_experiment_contract(path, data, errors)
+            return errors
+
+    def test_valid_experiment_contract(self):
+        self.assertEqual([], self.validate(self.data()))
+
+    def test_rejects_invalid_experiment_identity_dates_and_structure(self):
+        data = self.data()
+        data["code"] = "EXP-1"
+        data["status"] = "Done"
+        data["end"] = "2026-10-01"
+        data["changes"] = [{"path": "missing.md"}]
+        data["extra"] = "value"
+        errors = self.validate(data, ["Summary"])
+        self.assertTrue(any("code must look like EXPERIMENT-0001" in error for error in errors))
+        self.assertTrue(any("status has invalid value" in error for error in errors))
+        self.assertTrue(any("end must not be earlier than start" in error for error in errors))
+        self.assertTrue(any("changes path 'missing.md' does not exist" in error for error in errors))
+        self.assertTrue(any("unknown top-level frontmatter field extra" in error for error in errors))
+        self.assertTrue(any("H2 headings must be exactly" in error for error in errors))
+
+
 if __name__ == "__main__":
     unittest.main()
