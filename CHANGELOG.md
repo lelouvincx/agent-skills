@@ -248,6 +248,7 @@ and this project does not currently use versioned releases.
 
 ### Fixed
 
+- Sync `modern-web-guidance` and `domain-modeling` from upstream archives so renamed companion files no longer break `./sync-skills.sh --remote` in Orbs. [#264](https://github.com/lelouvincx/agent-skills/pull/264)
 - Handle ChatGPT plans that disable one quota window so the subscription selector can use the remaining active window. [#198](https://github.com/lelouvincx/agent-skills/pull/198)
 - Align `amp-runner list` columns for runner IDs and states of different lengths. [#189](https://github.com/lelouvincx/agent-skills/pull/189)
 - Hash dash-prefixed repository paths safely when validating shared agent output. [#187](https://github.com/lelouvincx/agent-skills/pull/187)
