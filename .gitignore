@@ -33,7 +33,8 @@ skills/writing-for-agents/SKILL-MECHANICS.md
 skills/domain-modeling/SKILL.md
 skills/domain-modeling/.remote-source
 skills/domain-modeling/ADR-FORMAT.md
-skills/domain-modeling/CONTEXT-FORMAT.md
+skills/domain-modeling/GLOSSARY-FORMAT.md
+skills/domain-modeling/agents/
 
 skills/grill-me/SKILL.md
 skills/grill-me/.remote-source
