@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate Amp artifact and issue documentation consistency."""
+"""Validate Amp artifact, issue and experiment documentation consistency."""
 
 from __future__ import annotations
 
@@ -14,6 +14,7 @@ import yaml
 AMP_ROOT = Path(__file__).resolve().parents[1]
 DOCS_DIR = AMP_ROOT / "docs" / "tools"
 ISSUES_DIR = AMP_ROOT / "docs" / "issues"
+EXPERIMENTS_DIR = AMP_ROOT / "docs" / "experiments"
 
 V2_REQUIRED_TOP_LEVEL = {
     "doc_schema": "scalar",
@@ -145,6 +146,38 @@ ISSUE_REQUIRED_H2S = [
     "Maintenance notes",
 ]
 
+
+EXPERIMENT_REQUIRED_TOP_LEVEL = {
+    "doc_schema": "scalar",
+    "code": "scalar",
+    "title": "scalar",
+    "slug": "scalar",
+    "file": "scalar",
+    "status": "scalar",
+    "summary": "scalar",
+    "owner": "scalar",
+    "start": "scalar",
+    "end": "scalar",
+    "updated": "scalar",
+    "amp_thread_id": "mapping",
+    "changes": "list",
+    "related": "list",
+    "tags": "list",
+}
+
+EXPERIMENT_STATUSES = {"Planned", "Running", "Concluded", "Abandoned"}
+EXPERIMENT_REQUIRED_H2S = [
+    "Summary",
+    "Question",
+    "Hypothesis",
+    "Change under test",
+    "Method",
+    "Measures",
+    "Decision criteria",
+    "Observation log",
+    "Result",
+    "Maintenance notes",
+]
 
 def frontmatter(path: Path) -> str | None:
     text = path.read_text(encoding="utf-8")
@@ -293,22 +326,21 @@ def validate_schema_contract(path: Path, data: dict[str, object], errors: list[s
         errors.append(f"{path}: H2 headings must be exactly {REQUIRED_H2S!r}; got {h2s!r}")
 
 
-def validate_issue_contract(path: Path, data: dict[str, object], errors: list[str]) -> None:
-    for field, expected in ISSUE_REQUIRED_TOP_LEVEL.items():
+def validate_closed_fields(path: Path, data: dict[str, object], required: dict[str, str], errors: list[str]) -> None:
+    for field, expected in required.items():
         if field not in data:
             errors.append(f"{path}: missing required frontmatter field {field}")
             continue
         validate_type(path, field, data[field], expected, errors)
 
-    for unknown in sorted(set(data) - set(ISSUE_REQUIRED_TOP_LEVEL)):
+    for unknown in sorted(set(data) - set(required)):
         errors.append(f"{path}: unknown top-level frontmatter field {unknown}")
 
-    if data.get("doc_schema") != "amp-issue/v1":
-        errors.append(f"{path}: doc_schema must be 'amp-issue/v1'")
 
+def validate_record_identity(path: Path, data: dict[str, object], prefix: str, errors: list[str]) -> None:
     code = data.get("code")
-    if isinstance(code, str) and not re.fullmatch(r"ISSUE-\d{4}", code):
-        errors.append(f"{path}: code must look like ISSUE-0001")
+    if isinstance(code, str) and not re.fullmatch(rf"{prefix}-\d{{4}}", code):
+        errors.append(f"{path}: code must look like {prefix}-0001")
 
     slug = data.get("slug")
     if isinstance(slug, str) and not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", slug):
@@ -321,16 +353,10 @@ def validate_issue_contract(path: Path, data: dict[str, object], errors: list[st
         if path.name != expected_filename:
             errors.append(f"{path}: code and slug require filename {expected_filename!r}")
 
-    status = data.get("status")
-    if isinstance(status, str) and status not in ISSUE_STATUSES:
-        errors.append(f"{path}: status has invalid value {status!r}")
 
-    priority = data.get("priority")
-    if isinstance(priority, str) and priority not in ISSUE_PRIORITIES:
-        errors.append(f"{path}: priority has invalid value {priority!r}")
-
+def validate_dates(path: Path, data: dict[str, object], fields: tuple[str, ...], errors: list[str]) -> dict[str, date]:
     parsed_dates: dict[str, date] = {}
-    for field in ("created", "updated"):
+    for field in fields:
         value = data.get(field)
         try:
             parsed_dates[field] = date.fromisoformat(value) if isinstance(value, str) else date.min
@@ -338,9 +364,10 @@ def validate_issue_contract(path: Path, data: dict[str, object], errors: list[st
             parsed_dates[field] = date.min
         if not isinstance(value, str) or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", value) or parsed_dates[field] == date.min:
             errors.append(f"{path}: {field} must use YYYY-MM-DD")
-    if parsed_dates.get("updated", date.min) < parsed_dates.get("created", date.min):
-        errors.append(f"{path}: updated must not be earlier than created")
+    return parsed_dates
 
+
+def validate_thread_map(path: Path, data: dict[str, object], errors: list[str]) -> None:
     threads = data.get("amp_thread_id")
     if isinstance(threads, dict):
         if not threads:
@@ -351,21 +378,56 @@ def validate_issue_contract(path: Path, data: dict[str, object], errors: list[st
             if not isinstance(intent, str) or not intent:
                 errors.append(f"{path}: amp_thread_id {thread_id!r} must describe the thread intent")
 
-    implementation = data.get("implementation")
-    if isinstance(implementation, list):
-        for item in implementation:
+
+def validate_path_list(path: Path, data: dict[str, object], field: str, errors: list[str]) -> None:
+    items = data.get(field)
+    if isinstance(items, list):
+        for item in items:
             if not isinstance(item, dict) or set(item) != {"path"} or not isinstance(item.get("path"), str) or not item["path"]:
-                errors.append(f"{path}: implementation items must contain exactly one string path")
+                errors.append(f"{path}: {field} items must contain exactly one string path")
                 continue
             if Path(item["path"]).is_absolute():
-                errors.append(f"{path}: implementation path {item['path']!r} must be relative")
+                errors.append(f"{path}: {field} path {item['path']!r} must be relative")
             elif not (path.parent / item["path"]).resolve().exists():
-                errors.append(f"{path}: implementation path {item['path']!r} does not exist")
+                errors.append(f"{path}: {field} path {item['path']!r} does not exist")
 
-    for field in ("artifacts", "pull_requests", "related", "tags"):
+
+def validate_string_lists(path: Path, data: dict[str, object], fields: tuple[str, ...], errors: list[str]) -> None:
+    for field in fields:
         values = data.get(field)
         if isinstance(values, list) and any(not isinstance(value, str) or not value for value in values):
             errors.append(f"{path}: {field} items must be non-empty strings")
+
+
+def validate_h2s(path: Path, required: list[str], errors: list[str]) -> None:
+    h2s = markdown_h2s(path)
+    if h2s != required:
+        errors.append(f"{path}: H2 headings must be exactly {required!r}; got {h2s!r}")
+
+
+def validate_issue_contract(path: Path, data: dict[str, object], errors: list[str]) -> None:
+    validate_closed_fields(path, data, ISSUE_REQUIRED_TOP_LEVEL, errors)
+
+    if data.get("doc_schema") != "amp-issue/v1":
+        errors.append(f"{path}: doc_schema must be 'amp-issue/v1'")
+
+    validate_record_identity(path, data, "ISSUE", errors)
+
+    status = data.get("status")
+    if isinstance(status, str) and status not in ISSUE_STATUSES:
+        errors.append(f"{path}: status has invalid value {status!r}")
+
+    priority = data.get("priority")
+    if isinstance(priority, str) and priority not in ISSUE_PRIORITIES:
+        errors.append(f"{path}: priority has invalid value {priority!r}")
+
+    parsed_dates = validate_dates(path, data, ("created", "updated"), errors)
+    if parsed_dates.get("updated", date.min) < parsed_dates.get("created", date.min):
+        errors.append(f"{path}: updated must not be earlier than created")
+
+    validate_thread_map(path, data, errors)
+    validate_path_list(path, data, "implementation", errors)
+    validate_string_lists(path, data, ("artifacts", "pull_requests", "related", "tags"), errors)
 
     pull_requests = data.get("pull_requests")
     if isinstance(pull_requests, list):
@@ -373,9 +435,29 @@ def validate_issue_contract(path: Path, data: dict[str, object], errors: list[st
             if isinstance(pull_request, str) and not re.fullmatch(r"https://github\.com/[^/]+/[^/]+/pull/\d+", pull_request):
                 errors.append(f"{path}: pull request must use a full GitHub pull URL; got {pull_request!r}")
 
-    h2s = markdown_h2s(path)
-    if h2s != ISSUE_REQUIRED_H2S:
-        errors.append(f"{path}: H2 headings must be exactly {ISSUE_REQUIRED_H2S!r}; got {h2s!r}")
+    validate_h2s(path, ISSUE_REQUIRED_H2S, errors)
+
+
+def validate_experiment_contract(path: Path, data: dict[str, object], errors: list[str]) -> None:
+    validate_closed_fields(path, data, EXPERIMENT_REQUIRED_TOP_LEVEL, errors)
+
+    if data.get("doc_schema") != "amp-experiment/v1":
+        errors.append(f"{path}: doc_schema must be 'amp-experiment/v1'")
+
+    validate_record_identity(path, data, "EXPERIMENT", errors)
+
+    status = data.get("status")
+    if isinstance(status, str) and status not in EXPERIMENT_STATUSES:
+        errors.append(f"{path}: status has invalid value {status!r}")
+
+    parsed_dates = validate_dates(path, data, ("start", "end", "updated"), errors)
+    if parsed_dates.get("end", date.min) < parsed_dates.get("start", date.min):
+        errors.append(f"{path}: end must not be earlier than start")
+
+    validate_thread_map(path, data, errors)
+    validate_path_list(path, data, "changes", errors)
+    validate_string_lists(path, data, ("related", "tags"), errors)
+    validate_h2s(path, EXPERIMENT_REQUIRED_H2S, errors)
 
 
 def markdown_links(path: Path) -> list[str]:
@@ -479,13 +561,56 @@ def main() -> int:
         if issue.resolve() not in linked_issues:
             errors.append(f"{issue}: is not linked from {issues_readme}")
 
+    experiment_docs = sorted(EXPERIMENTS_DIR.glob("experiment-*.md"))
+    seen_experiment_codes: dict[str, Path] = {}
+    seen_experiment_slugs: dict[str, Path] = {}
+    experiment_data: dict[Path, dict[str, object]] = {}
+    for experiment in experiment_docs:
+        fm = frontmatter(experiment)
+        if fm is None:
+            errors.append(f"{experiment}: missing or malformed frontmatter")
+            continue
+        data = parse_frontmatter(fm)
+        experiment_data[experiment] = data
+        validate_experiment_contract(experiment, data, errors)
+        for field, seen in (("code", seen_experiment_codes), ("slug", seen_experiment_slugs)):
+            value = data.get(field)
+            if not isinstance(value, str):
+                continue
+            previous = seen.setdefault(value, experiment)
+            if previous != experiment:
+                errors.append(f"{experiment}: duplicate {field} {value!r}; already used by {previous}")
+
+    for experiment, data in experiment_data.items():
+        related = data.get("related")
+        for related_code in related if isinstance(related, list) else []:
+            if isinstance(related_code, str) and related_code not in seen_experiment_codes:
+                errors.append(f"{experiment}: related experiment code {related_code!r} does not exist")
+
+    experiments_readme = EXPERIMENTS_DIR / "README.md"
+    linked_experiments: set[Path] = set()
+    if experiment_docs and not experiments_readme.exists():
+        errors.append(f"{experiments_readme}: missing experiment index")
+    elif experiments_readme.exists():
+        for link in markdown_links(experiments_readme):
+            target = (EXPERIMENTS_DIR / link.removeprefix("./")).resolve()
+            linked_experiments.add(target)
+            if not target.exists():
+                errors.append(f"{experiments_readme}: link {link!r} points to a missing file")
+    for experiment in experiment_docs:
+        if experiment.resolve() not in linked_experiments:
+            errors.append(f"{experiment}: is not linked from {experiments_readme}")
+
     if errors:
         print("Amp documentation validation failed:")
         for error in errors:
             print(f"- {error}")
         return 1
 
-    print(f"Validated {len(doc_to_slug)} Amp artifact docs and {len(issue_docs)} issue docs.")
+    print(
+        f"Validated {len(doc_to_slug)} Amp artifact docs, {len(issue_docs)} issue docs "
+        f"and {len(experiment_docs)} experiment docs."
+    )
     return 0
 
 

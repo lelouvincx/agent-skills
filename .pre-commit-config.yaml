@@ -34,15 +34,15 @@ repos:
         language: python
         additional_dependencies: [PyYAML==6.0.3]
         pass_filenames: false
-        files: ^(?:amp/(?:docs/(?:issues|tools)|plugins)/|amp/scripts/(?:logseq-manual-log\.test\.ts|(?:test_validate_plugin_docs|validate-plugin-docs)\.py)$|\.github/workflows/ci\.yml$|\.pre-commit-config\.yaml$)
+        files: ^(?:amp/(?:docs/(?:experiments|issues|tools)|plugins)/|amp/scripts/(?:logseq-manual-log\.test\.ts|(?:test_validate_plugin_docs|validate-plugin-docs)\.py)$|\.github/workflows/ci\.yml$|\.pre-commit-config\.yaml$)
 
       - id: validate-amp-artifacts
-        name: Validate Amp artifact and issue docs
+        name: Validate Amp artifact, issue and experiment docs
         entry: python amp/scripts/validate-plugin-docs.py
         language: python
         additional_dependencies: [PyYAML==6.0.3]
         pass_filenames: false
-        files: ^(?:amp/(?:docs/(?:issues|tools)|plugins)/|amp/scripts/(?:logseq-manual-log\.test\.ts|(?:test_validate_plugin_docs|validate-plugin-docs)\.py)$|\.github/workflows/ci\.yml$|\.pre-commit-config\.yaml$)
+        files: ^(?:amp/(?:docs/(?:experiments|issues|tools)|plugins)/|amp/scripts/(?:logseq-manual-log\.test\.ts|(?:test_validate_plugin_docs|validate-plugin-docs)\.py)$|\.github/workflows/ci\.yml$|\.pre-commit-config\.yaml$)
 
       - id: validate-amp-rfcs
         name: Validate Amp RFCs

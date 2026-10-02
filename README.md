@@ -196,7 +196,7 @@ Run the relevant repository command directly:
 | Check | Command |
 | --- | --- |
 | Test the Amp documentation validator | `python3 -m unittest amp/scripts/test_validate_plugin_docs.py` |
-| Validate Amp capability and issue docs | `python3 amp/scripts/validate-plugin-docs.py` |
+| Validate Amp capability, issue and experiment docs | `python3 amp/scripts/validate-plugin-docs.py` |
 | Validate Amp RFCs | `python3 amp/scripts/validate-rfcs.py` |
 | Test the agent secret resolver | `uvx --with jsonschema==4.25.1 python -m unittest amp/scripts/test_validate_agent_secrets.py amp/scripts/test_agent_secrets.py amp/scripts/test_agent_secrets_good_outcomes.py` |
 | Test shared agent helper contracts | `amp/scripts/test-agent-secrets-lib.sh` |
