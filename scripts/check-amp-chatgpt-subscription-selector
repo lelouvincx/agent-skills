@@ -2,7 +2,7 @@
 set -euo pipefail
 
 repo_root="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
-tool="$repo_root/bin/amp-chatgpt-subscription-selector"
+tool="$repo_root/bin/amp-chatgpt-selector"
 tmp="$(mktemp -d "$HOME/.check-amp-chatgpt-selector.XXXXXX")"
 trap 'rm -rf "$tmp"' EXIT
 mkdir -p "$tmp/bin" "$tmp/home" "$tmp/agents"

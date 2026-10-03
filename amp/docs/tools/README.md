@@ -31,7 +31,7 @@ All active documents use `amp-artifact/v2`, which supports skills, local CLIs, a
 
 ### Local CLIs
 
-- [Amp ChatGPT subscription selector](./amp-chatgpt-subscription-selector.md)
+- [Amp ChatGPT selector](./amp-chatgpt-selector.md)
 - [Amp Runner](./amp-runner.md)
 - [Amp runner log maintenance](./amp-runner-logs.md)
 
