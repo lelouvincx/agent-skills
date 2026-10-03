@@ -210,6 +210,7 @@ Run the relevant repository command directly:
 | Test the Amp runner launcher | `scripts/check-amp-runner` |
 | Test Amp runner log maintenance | `scripts/check-amp-runner-logs` |
 | Test Amp ChatGPT subscription selection | `scripts/check-amp-chatgpt-subscription-selector` |
+| Test local Claude subscription selection | `scripts/check-amp-claude-subscription-selector` |
 | Validate runtime projection | `scripts/check-projection` |
 | Build Amp plugins | `scripts/check-plugin-builds` |
 | Validate SDK dependencies | `npm ci --prefix sdk` |
@@ -218,7 +219,7 @@ Run the relevant repository command directly:
 
 | Capability | Type | Where it appears | Use it to |
 | --- | --- | --- | --- |
-| [Amp ChatGPT subscription selector](amp/docs/tools/amp-chatgpt-subscription-selector.md) | Local CLI | Shell | switch Amp ChatGPT subscriptions based on Codex quota |
+| [Amp ChatGPT selector](amp/docs/tools/amp-chatgpt-selector.md) | Local CLI | Shell | switch Amp ChatGPT subscriptions based on Codex quota |
 | [Amp runner](amp/docs/tools/amp-runner.md) | Local CLI | Shell | run named Amp background runners as user LaunchAgents |
 | [Amp runner log maintenance](amp/docs/tools/amp-runner-logs.md) | Local CLI | Shell | rotate, back up, and restore private runner logs |
 | [Claude Code subagent](amp/docs/tools/claude-code-subagent.md) | Agent tool | Agent | ask Claude Code for read-only advice |

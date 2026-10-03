@@ -1,18 +1,18 @@
 ---
 doc_schema: "amp-artifact/v2"
-title: "Amp ChatGPT subscription selector"
-slug: "amp-chatgpt-subscription-selector"
+title: "Amp ChatGPT selector"
+slug: "amp-chatgpt-selector"
 status: "active"
 summary: "Keeps a preferred ChatGPT subscription active in Amp until its weekly Codex quota is at or below a configured remaining threshold."
 artifact:
-  id: "amp-chatgpt-subscription-selector"
+  id: "amp-chatgpt-selector"
   type: "local_cli"
   surface: "shell"
   invocation: "cli"
   api_stability: "stable"
 source:
   kind: "script"
-  file: "bin/amp-chatgpt-subscription-selector"
+  file: "bin/amp-chatgpt-selector"
   scope: "system"
   install_source: "local"
   registration_api: null
@@ -83,15 +83,17 @@ tags:
   - "model-provider"
 ---
 
-# Amp ChatGPT subscription selector
+# Amp ChatGPT selector
 
 ## Summary
 
-`amp-chatgpt-subscription-selector` keeps the primary ChatGPT subscription active in Amp while its weekly Codex quota is above your configured remaining threshold. It activates the secondary subscription when the weekly window is at or below that threshold.
+`amp-chatgpt-selector` keeps the primary ChatGPT subscription active in Amp while its weekly Codex quota is above your configured remaining threshold. It activates the secondary subscription when the weekly window is at or below that threshold.
 
 ## Invocation
 
-`sync-skills.sh` projects the command from `bin/amp-chatgpt-subscription-selector` to `~/.local/bin`.
+`sync-skills.sh` projects the command from `bin/amp-chatgpt-selector` to `~/.local/bin`.
+
+The state directory and LaunchAgent label retain their existing `subscription-selector` names so renaming the command does not reset installed configuration.
 
 Use `install`, `uninstall`, `pause`, `resume`, `run` or `status`. Run `amp config model-providers list` to find the primary and secondary connection IDs before installation.
 
@@ -135,7 +137,7 @@ The LaunchAgent and local state use mode 0600 or 0700. Stored configuration cont
 Install and start the background check:
 
 ```bash
-amp-chatgpt-subscription-selector install \
+amp-chatgpt-selector install \
   --preferred 00000000-0000-4000-8000-000000000001 \
   --fallback 00000000-0000-4000-8000-000000000002 \
   --threshold PERCENT \
@@ -145,20 +147,20 @@ amp-chatgpt-subscription-selector install \
 Run a check or inspect the latest result:
 
 ```bash
-amp-chatgpt-subscription-selector run
-amp-chatgpt-subscription-selector status
+amp-chatgpt-selector run
+amp-chatgpt-selector status
 ```
 
 Pause background checks without changing the active subscription:
 
 ```bash
-amp-chatgpt-subscription-selector pause
+amp-chatgpt-selector pause
 ```
 
 Resume background checks:
 
 ```bash
-amp-chatgpt-subscription-selector resume
+amp-chatgpt-selector resume
 ```
 
 `status` prints a report like this:
@@ -181,7 +183,7 @@ Reason: preferred subscription is at or below the remaining quota threshold
 Remove the background task without changing the active subscription:
 
 ```bash
-amp-chatgpt-subscription-selector uninstall
+amp-chatgpt-selector uninstall
 ```
 
 ## Troubleshooting
@@ -189,9 +191,9 @@ amp-chatgpt-subscription-selector uninstall
 - if `run` reports a provider test failure, run `amp config model-providers test CONNECTION_ID`
 - if no usable quota window is found, inspect the test response headers for a missing header pair or changed window duration or name
 - if activation fails, confirm both subscriptions still appear in `amp config model-providers list`
-- if status reports `Background check: paused`, run `amp-chatgpt-subscription-selector resume`
+- if status reports `Background check: paused`, run `amp-chatgpt-selector resume`
 - if the background task does not run, inspect `status` for a scheduled background check and the private selector log
 
 ## Maintenance notes
 
-Keep this document aligned with `bin/amp-chatgpt-subscription-selector`. Update the duration mapping if OpenAI changes its weekly quota window. Update response parsing if Amp changes the output of `model-providers test` or `show`.
+Keep this document aligned with `bin/amp-chatgpt-selector`. Update the duration mapping if OpenAI changes its weekly quota window. Update response parsing if Amp changes the output of `model-providers test` or `show`.

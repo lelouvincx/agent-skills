@@ -110,6 +110,13 @@ repos:
         pass_filenames: false
         files: ^(?:bin/amp-runner-logs$|scripts/check-amp-runner-logs$|amp/docs/tools/amp-runner-logs\.md$|amp/agent-secrets/bundles\.json$|README\.md$|\.pre-commit-config\.yaml$)
 
+      - id: amp-claude-subscription-selector-tests
+        name: Test Claude subscription selector
+        entry: scripts/check-amp-claude-subscription-selector
+        language: system
+        pass_filenames: false
+        files: ^(?:bin/amp-claude-selector$|scripts/(?:check-amp-claude-subscription-selector|test_amp_claude_subscription_selector\.py)$|amp/local-claude-cliproxy/|\.github/workflows/ci\.yml$|\.pre-commit-config\.yaml$)
+
       - id: generated-project-docs
         name: Check generated project documentation
         entry: >-

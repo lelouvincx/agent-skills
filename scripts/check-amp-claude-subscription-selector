@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+set -euo pipefail
+repo_root="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+python3 -m unittest discover -s "$repo_root/scripts" -p test_amp_claude_subscription_selector.py

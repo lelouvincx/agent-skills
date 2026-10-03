@@ -1,0 +1,642 @@
+#!/usr/bin/env python3
+"""Select Claude OAuth credentials through a local CLIProxyAPI v7 Management API."""
+
+import argparse
+import datetime as dt
+import fcntl
+import json
+import math
+import os
+import plistlib
+import re
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+LABEL = "com.ampcode.claude-subscription-selector"
+STATE = Path(
+    os.environ.get(
+        "AMP_CLAUDE_SELECTOR_STATE_DIR",
+        Path.home() / ".local/state/amp-claude-subscription-selector",
+    )
+)
+AGENT = Path.home() / "Library/LaunchAgents" / f"{LABEL}.plist"
+CURL_IMAGE = "curlimages/curl:8.12.1"
+
+
+class SelectorError(Exception):
+    pass
+
+
+def command(args, data=None):
+    try:
+        result = subprocess.run(
+            args, input=data, text=True, capture_output=True, timeout=90, check=False
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise SelectorError(f"Could not execute {Path(args[0]).name}") from exc
+    if result.returncode:
+        # Tool output can contain credentials, OAuth URLs or response bodies.
+        raise SelectorError(f"{Path(args[0]).name} failed (exit {result.returncode})")
+    return result.stdout
+
+
+def save(path, value):
+    path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    temp = path.with_name(path.name + f".tmp.{os.getpid()}")
+    try:
+        with temp.open("w") as stream:
+            os.chmod(temp, 0o600)
+            json.dump(value, stream, indent=2, allow_nan=False)
+            stream.write("\n")
+        temp.replace(path)
+    finally:
+        temp.unlink(missing_ok=True)
+
+
+def load():
+    try:
+        return json.loads((STATE / "config.json").read_text())
+    except (OSError, ValueError) as exc:
+        raise SelectorError("Not configured; run install first") from exc
+
+
+def secret(reference):
+    if not reference.startswith("op://"):
+        raise SelectorError("Management key must be a 1Password op:// reference")
+    # agent-secrets currently has no arbitrary read capability; use op directly.
+    value = command(["op", "read", "--account", "my.1password.com", reference]).strip()
+    if not value or any(char in value for char in "\r\n"):
+        raise SelectorError("Management key is empty or contains a newline")
+    return value
+
+
+class API:
+    def __init__(self, config):
+        self.config = config
+        self.key = secret(config["management_key_ref"])
+
+    def call(self, method, endpoint, payload=None):
+        # Share only the proxy's network namespace. The key travels on stdin,
+        # never in Docker arguments, environment, config files or logs.
+        options = [
+            "silent",
+            "show-error",
+            "fail-with-body",
+            "max-time = 45",
+            "url = " + json.dumps("http://127.0.0.1:8317/v0/management/" + endpoint),
+            "request = " + json.dumps(method),
+            "header = " + json.dumps("Authorization: Bearer " + self.key),
+        ]
+        if payload is not None:
+            options += [
+                'header = "Content-Type: application/json"',
+                "data = " + json.dumps(json.dumps(payload)),
+            ]
+        output = command(
+            [
+                self.config["docker"],
+                "run",
+                "--rm",
+                "-i",
+                "--network",
+                "container:" + self.config["container"],
+                CURL_IMAGE,
+                "--config",
+                "-",
+            ],
+            "\n".join(options) + "\n",
+        )
+        try:
+            response = json.loads(output)
+        except ValueError as exc:
+            raise SelectorError("Management API returned invalid JSON") from exc
+        if not isinstance(response, dict):
+            raise SelectorError("Management API response is not an object")
+        return response
+
+    def accounts(self):
+        response = self.call("GET", "auth-files")
+        if not isinstance(response, dict) or not isinstance(
+            response.get("files"), list
+        ):
+            raise SelectorError("Management API returned an invalid account list")
+        if any(not isinstance(a, dict) for a in response["files"]):
+            raise SelectorError("Management API returned an invalid account entry")
+        return [a for a in response["files"] if a.get("provider") == "claude"]
+
+    def quota(self, account, window):
+        request = {
+            "auth_index": account["auth_index"],
+            "method": "GET",
+            "url": "https://api.anthropic.com/api/oauth/usage",
+            "header": {
+                "Authorization": "Bearer $TOKEN$",
+                "anthropic-beta": "oauth-2025-04-20",
+                "Content-Type": "application/json",
+                "User-Agent": "claude-cli/2.1.280 (external, cli)",
+            },
+        }
+        response = self.call("POST", "api-call", request)
+        if response.get("status_code") == 401:
+            self.call(
+                "POST",
+                "auth-files/refresh",
+                {"name": account["name"], "auth_index": account["auth_index"]},
+            )
+            # One retry only, including for disabled credentials with expired tokens.
+            response = self.call("POST", "api-call", request)
+        if response.get("status_code") != 200:
+            raise SelectorError("Claude usage request failed")
+        try:
+            return parse_quota(json.loads(response["body"]), window)
+        except (KeyError, TypeError, ValueError) as exc:
+            raise SelectorError("Claude usage response is invalid") from exc
+
+    def disable(self, account, disabled):
+        response = self.call(
+            "PATCH",
+            "auth-files/status",
+            {
+                "name": account["name"],
+                "auth_index": account["auth_index"],
+                "disabled": disabled,
+            },
+        )
+        if response.get("status") != "ok" or response.get("disabled") is not disabled:
+            raise SelectorError("Credential status update was not confirmed")
+
+
+def parse_quota(payload, window):
+    keys = {
+        "weekly": ["seven_day"],
+        "five-hour": ["five_hour"],
+        "either": ["five_hour", "seven_day"],
+    }[window]
+    result = {}
+    if not isinstance(payload, dict):
+        raise SelectorError("Claude usage response is not an object")
+    for key in keys:
+        entry = payload.get(key)
+        used = entry.get("utilization") if isinstance(entry, dict) else None
+        if (
+            isinstance(used, bool)
+            or not isinstance(used, (int, float))
+            or not math.isfinite(used)
+            or not 0 <= used <= 100
+        ):
+            raise SelectorError(f"No usable {key} quota")
+        reset = entry.get("resets_at")
+        if reset is not None and not isinstance(reset, str):
+            raise SelectorError("Invalid quota reset timestamp")
+        result[key] = {"remaining": 100 - used, "resets_at": reset}
+    return result
+
+
+def resolve(accounts, name):
+    matches = [a for a in accounts if a.get("name") == name]
+    if (
+        len(matches) != 1
+        or not matches[0].get("auth_index")
+        or type(matches[0].get("disabled")) is not bool
+        or matches[0].get("source") != "file"
+        or matches[0].get("runtime_only")
+    ):
+        raise SelectorError(f"Account not uniquely available: {name}")
+    return matches[0]
+
+
+def switch(api, config, selected):
+    accounts = api.accounts()
+    preferred = resolve(accounts, config["preferred"])
+    fallback = resolve(accounts, config["fallback"])
+    if {a["name"] for a in accounts} != {preferred["name"], fallback["name"]}:
+        raise SelectorError(
+            "Unexpected Claude credentials; selection would not be exclusive"
+        )
+    target = preferred if selected == "preferred" else fallback
+    other = fallback if selected == "preferred" else preferred
+    # Fail closed: never briefly make both company and personal eligible.
+    # A failed enable may leave no eligible account; do not silently restore it.
+    if not other["disabled"]:
+        api.disable(other, True)
+    if target["disabled"]:
+        api.disable(target, False)
+    after = api.accounts()
+    if (
+        {a["name"] for a in after} != {target["name"], other["name"]}
+        or resolve(after, target["name"])["disabled"]
+        or not resolve(after, other["name"])["disabled"]
+    ):
+        raise SelectorError("Account selection verification failed")
+
+
+def check(api, config):
+    accounts = api.accounts()
+    quotas = {
+        role: api.quota(resolve(accounts, config[role]), config["window"])
+        for role in ("preferred", "fallback")
+    }
+    available = {
+        role: all(q["remaining"] > config["threshold"] for q in quota.values())
+        for role, quota in quotas.items()
+    }
+    selected = (
+        "preferred"
+        if available["preferred"]
+        else "fallback"
+        if available["fallback"]
+        else None
+    )
+    if selected:
+        switch(api, config, selected)
+    return {
+        "selected": selected or "unchanged",
+        "quotas": quotas,
+        "reason": "Selected account has capacity"
+        if selected
+        else "Both accounts are at or below threshold; unchanged",
+    }
+
+
+def record(result):
+    result["timestamp"] = dt.datetime.now(dt.timezone.utc).isoformat()
+    save(STATE / "last-run.json", result)
+    with (STATE / "selector.log").open("a") as stream:
+        os.chmod(STATE / "selector.log", 0o600)
+        stream.write(f"{result['timestamp']} {result['result']}: {result['reason']}\n")
+
+
+def agent_loaded():
+    result = subprocess.run(
+        ["launchctl", "print", f"gui/{os.getuid()}/{LABEL}"],
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=15,
+    )
+    if result.returncode == 0:
+        return True
+    if "Could not find service" in result.stderr + result.stdout:
+        return False
+    raise SelectorError("Could not inspect LaunchAgent state")
+
+
+def bootout():
+    if agent_loaded():
+        command(["launchctl", "bootout", f"gui/{os.getuid()}/{LABEL}"])
+
+
+def bootstrap():
+    command(["launchctl", "bootstrap", f"gui/{os.getuid()}", str(AGENT)])
+
+
+def schedule(config):
+    python = str(Path(sys.executable).resolve())
+    script = str(Path(__file__).resolve())
+    plist = {
+        "Label": LABEL,
+        "ProgramArguments": [python, script, "run"],
+        "StartInterval": config["interval"],
+        "RunAtLoad": True,
+        "EnvironmentVariables": {
+            "HOME": str(Path.home()),
+            "PATH": os.environ.get("PATH", ""),
+            "AMP_CLAUDE_SELECTOR_STATE_DIR": str(STATE),
+        },
+        "StandardOutPath": "/dev/null",
+        "StandardErrorPath": "/dev/null",
+    }
+    AGENT.parent.mkdir(parents=True, exist_ok=True)
+    with AGENT.open("wb") as stream:
+        os.chmod(AGENT, 0o600)
+        plistlib.dump(plist, stream)
+
+
+def setup_management(args):
+    # Update only the reviewed remote-management block, never print config.
+    runtime = Path(args.runtime).expanduser()
+    path = runtime / "config.yaml"
+    original = path.read_text()
+    pattern = r"(?m)^remote-management:\n(?:(?:[ \t]+[^\n]*|[ \t]*)\n)*"
+    blocks = re.findall(pattern, original)
+    if len(blocks) != 1 or not re.search(r"(?m)^  allow-remote: false\s*$", blocks[0]):
+        raise SelectorError(
+            "Expected one local-only remote-management block; review config manually"
+        )
+    value = secret(args.management_key_ref)
+    hashed = (
+        command(["/usr/sbin/htpasswd", "-niBC", "12", "selector"], value + "\n")
+        .strip()
+        .split(":", 1)[1]
+    )
+    block, count = re.subn(
+        r"(?m)^  secret-key:.*$", "  secret-key: " + json.dumps(hashed), blocks[0]
+    )
+    if count != 1:
+        raise SelectorError("Expected one management secret-key field")
+    replacement = original.replace(blocks[0], block, 1)
+    temp = path.with_name("config.yaml.selector-tmp")
+    try:
+        with temp.open("w") as stream:
+            os.chmod(temp, 0o600)
+            stream.write(replacement)
+        temp.replace(path)
+    finally:
+        temp.unlink(missing_ok=True)
+    print(
+        "Management key hash configured; restart the proxy to enable it. Remote management remains disabled."
+    )
+
+
+def positive(value):
+    number = int(value)
+    if number <= 0:
+        raise argparse.ArgumentTypeError("Must be positive")
+    return number
+
+
+def percent(value):
+    number = float(value)
+    if not math.isfinite(number) or not 0 <= number <= 100:
+        raise argparse.ArgumentTypeError("Must be between 0 and 100")
+    return number
+
+
+def format_interval(seconds):
+    for size, unit in ((3600, "hour"), (60, "minute"), (1, "second")):
+        if seconds >= size and seconds % size == 0:
+            count = seconds // size
+            return f"{count} {unit}{'s' if count != 1 else ''}"
+
+
+def format_timestamp(timestamp, offset=0):
+    if timestamp == "never":
+        return timestamp
+    try:
+        value = dt.datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+        if value.tzinfo is None:
+            return "unknown"
+        value = (value + dt.timedelta(seconds=offset)).astimezone(
+            dt.timezone(dt.timedelta(hours=7))
+        )
+        return value.strftime("%Y-%m-%d %H:%M:%S UTC+7")
+    except (ValueError, TypeError, AttributeError):
+        return "unknown"
+
+
+def status_report(config):
+    last = (
+        json.loads((STATE / "last-run.json").read_text())
+        if (STATE / "last-run.json").exists()
+        else {}
+    )
+    state = (
+        "paused"
+        if (STATE / "paused").exists()
+        else "scheduled"
+        if agent_loaded()
+        else "not scheduled"
+    )
+    timestamp = last.get("timestamp", "never")
+    next_check = (
+        state
+        if state != "scheduled"
+        else "awaiting first check"
+        if timestamp == "never"
+        else format_timestamp(timestamp, config["interval"])
+    )
+    selected = last.get("selected", "none")
+    labels = {
+        "preferred": f"company ({config['preferred']})",
+        "fallback": f"personal ({config['fallback']})",
+    }
+    reason = last.get("reason", "selector has not run yet")
+    if reason == "Selected account has capacity":
+        reason = (
+            "preferred subscription still has remaining quota"
+            if selected == "preferred"
+            else "preferred subscription is at or below the remaining quota threshold"
+        )
+    windows = {
+        "weekly": [("seven_day", "weekly")],
+        "five-hour": [("five_hour", "five-hour")],
+        "either": [("five_hour", "five-hour"), ("seven_day", "weekly")],
+    }[config["window"]]
+
+    def remaining(role):
+        quota = last.get("quotas", {}).get(role, {})
+        parts = []
+        for key, label in windows:
+            value = quota.get(key, {}).get("remaining")
+            text = (
+                f"{value:g}%"
+                if isinstance(value, (int, float))
+                and not isinstance(value, bool)
+                and math.isfinite(value)
+                and 0 <= value <= 100
+                else "unknown"
+            )
+            parts.append(f"{label} {text}")
+        return "; ".join(parts)
+
+    result = last.get("result", "never run")
+    print(f"Preferred: {labels['preferred']}")
+    print(f"Fallback: {labels['fallback']}")
+    print(f"Threshold: {config['threshold']:g}% remaining")
+    print(f"Interval: {format_interval(config['interval'])}")
+    print(f"Background check: {state}")
+    print(f"Last check: {format_timestamp(timestamp)}")
+    print(f"Next check: {next_check}")
+    print(f"Result: {'never run' if result == 'never-run' else result}")
+    print(f"Selected: {labels.get(selected, selected)}")
+    print(f"Preferred remaining: {remaining('preferred')}")
+    print(f"Fallback remaining: {remaining('fallback')}")
+    print(f"Reason: {reason}")
+
+
+def parser():
+    root = argparse.ArgumentParser(description=__doc__)
+    commands = root.add_subparsers(dest="action", required=True)
+    setup = commands.add_parser(
+        "setup-management", help="Configure a local-only hashed management key"
+    )
+    setup.add_argument("--management-key-ref", required=True)
+    setup.add_argument(
+        "--runtime", default=str(Path.home() / ".local/share/amp-cliproxy")
+    )
+    install = commands.add_parser("install")
+    install.add_argument(
+        "--preferred", required=True, help="Company Claude auth filename"
+    )
+    install.add_argument(
+        "--fallback", required=True, help="Personal Claude auth filename"
+    )
+    install.add_argument("--management-key-ref", required=True)
+    install.add_argument("--container", default="amp-cliproxyapi")
+    for action in (install, commands.add_parser("configure")):
+        action.add_argument(
+            "--window",
+            choices=["weekly", "five-hour", "either"],
+            default="weekly" if action is install else None,
+        )
+        action.add_argument(
+            "--threshold", type=percent, default=40 if action is install else None
+        )
+        action.add_argument(
+            "--interval", type=positive, default=3600 if action is install else None
+        )
+    accounts = commands.add_parser(
+        "accounts", help="List credentials before or after install"
+    )
+    accounts.add_argument("--management-key-ref")
+    accounts.add_argument("--container", default="amp-cliproxyapi")
+    for name in ("run", "status", "pause", "resume", "uninstall"):
+        commands.add_parser(name)
+    use = commands.add_parser(
+        "use", help="Explicit selection; requires paused automation"
+    )
+    use.add_argument("account", choices=["company", "personal"])
+    return root
+
+
+def main():
+    args = parser().parse_args()
+    os.umask(0o077)
+    STATE.mkdir(parents=True, exist_ok=True, mode=0o700)
+    os.chmod(STATE, 0o700)
+    with (STATE / "selector.lock").open("a") as lock:
+        try:
+            # RunAtLoad can start before install/resume releases its lock.
+            # Let that check wait rather than lose the first evaluation.
+            mode = (
+                fcntl.LOCK_EX if args.action == "run" else fcntl.LOCK_EX | fcntl.LOCK_NB
+            )
+            fcntl.flock(lock, mode)
+        except BlockingIOError as exc:
+            raise SelectorError("Another selector operation is running") from exc
+        if args.action == "setup-management":
+            setup_management(args)
+            return
+        if args.action == "accounts" and args.management_key_ref:
+            config = {
+                "management_key_ref": args.management_key_ref,
+                "container": args.container,
+                "docker": shutil.which("docker") or "docker",
+            }
+            for account in API(config).accounts():
+                print(
+                    f"{account['name']}: {'disabled' if account['disabled'] else 'enabled'}"
+                )
+            return
+        if args.action == "install":
+            if args.preferred == args.fallback:
+                raise SelectorError("Preferred and fallback must differ")
+            docker = shutil.which("docker")
+            if not docker:
+                raise SelectorError("Docker is not installed")
+            config = {
+                "preferred": args.preferred,
+                "fallback": args.fallback,
+                "management_key_ref": args.management_key_ref,
+                "container": args.container,
+                "docker": docker,
+                "window": args.window,
+                "threshold": args.threshold,
+                "interval": args.interval,
+            }
+            api = API(config)
+            # Validate both quota payloads before installing an active scheduler.
+            accounts = api.accounts()
+            if {a["name"] for a in accounts} != {
+                config["preferred"],
+                config["fallback"],
+            }:
+                raise SelectorError("Exactly two Claude credentials are required")
+            for role in ("preferred", "fallback"):
+                api.quota(resolve(accounts, config[role]), config["window"])
+            bootout()
+            save(STATE / "config.json", config)
+            schedule(config)
+            (STATE / "paused").touch(mode=0o600)
+            bootstrap()
+            (STATE / "paused").unlink()
+            print("Installed Claude subscription selector")
+            return
+        if args.action == "uninstall":
+            bootout()
+            AGENT.unlink(missing_ok=True)
+            (STATE / "paused").touch(mode=0o600)
+            print("Uninstalled scheduler; account selection unchanged")
+            return
+        config = load()
+        if args.action == "configure":
+            if all(
+                getattr(args, field) is None
+                for field in ("window", "threshold", "interval")
+            ):
+                raise SelectorError("Provide --window, --threshold or --interval")
+            for field in ("window", "threshold", "interval"):
+                if getattr(args, field) is not None:
+                    config[field] = getattr(args, field)
+            loaded = agent_loaded()
+            bootout()
+            (STATE / "paused").touch(mode=0o600)
+            save(STATE / "config.json", config)
+            schedule(config)
+            if loaded:
+                bootstrap()
+                (STATE / "paused").unlink()
+            print("Policy updated")
+        elif args.action == "pause":
+            bootout()
+            (STATE / "paused").touch(mode=0o600)
+            print("Paused; account selection unchanged")
+        elif args.action == "resume":
+            if not AGENT.exists():
+                raise SelectorError("Scheduler is not installed")
+            if not agent_loaded():
+                bootstrap()
+            (STATE / "paused").unlink(missing_ok=True)
+            print("Resumed")
+        elif args.action == "status":
+            status_report(config)
+        elif args.action == "accounts":
+            for account in API(config).accounts():
+                print(
+                    f"{account['name']}: {'disabled' if account['disabled'] else 'enabled'}"
+                )
+        elif args.action == "use":
+            if not (STATE / "paused").exists() or agent_loaded():
+                raise SelectorError("Run pause before explicit account selection")
+            switch(
+                API(config),
+                config,
+                "preferred" if args.account == "company" else "fallback",
+            )
+            print(f"Selected {args.account}")
+        elif args.action == "run":
+            if (STATE / "paused").exists():
+                raise SelectorError("Selector is paused; run resume first")
+            try:
+                result = check(API(config), config)
+                record({"result": "ok", **result})
+                print(result["reason"])
+            except SelectorError as exc:
+                record({"result": "failed", "selected": "unknown", "reason": str(exc)})
+                raise
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except (SelectorError, OSError, ValueError, KeyError, TypeError) as error:
+        # Avoid emitting potentially sensitive malformed API/config contents.
+        message = (
+            str(error)
+            if isinstance(error, SelectorError)
+            else "Invalid configuration or local operation failed"
+        )
+        print(f"amp-claude-selector: {message}", file=sys.stderr)
+        sys.exit(2)

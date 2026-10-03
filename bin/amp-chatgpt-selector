@@ -4,19 +4,19 @@ set -Eeuo pipefail
 usage() {
 	cat <<'EOF'
 Usage:
-  amp-chatgpt-subscription-selector install --preferred ID --fallback ID --interval SECONDS [--threshold PERCENT]
-  amp-chatgpt-subscription-selector uninstall
-  amp-chatgpt-subscription-selector pause
-  amp-chatgpt-subscription-selector resume
-  amp-chatgpt-subscription-selector run
-  amp-chatgpt-subscription-selector status
+  amp-chatgpt-selector install --preferred ID --fallback ID --interval SECONDS [--threshold PERCENT]
+  amp-chatgpt-selector uninstall
+  amp-chatgpt-selector pause
+  amp-chatgpt-selector resume
+  amp-chatgpt-selector run
+  amp-chatgpt-selector status
 
 Keep a preferred Amp ChatGPT subscription active until its weekly Codex quota
 has the configured remaining percentage or less.
 EOF
 }
 
-fail() { printf 'amp-chatgpt-subscription-selector: %s\n' "$*" >&2; exit 2; }
+fail() { printf 'amp-chatgpt-selector: %s\n' "$*" >&2; exit 2; }
 
 state_dir="${AMP_CHATGPT_SELECTOR_STATE_DIR:-$HOME/.local/state/amp-chatgpt-subscription-selector}"
 launch_agents_dir="${AMP_CHATGPT_SELECTOR_LAUNCH_AGENTS_DIR:-$HOME/Library/LaunchAgents}"
@@ -155,7 +155,7 @@ agent_loaded() {
 	if printf '%s\n' "$output" | grep -Fq 'Could not find service'; then
 		return 1
 	fi
-	printf 'amp-chatgpt-subscription-selector: could not inspect LaunchAgent state: %s\n' "$output" >&2
+	printf 'amp-chatgpt-selector: could not inspect LaunchAgent state: %s\n' "$output" >&2
 	return "$status"
 }
 
@@ -174,7 +174,7 @@ launch_agent_status() {
 		printf 'not scheduled\n'
 		return 0
 	fi
-	printf 'amp-chatgpt-subscription-selector: could not inspect LaunchAgent state: %s\n' "$output" >&2
+	printf 'amp-chatgpt-selector: could not inspect LaunchAgent state: %s\n' "$output" >&2
 	return "$status"
 }
 

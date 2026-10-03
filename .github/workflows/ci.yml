@@ -85,6 +85,8 @@ jobs:
               - "sync-skills.sh"
               - "scripts/check-projection"
               - "scripts/check-skill-dependencies"
+              - "scripts/check-amp-claude-subscription-selector"
+              - "scripts/test_amp_claude_subscription_selector.py"
               - ".pre-commit-config.yaml"
               - ".github/workflows/ci.yml"
             plugins:
@@ -255,6 +257,9 @@ jobs:
 
       - name: Test ChatGPT subscription selector
         run: scripts/check-amp-chatgpt-subscription-selector
+
+      - name: Test Claude subscription selector
+        run: scripts/check-amp-claude-subscription-selector
 
   validate-plugins:
     name: Validate plugin builds
