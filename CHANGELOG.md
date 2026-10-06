@@ -9,6 +9,7 @@ and this project does not currently use versioned releases.
 
 ### Changed
 
+- Add `designing-with-painter` for agent-owned screenshot capture, design exploration, selected-concept refinement, asset preparation and verified implementation handoff, with user checkpoints for taste, product decisions and authorization. [#266](https://github.com/lelouvincx/agent-skills/pull/266)
 - Add amp-claude-selector for quota-aware company/personal Claude account switching through local CLIProxyAPI, match selector status reports, and rename the ChatGPT command to amp-chatgpt-selector while retaining installed schedules and state. [#265](https://github.com/lelouvincx/agent-skills/pull/265)
 - Let agents ask Chinh about judgement calls through a standing `Decisions` rule, tracked as EXPERIMENT-0001 under a new validated `amp-experiment/v1` doc schema. [#263](https://github.com/lelouvincx/agent-skills/pull/263)
 - Rewrite the Logseq: Log Current Task parent prompt for agent readers without changing the logging contract. [#262](https://github.com/lelouvincx/agent-skills/pull/262)
