@@ -50,6 +50,8 @@ AGENTS_REGISTRY_ENV=vps project-resolve prefect --path
 | `dotfiles` | `lelouvincx` | `~/Developer/dotfiles` | `lelouvincx/dotfiles` |
 | `nvim` | `lelouvincx` | `~/Developer/dotfiles/nvim` | `lelouvincx/dotfiles` |
 | `contribute` | `open-source` | `~/Developer/contribute` | `null` |
+| `anfra` | `holistics` | `~/Developer/anfra` | `null` |
+| `anfra-demo-data` | `holistics` | `~/Developer/anfra/anfra-demo-data` | `holistics/anfra-demo-data` |
 | `data` | `holistics` | `~/Developer/holistics/data` | `null` |
 | `presales` | `holistics` | `~/Developer/holistics/presales` | `null` |
 | `presales-calls` | `holistics` | `~/Developer/holistics/presales/presales-calls` | `null` |

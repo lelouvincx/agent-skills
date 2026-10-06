@@ -86,6 +86,22 @@ projects:
       - open source contributions
     description: Parent workspace containing open-source contribution repositories.
 
+  anfra:
+    github: null
+    owner: holistics
+    dir: anfra
+    aliases:
+      - anfra workspace
+    description: Parent Anfra workspace containing Anfra-related repositories.
+
+  anfra-demo-data:
+    github: holistics/anfra-demo-data
+    owner: holistics
+    dir: anfra/anfra-demo-data
+    aliases:
+      - anfra demo data
+    description: Anfra demo data repository.
+
   data:
     github: null
     owner: holistics
