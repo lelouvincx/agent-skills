@@ -221,6 +221,7 @@ if run_tool install --preferred replacement-id --fallback "$fallback" --interval
 [ "$(shasum -a 256 "$tmp/state/config" | awk '{print $1}')" = "$locked_config_digest" ]
 if run_tool pause >/dev/null 2>&1; then exit 1; fi
 if run_tool resume >/dev/null 2>&1; then exit 1; fi
+if run_tool configure --threshold 40 >/dev/null 2>&1; then exit 1; fi
 rm "$tmp/hold"
 wait "$held_pid"
 TEST_QUOTA="$valid_quota" run_tool run >/dev/null
@@ -330,5 +331,68 @@ run_tool uninstall | grep -Fq 'active subscription was unchanged'
 # Pause and resume fail when not installed.
 if run_tool pause >/dev/null 2>&1; then exit 1; fi
 if run_tool resume >/dev/null 2>&1; then exit 1; fi
+
+# Configure requires installation and accepts only policy options.
+if run_tool configure --threshold 40 >/dev/null 2>&1; then exit 1; fi
+run_tool install --preferred "$primary" --fallback "$fallback" --interval 1800 >/dev/null
+cp "$tmp/state/config" "$tmp/config.before"
+cp "$plist" "$tmp/plist.before"
+for option in '' '--threshold' '--interval' '--threshold -1' '--threshold 101' '--threshold nope' '--threshold 4.5' '--interval 0' '--interval nope' '--preferred other'; do
+	# Intentional splitting exercises separate CLI arguments.
+	if run_tool configure $option >/dev/null 2>&1; then exit 1; fi
+	cmp "$tmp/config.before" "$tmp/state/config"
+	cmp "$tmp/plist.before" "$plist"
+done
+
+# Staging, scheduler inspection and stop failures preserve the existing policy.
+for failure in TEST_PLUTIL_FAIL TEST_PRINT_FAIL TEST_BOOTOUT_FAIL; do
+	if (export "$failure=1"; run_tool configure --threshold 40 --interval 3600) >/dev/null 2>&1; then exit 1; fi
+	cmp "$tmp/config.before" "$tmp/state/config"
+	cmp "$tmp/plist.before" "$plist"
+	[ -f "$tmp/loaded" ]
+done
+
+# Partial updates retain omitted values and never call Amp directly.
+calls_before="$(wc -l < "$tmp/calls" | tr -d ' ')"
+run_tool configure --threshold 40 | grep -Fxq 'Policy updated'
+grep -Fxq 'THRESHOLD=40' "$tmp/state/config"
+grep -Fxq 'INTERVAL=1800' "$tmp/state/config"
+run_tool configure --interval 3600 >/dev/null
+grep -Fxq 'THRESHOLD=40' "$tmp/state/config"
+grep -Fxq 'INTERVAL=3600' "$tmp/state/config"
+grep -Fq '<integer>3600</integer>' "$plist"
+grep -Fxq "PREFERRED=$primary" "$tmp/state/config"
+grep -Fxq "FALLBACK=$fallback" "$tmp/state/config"
+[ -f "$tmp/loaded" ] && [ ! -f "$tmp/state/paused" ]
+[ "$(wc -l < "$tmp/calls" | tr -d ' ')" = "$calls_before" ]
+
+# Subsequent checks use the updated threshold rather than the install default.
+printf '%s\n' "$primary" > "$tmp/active"
+TEST_QUOTA="$threshold_quota" run_tool run >/dev/null
+[ "$(cat "$tmp/active")" = "$fallback" ]
+run_tool configure --threshold 0 >/dev/null
+TEST_QUOTA="$threshold_quota" run_tool run >/dev/null
+[ "$(cat "$tmp/active")" = "$primary" ]
+
+# Paused and unscheduled selectors remain stopped after policy updates.
+run_tool pause >/dev/null
+run_tool configure --threshold 0 --interval 60 >/dev/null
+[ ! -f "$tmp/loaded" ] && [ -f "$tmp/state/paused" ]
+run_tool status > "$tmp/configured-status.out"
+grep -Fxq 'Threshold: 0% remaining' "$tmp/configured-status.out"
+grep -Fxq 'Interval: 1 minute' "$tmp/configured-status.out"
+rm "$tmp/state/paused"
+run_tool configure --threshold 100 >/dev/null
+[ ! -f "$tmp/loaded" ] && [ ! -f "$tmp/state/paused" ]
+grep -Fxq 'THRESHOLD=100' "$tmp/state/config"
+
+# A failed reload keeps the saved policy and supports recovery through resume.
+touch "$tmp/loaded"
+if TEST_BOOTSTRAP_FAIL=1 run_tool configure --threshold 40 >/dev/null 2>&1; then exit 1; fi
+grep -Fxq 'THRESHOLD=40' "$tmp/state/config"
+[ ! -f "$tmp/loaded" ] && [ -f "$tmp/state/paused" ]
+run_tool resume >/dev/null
+[ -f "$tmp/loaded" ] && [ ! -f "$tmp/state/paused" ]
+run_tool uninstall >/dev/null
 
 printf '%s\n' 'Amp ChatGPT subscription selector contracts passed.'
