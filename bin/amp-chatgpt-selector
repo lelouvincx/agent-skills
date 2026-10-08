@@ -5,6 +5,7 @@ usage() {
 	cat <<'EOF'
 Usage:
   amp-chatgpt-selector install --preferred ID --fallback ID --interval SECONDS [--threshold PERCENT]
+  amp-chatgpt-selector configure [--threshold PERCENT] [--interval SECONDS]
   amp-chatgpt-selector uninstall
   amp-chatgpt-selector pause
   amp-chatgpt-selector resume
@@ -347,7 +348,6 @@ xml_escape() { printf '%s' "$1" | sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>
 xml_string() { printf '\t\t<string>%s</string>\n' "$(xml_escape "$1")"; }
 
 install_agent() {
-	local script_path config_tmp plist_tmp loaded=false state_status
 	preferred=
 	fallback=
 	threshold=5
@@ -375,6 +375,30 @@ install_agent() {
 		connection_json="$("$amp_command" config model-providers show "$connection" 2>&1)" || fail "could not inspect model-provider connection $connection"
 		printf '%s\n' "$connection_json" | grep -q '"type": "model_provider_openai_chatgpt"' || fail "$connection is not a ChatGPT subscription"
 	done
+	publish_agent install
+}
+
+configure_agent() {
+	local new_threshold= new_interval=
+	[ "$#" -gt 0 ] || fail 'provide --threshold or --interval'
+	while [ "$#" -gt 0 ]; do
+		case "$1" in
+			--threshold) [ "$#" -ge 2 ] || fail '--threshold requires a value'; new_threshold="$2"; [[ "$new_threshold" =~ ^[0-9]+$ ]] && [ "$new_threshold" -le 100 ] || fail '--threshold must be an integer from 0 to 100'; shift 2 ;;
+			--interval) [ "$#" -ge 2 ] || fail '--interval requires a value'; new_interval="$2"; [[ "$new_interval" =~ ^[1-9][0-9]*$ ]] || fail '--interval must be a positive integer of seconds'; shift 2 ;;
+			*) fail "unknown configure option: $1" ;;
+		esac
+	done
+	prepare_state
+	acquire_lock || fail 'another selector operation is running; retry configuration'
+	load_config
+	[ -f "$agent_path" ] || fail 'selector is not installed; run install first'
+	[ -z "$new_threshold" ] || threshold="$new_threshold"
+	[ -z "$new_interval" ] || interval="$new_interval"
+	publish_agent configure
+}
+
+publish_agent() {
+	local operation="$1" script_path config_tmp plist_tmp loaded=false state_status restart=false
 	prepare_state
 	mkdir -p "$launch_agents_dir"
 	config_tmp="$config_file.tmp.$$"
@@ -399,7 +423,9 @@ install_agent() {
 	} > "$plist_tmp"
 	chmod 600 "$plist_tmp"
 	"$plutil_command" -lint "$plist_tmp" >/dev/null || fail 'generated LaunchAgent failed validation'
-	acquire_lock || fail 'another selector operation is running; retry installation'
+	if [ "$operation" = install ]; then
+		acquire_lock || fail 'another selector operation is running; retry installation'
+	fi
 	if agent_loaded; then
 		loaded=true
 	else
@@ -407,14 +433,25 @@ install_agent() {
 		[ "$state_status" -eq 1 ] || fail 'could not determine whether the LaunchAgent is loaded'
 	fi
 	if [ "$loaded" = true ]; then
-		"$launchctl_command" bootout "gui/$(id -u)/com.ampcode.chatgpt-subscription-selector" 9>&- >/dev/null || fail 'could not stop the existing LaunchAgent; installation was not changed'
+		"$launchctl_command" bootout "gui/$(id -u)/com.ampcode.chatgpt-subscription-selector" 9>&- >/dev/null || fail "could not stop the existing LaunchAgent; $operation was not changed"
 	fi
-	rm -f "$paused_file"
+	if [ "$operation" = install ] || { [ "$loaded" = true ] && [ ! -f "$paused_file" ]; }; then
+		restart=true
+	fi
 	mv "$config_tmp" "$config_file"
 	mv "$plist_tmp" "$agent_path"
-	"$launchctl_command" bootstrap "gui/$(id -u)" "$agent_path" 9>&-
+	if [ "$restart" = true ]; then
+		touch "$paused_file"
+		chmod 600 "$paused_file"
+		"$launchctl_command" bootstrap "gui/$(id -u)" "$agent_path" 9>&- || fail 'could not start the LaunchAgent; policy saved, run resume to retry'
+		rm -f "$paused_file"
+	fi
 	trap - EXIT
-	printf 'Installed %s\n' "$agent_path"
+	if [ "$operation" = install ]; then
+		printf 'Installed %s\n' "$agent_path"
+	else
+		printf 'Policy updated\n'
+	fi
 }
 
 pause_agent() {
@@ -516,6 +553,7 @@ command_name="$1"
 shift
 case "$command_name" in
 	install) install_agent "$@" ;;
+	configure) configure_agent "$@" ;;
 	uninstall) [ "$#" -eq 0 ] || fail 'uninstall takes no arguments'; uninstall_agent ;;
 	pause) [ "$#" -eq 0 ] || fail 'pause takes no arguments'; pause_agent ;;
 	resume) [ "$#" -eq 0 ] || fail 'resume takes no arguments'; resume_agent ;;

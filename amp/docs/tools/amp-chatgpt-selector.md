@@ -21,7 +21,7 @@ amp:
   docs_sources:
     api_docs: null
     agent_options: null
-  last_verified: "2026-09-06"
+  last_verified: "2026-10-08"
 contract:
   input_kind: "command_line_arguments"
   output_kind: "active_amp_model_provider_and_local_status"
@@ -95,9 +95,11 @@ tags:
 
 The state directory and LaunchAgent label retain their existing `subscription-selector` names so renaming the command does not reset installed configuration.
 
-Use `install`, `uninstall`, `pause`, `resume`, `run` or `status`. Run `amp config model-providers list` to find the primary and secondary connection IDs before installation.
+Use `install`, `configure`, `uninstall`, `pause`, `resume`, `run` or `status`. Run `amp config model-providers list` to find the primary and secondary connection IDs before installation.
 
 `install` requires `--preferred`, `--fallback` and `--interval`. `--interval` is the LaunchAgent check period in seconds.
+
+`configure` requires an installed selector and at least one of `--threshold` or `--interval`. The threshold is an integer from 0 to 100. The interval is a positive integer of seconds. Omitted options retain their current values. The command preserves the subscription IDs and does not test or activate subscriptions. It updates the LaunchAgent and reloads scheduled checks, but leaves paused or unscheduled checks stopped. Reloading scheduled checks triggers the normal `RunAtLoad` check.
 
 As of 27 August 2026, Amp supports at most 2 linked ChatGPT subscriptions. The install command therefore accepts exactly one primary and one secondary subscription.
 
@@ -122,7 +124,7 @@ The command runs `amp config model-providers test` for the preferred connection.
 
 The command calculates remaining quota as `100 - used_percent`. It checks the selected connection with `amp config model-providers show`. It runs `amp config model-providers activate` only when a change is needed.
 
-A kernel-managed file lock prevents checks, installation, pause, resume and removal from overlapping. A response with a missing window header pair, no supported active window, invalid percentage or invalid provider state leaves the current subscription active and records a failed result.
+A kernel-managed file lock prevents checks, installation, configuration, pause, resume and removal from overlapping. A response with a missing window header pair, no supported active window, invalid percentage or invalid provider state leaves the current subscription active and records a failed result.
 
 `status` prints a short labelled report. The report names both subscriptions, the remaining quota threshold, and the check interval. It also shows the last check time, the last result, the selected subscription, remaining weekly quota, why that subscription was chosen, and whether the background check is scheduled. It uses Amp connection names when `amp config model-providers show` can resolve them. Otherwise it uses the stored connection IDs.
 
@@ -142,6 +144,12 @@ amp-chatgpt-selector install \
   --fallback 00000000-0000-4000-8000-000000000002 \
   --threshold PERCENT \
   --interval SECONDS
+```
+
+Update the policy without reinstalling or resuming paused checks:
+
+```bash
+amp-chatgpt-selector configure --threshold 40 --interval 3600
 ```
 
 Run a check or inspect the latest result:
