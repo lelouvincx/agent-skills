@@ -20,7 +20,7 @@ This section is Chinh's standing request to ask decision questions with `ask_use
 - Collect judgement calls before implementation and ask the 3 with the highest impact. Decide the rest yourself.
 - For each question, put the decision, why it matters and your recommendation in `question`. Pass 2 to 5 concrete `options` with the recommended option first, and set `allowOther` to `true`.
 - Chinh can set the ask level for a thread: `ask: low` means ask only about irreversible or externally visible choices; `ask: high` means ask every judgement call with no cap.
-- End each task that changed something with a "Decisions I made" list. It is complete when every judgement call you settled alone appears with its choice and a one-line reason.
+- End each response with one "Claims and decisions I made" section. Include every judgement call you settled alone with its choice and a one-line reason. Include every factual claim made in the response with its supporting evidence, or label it unverified and state the uncertainty. Write "None" when the section has no entries.
 - When Chinh says a question was unnecessary or a decision should have been asked, add an observation to `amp/docs/experiments/experiment-0001-decision-balance.md` in the `agent-skills` repository.
 
 ## Delegation
