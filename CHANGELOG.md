@@ -9,6 +9,7 @@ and this project does not currently use versioned releases.
 
 ### Changed
 
+- Require only OpenRouter in the local SmartClass Wrangler wrapper and stop accepting or forwarding Cohere credentials. [#270](https://github.com/lelouvincx/agent-skills/pull/270)
 - Require one "Claims and decisions I made" response closing section with reasons for decisions and evidence or uncertainty for factual claims. [#269](https://github.com/lelouvincx/agent-skills/pull/269)
 - Add amp-chatgpt-selector configure to update quota thresholds and check intervals while preserving subscription IDs and paused checks. [#268](https://github.com/lelouvincx/agent-skills/pull/268)
 - Add amp-claude-selector for quota-aware company/personal Claude account switching through local CLIProxyAPI, match selector status reports, and rename the ChatGPT command to amp-chatgpt-selector while retaining installed schedules and state. [#265](https://github.com/lelouvincx/agent-skills/pull/265)
