@@ -14,7 +14,7 @@ WRANGLER = f"{PROJECT}/node_modules/wrangler/bin/wrangler.js"
 DEV_VARS = f"{PROJECT}/.dev.vars"
 PERSISTENCE = f"{PROJECT}/.wrangler/state"
 GIT = "/usr/bin/git"
-SECRETS = ("COHERE_API_KEY", "OPENROUTER_API_KEY")
+SECRETS = ("OPENROUTER_API_KEY",)
 MAIN_CHECKOUT_PORTS = {"8787", "8788"}
 
 
