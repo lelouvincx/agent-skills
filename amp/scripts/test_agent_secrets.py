@@ -598,7 +598,7 @@ class SmartClassWranglerWrapperTests(unittest.TestCase):
         )
         self.assertEqual(0, result.returncode, result.stderr)
         self.assertEqual(
-            "COHERE_API_KEY is present\nOPENROUTER_API_KEY is present\n",
+            "OPENROUTER_API_KEY is present\n",
             result.stdout,
         )
         self.assertNotIn("cohere-placeholder-value", result.stdout + result.stderr)
@@ -611,6 +611,14 @@ class SmartClassWranglerWrapperTests(unittest.TestCase):
         )
         self.assertEqual(0, result.returncode, result.stderr)
         self.assertEqual("OPENROUTER_API_KEY is present\n", result.stdout)
+        self.assertNotIn("placeholder-value", result.stdout + result.stderr)
+
+    def test_probe_rejects_cohere_without_openrouter(self):
+        result = self.run_wrapper(
+            "probe", environment={"COHERE_API_KEY": "placeholder-value"}
+        )
+        self.assertEqual(1, result.returncode)
+        self.assertIn("no approved SmartClass provider secret", result.stderr)
         self.assertNotIn("placeholder-value", result.stdout + result.stderr)
 
     def test_wrapper_rejects_missing_secret_and_unapproved_modes(self):
@@ -669,7 +677,6 @@ class SmartClassWranglerWrapperTests(unittest.TestCase):
                     f"{SMARTCLASS_RUNTIME['NODE_DIRECTORY']}:"
                     "/opt/homebrew/bin:/usr/bin:/bin"
                 ),
-                cohere_secret: "cohere-placeholder-value",
                 openrouter_secret: "openrouter-placeholder-value",
                 "CLOUDFLARE_INCLUDE_PROCESS_ENV": "true",
             },
