@@ -60,7 +60,6 @@ All active documents use `amp-artifact/v2`, which supports skills, local CLIs, a
 ### Event handlers
 
 - [Capture Skill/Plugin Magic Words](./capture-skill-plugin-magic-words.md)
-- [RTK Rewrite](./rtk-rewrite.md)
 - [Holistics Markdown Result Renderer](./holistics-md.md)
 - [Holistics MCP Error Logger](./holistics-mcp-errors.md)
 
