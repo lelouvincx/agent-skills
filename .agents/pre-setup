@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Publish this dispatcher as an Amp project's pre-setup script. Keep installation
+# logic in the canonical checkout rather than copying it into project settings.
+export AGENT_SKILLS_REPO="${AGENT_SKILLS_REPO:-https://github.com/lelouvincx/agent-skills.git}"
+export AGENT_SKILLS_DIR="${AGENT_SKILLS_DIR:-/home/user/workspace/agent-skills}"
+
+if [ ! -e "$AGENT_SKILLS_DIR" ]; then
+	git clone "$AGENT_SKILLS_REPO" "$AGENT_SKILLS_DIR"
+elif [ ! -d "$AGENT_SKILLS_DIR/.git" ]; then
+	echo "[agent-skills] refusing to replace non-checkout: $AGENT_SKILLS_DIR" >&2
+	exit 1
+elif [ -z "$(git -C "$AGENT_SKILLS_DIR" status --porcelain)" ]; then
+	git -C "$AGENT_SKILLS_DIR" pull --ff-only
+else
+	echo "[agent-skills] local changes detected; skipping pull"
+fi
+
+exec bash "$AGENT_SKILLS_DIR/.agents/setup" "$@"
