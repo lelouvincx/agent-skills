@@ -256,11 +256,26 @@ if [ -e "$tmp_home/.config/amp/agent-secrets/stale.json" ]; then
 	exit 1
 fi
 
-if [ -e "$tmp_home/.credentials/agent-secrets" ] \
-	|| [ -e "$tmp_home/.local/share/agent-secrets/op-service-account-token" ]; then
-	echo "error: projection created local agent secret credentials" >&2
+if [ -e "$tmp_home/.local/share/agent-secrets/op-service-account-token" ]; then
+	echo "error: projection created a service-account bootstrap token" >&2
 	exit 1
 fi
+
+python3 - "$REPO_DIR" "$tmp_home" <<'PY'
+import runpy
+import sys
+from pathlib import Path
+
+repo, home = map(Path, sys.argv[1:])
+runtime = runpy.run_path(str(repo / "bin/agent-secrets"))
+manifest = runtime["load_manifest"](repo / "amp/agent-secrets/bundles.json")
+runtime["load_bundle_references"](home, manifest, [], all_bundles=True)
+for name in manifest["bundles"]:
+    assert (home / ".credentials/agent-secrets" / f"{name}.env").read_bytes() == (
+        repo / "amp/agent-secrets/bundle-references" / f"{name}.env"
+    ).read_bytes()
+print("Reference-only bundle projection and permissions passed")
+PY
 
 if ! diff -qr "$REPO_DIR/amp/github-thread-events" "$tmp_home/.config/amp/github-thread-events"; then
 	echo "error: GitHub thread event projection differs from its source" >&2

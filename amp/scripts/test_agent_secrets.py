@@ -3,6 +3,7 @@ import io
 import json
 import os
 import runpy
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -38,6 +39,9 @@ log_path = os.environ.get("FAKE_OP_LOG")
 if log_path:
     with Path(log_path).open("a") as log:
         log.write(f"{lane}:{stage}\n")
+expected_token = os.environ.get("FAKE_OP_EXPECTED_TOKEN")
+if expected_token is not None and os.environ.get("OP_SERVICE_ACCOUNT_TOKEN") != expected_token:
+    raise SystemExit(25)
 reference_log_path = os.environ.get("FAKE_OP_REFERENCE_LOG")
 if reference_log_path and stage == "read":
     with Path(reference_log_path).open("a") as log:
@@ -203,6 +207,53 @@ class AgentSecretsTests(unittest.TestCase):
 
     def op_events(self):
         return self.op_log.read_text().splitlines() if self.op_log.exists() else []
+
+    def reference_source(self):
+        source = self.home / "reference-source"
+        source.mkdir()
+        (source / "bundles.json").write_text(json.dumps(self.manifest))
+        shutil.copytree(self.bundle_root, source / "bundle-references")
+        return source
+
+    def test_reference_sync_installs_secure_files_and_preserves_unmanaged_state(self):
+        sync = runpy.run_path(str(ROOT / "amp/scripts/sync-agent-secret-references.py"))
+        source = self.reference_source()
+        home = self.home / "fresh-orb"
+        home.mkdir()
+        sync["sync_references"](source, home)
+        destination = home / ".credentials/agent-secrets"
+        sentinel = destination / "unmanaged.txt"
+        sentinel.write_text("keep")
+        (destination / "alpha.env").chmod(0o644)
+        sync["sync_references"](source, home)
+        self.assertEqual(0o700, destination.stat().st_mode & 0o777)
+        for name in self.manifest["bundles"]:
+            path = destination / f"{name}.env"
+            self.assertEqual(0o600, path.stat().st_mode & 0o777)
+            self.assertEqual((source / "bundle-references" / path.name).read_text(), path.read_text())
+        self.assertEqual("keep", sentinel.read_text())
+
+    def test_reference_sync_rejects_plaintext_before_creating_runtime_files(self):
+        sync = runpy.run_path(str(ROOT / "amp/scripts/sync-agent-secret-references.py"))
+        source = self.reference_source()
+        (source / "bundle-references/alpha.env").write_text("ALPHA_TOKEN=not-a-reference\n")
+        home = self.home / "fresh-orb"
+        home.mkdir()
+        with self.assertRaises(sync["RUNTIME"]["LocalStateError"]):
+            sync["sync_references"](source, home)
+        self.assertFalse((home / ".credentials").exists())
+
+    def test_reference_sync_refuses_symlinked_destinations(self):
+        sync = runpy.run_path(str(ROOT / "amp/scripts/sync-agent-secret-references.py"))
+        source = self.reference_source()
+        home = self.home / "fresh-orb"
+        home.mkdir()
+        outside = self.home / "outside"
+        outside.mkdir()
+        (home / ".credentials").symlink_to(outside)
+        with self.assertRaises(ValueError):
+            sync["sync_references"](source, home)
+        self.assertEqual([], list(outside.iterdir()))
 
     def test_interactive_run_preserves_arguments_and_builds_a_sanitized_child_environment(self):
         output = self.home / "child.json"
@@ -403,6 +454,39 @@ class AgentSecretsTests(unittest.TestCase):
         payload = json.loads(output.read_text())
         self.assertNotIn("OP_SERVICE_ACCOUNT_TOKEN", payload["environment"])
         self.assertNotIn("AGENT_SECRET_AUTH", payload["environment"])
+
+    def test_injected_service_account_token_takes_precedence_and_stays_out_of_child(self):
+        for bootstrap_state in ("unsafe", "missing"):
+            with self.subTest(bootstrap_state=bootstrap_state):
+                if bootstrap_state == "unsafe":
+                    self.bootstrap.chmod(0o644)
+                else:
+                    self.bootstrap.unlink()
+                output = self.home / "injected.json"
+                result = self.run_cli(
+                    "run", "--bundle", "alpha", "--", self.agent, output,
+                    auth="service-account",
+                    OP_SERVICE_ACCOUNT_TOKEN="injected-test-token",
+                    FAKE_OP_EXPECTED_TOKEN="injected-test-token",
+                )
+                self.assertEqual(0, result.returncode, result.stderr)
+                payload = json.loads(output.read_text())
+                self.assertEqual("resolved-alpha-value", payload["environment"]["ALPHA_TOKEN"])
+                self.assertNotIn("OP_SERVICE_ACCOUNT_TOKEN", payload["environment"])
+                self.assertNotIn("injected-test-token", result.stdout + result.stderr)
+
+    def test_invalid_injected_token_fails_without_bootstrap_fallback(self):
+        for token in ("", " ", "injected\ntoken", "injected\r", "token=value"):
+            with self.subTest(token=token):
+                result = self.run_cli(
+                    "run", "--bundle", "alpha", "--", self.agent, self.home / "invalid.json",
+                    auth="service-account",
+                    OP_SERVICE_ACCOUNT_TOKEN=token,
+                )
+                self.assertNotEqual(0, result.returncode)
+                self.assertIn("injected service-account token", result.stderr)
+                self.assertEqual([], self.op_events())
+                self.assertFalse((self.home / "invalid.json").exists())
 
     def test_service_account_operational_failure_does_not_fall_back_interactively(self):
         output = self.home / "fallback.json"

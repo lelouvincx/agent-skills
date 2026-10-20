@@ -1,6 +1,15 @@
 {
   "version": 1,
   "command_classes": {
+    "amp-claude-selector": {
+      "executablePaths": ["/Users/lelouvincx/Developer/agent-skills/bin/amp-claude-selector"]
+    },
+    "braintrust-export": {
+      "executablePaths": ["/Users/lelouvincx/Developer/holistics/presales/demo-amql-sl-benchmark/bin/braintrust-export"]
+    },
+    "slb-harness": {
+      "executablePaths": ["/Users/lelouvincx/Developer/holistics/presales/demo-amql-sl-benchmark/environment/harness/.venv/bin/python3"]
+    },
     "amp": {
       "executablePaths": ["/Users/lelouvincx/.amp/bin/amp"]
     },
@@ -47,6 +56,34 @@
     }
   },
   "bundles": {
+    "amp-claude-selector": {
+      "audience": "agent",
+      "owner": "lelouvincx/agent-skills",
+      "variables": ["CLIPROXY_MANAGEMENT_KEY"],
+      "compatibleBundles": [],
+      "allowedCommandClasses": ["amp-claude-selector"]
+    },
+    "braintrust-export": {
+      "audience": "agent",
+      "owner": "holistics/demo-amql-sl-benchmark",
+      "variables": ["BRAINTRUST_API_KEY"],
+      "compatibleBundles": [],
+      "allowedCommandClasses": ["braintrust-export"]
+    },
+    "slb-databricks": {
+      "audience": "agent",
+      "owner": "holistics/demo-amql-sl-benchmark",
+      "variables": ["DATABRICKS_TOKEN"],
+      "compatibleBundles": [],
+      "allowedCommandClasses": ["slb-harness"]
+    },
+    "slb-snowflake": {
+      "audience": "agent",
+      "owner": "holistics/demo-amql-sl-benchmark",
+      "variables": ["SNOWFLAKE_PAT"],
+      "compatibleBundles": [],
+      "allowedCommandClasses": ["slb-harness"]
+    },
     "amp-runtime": {
       "audience": "agent",
       "owner": "lelouvincx/agent-skills",

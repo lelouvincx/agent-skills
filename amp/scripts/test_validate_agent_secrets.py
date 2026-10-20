@@ -40,6 +40,15 @@ class AgentSecretPolicyValidationTests(unittest.TestCase):
     def test_checked_in_policy_is_valid(self):
         self.assertEqual([], validator.validate_tree(SOURCE))
 
+    def test_source_reference_validation_rejects_missing_and_plaintext_files(self):
+        path = self.root / "bundle-references/work.env"
+        path.unlink()
+        self.assertTrue(any("bundle references" in error for error in validator.validate_tree(self.root)))
+        path.write_text("GH_TOKEN=plaintext-test-value\n")
+        errors = validator.validate_tree(self.root)
+        self.assertTrue(any("bundle references" in error for error in errors))
+        self.assertNotIn("plaintext-test-value", "\n".join(errors))
+
     def test_bot_repository_inventory_is_shared_policy(self):
         policy = self.read_identity_policy()
         self.assertEqual(
@@ -101,6 +110,7 @@ class AgentSecretPolicyValidationTests(unittest.TestCase):
         manifest = self.read_manifest()
         self.assertEqual(
             {
+                "amp-claude-selector",
                 "amp-runtime",
                 "work",
                 "lelouvincx-bot",
@@ -108,9 +118,32 @@ class AgentSecretPolicyValidationTests(unittest.TestCase):
                 "smartclass-cohere",
                 "openrouter",
                 "toanthaythanh-teacher",
+                "slb-databricks",
+                "slb-snowflake",
+                "braintrust-export",
             },
             set(manifest["bundles"]),
         )
+        self.assertEqual(
+            manifest["bundles"]["amp-claude-selector"],
+            {
+                "audience": "agent",
+                "owner": "lelouvincx/agent-skills",
+                "variables": ["CLIPROXY_MANAGEMENT_KEY"],
+                "compatibleBundles": [],
+                "allowedCommandClasses": ["amp-claude-selector"],
+            },
+        )
+        self.assertEqual(manifest["bundles"]["braintrust-export"]["variables"], ["BRAINTRUST_API_KEY"])
+        self.assertEqual(manifest["bundles"]["braintrust-export"]["compatibleBundles"], [])
+        self.assertEqual(manifest["bundles"]["braintrust-export"]["allowedCommandClasses"], ["braintrust-export"])
+        self.assertEqual(manifest["command_classes"]["braintrust-export"]["executablePaths"], [
+            "/Users/lelouvincx/Developer/holistics/presales/demo-amql-sl-benchmark/bin/braintrust-export"
+        ])
+        for bundle, variable in (("slb-databricks", "DATABRICKS_TOKEN"), ("slb-snowflake", "SNOWFLAKE_PAT")):
+            self.assertEqual(manifest["bundles"][bundle]["variables"], [variable])
+            self.assertEqual(manifest["bundles"][bundle]["compatibleBundles"], [])
+            self.assertEqual(manifest["bundles"][bundle]["allowedCommandClasses"], ["slb-harness"])
         self.assertEqual(
             {
                 "audience": "agent",
