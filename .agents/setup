@@ -4,6 +4,7 @@ set -euo pipefail
 AGENT_SKILLS_REPO="${AGENT_SKILLS_REPO:-https://github.com/lelouvincx/agent-skills.git}"
 AGENT_SKILLS_DIR="${AGENT_SKILLS_DIR:-/home/user/workspace/agent-skills}"
 
+setup_source="$(cat "${BASH_SOURCE[0]}")"
 export PATH="${HOME:-/home/user}/.local/bin:$PATH"
 
 echo "[agent-skills] ensuring repository at $AGENT_SKILLS_DIR"
@@ -17,6 +18,13 @@ else
 	else
 		echo "[agent-skills] local changes detected; skipping pull"
 	fi
+fi
+
+# Pulling replaces files, not the setup body already running in this shell.
+if [ "$setup_source" != "$(cat "$AGENT_SKILLS_DIR/.agents/setup")" ]; then
+	echo "[agent-skills] restarting with the current setup"
+	exec env AGENT_SKILLS_REPO="$AGENT_SKILLS_REPO" AGENT_SKILLS_DIR="$AGENT_SKILLS_DIR" \
+		bash "$AGENT_SKILLS_DIR/.agents/setup" "$@"
 fi
 
 ensure_uv() {
