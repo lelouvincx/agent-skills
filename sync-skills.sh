@@ -580,6 +580,7 @@ sync_amp_artifacts() {
 			return 1
 		fi
 		uvx --with jsonschema==4.25.1 python "$AMP_DIR/scripts/validate-agent-secrets.py"
+		uvx --with jsonschema==4.25.1 python "$AMP_DIR/scripts/sync-agent-secret-references.py"
 		mkdir -p "$AMP_CONFIG_DIR/agent-secrets"
 		rsync -a --delete "$AMP_DIR/agent-secrets/" "$AMP_CONFIG_DIR/agent-secrets/"
 		echo "synced: amp/agent-secrets/ -> $AMP_CONFIG_DIR/agent-secrets/"

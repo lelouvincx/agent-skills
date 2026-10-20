@@ -3,6 +3,7 @@ import io
 import json
 import os
 import runpy
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -38,6 +39,9 @@ log_path = os.environ.get("FAKE_OP_LOG")
 if log_path:
     with Path(log_path).open("a") as log:
         log.write(f"{lane}:{stage}\n")
+expected_token = os.environ.get("FAKE_OP_EXPECTED_TOKEN")
+if expected_token is not None and os.environ.get("OP_SERVICE_ACCOUNT_TOKEN") != expected_token:
+    raise SystemExit(25)
 reference_log_path = os.environ.get("FAKE_OP_REFERENCE_LOG")
 if reference_log_path and stage == "read":
     with Path(reference_log_path).open("a") as log:
@@ -204,6 +208,53 @@ class AgentSecretsTests(unittest.TestCase):
     def op_events(self):
         return self.op_log.read_text().splitlines() if self.op_log.exists() else []
 
+    def reference_source(self):
+        source = self.home / "reference-source"
+        source.mkdir()
+        (source / "bundles.json").write_text(json.dumps(self.manifest))
+        shutil.copytree(self.bundle_root, source / "bundle-references")
+        return source
+
+    def test_reference_sync_installs_secure_files_and_preserves_unmanaged_state(self):
+        sync = runpy.run_path(str(ROOT / "amp/scripts/sync-agent-secret-references.py"))
+        source = self.reference_source()
+        home = self.home / "fresh-orb"
+        home.mkdir()
+        sync["sync_references"](source, home)
+        destination = home / ".credentials/agent-secrets"
+        sentinel = destination / "unmanaged.txt"
+        sentinel.write_text("keep")
+        (destination / "alpha.env").chmod(0o644)
+        sync["sync_references"](source, home)
+        self.assertEqual(0o700, destination.stat().st_mode & 0o777)
+        for name in self.manifest["bundles"]:
+            path = destination / f"{name}.env"
+            self.assertEqual(0o600, path.stat().st_mode & 0o777)
+            self.assertEqual((source / "bundle-references" / path.name).read_text(), path.read_text())
+        self.assertEqual("keep", sentinel.read_text())
+
+    def test_reference_sync_rejects_plaintext_before_creating_runtime_files(self):
+        sync = runpy.run_path(str(ROOT / "amp/scripts/sync-agent-secret-references.py"))
+        source = self.reference_source()
+        (source / "bundle-references/alpha.env").write_text("ALPHA_TOKEN=not-a-reference\n")
+        home = self.home / "fresh-orb"
+        home.mkdir()
+        with self.assertRaises(sync["RUNTIME"]["LocalStateError"]):
+            sync["sync_references"](source, home)
+        self.assertFalse((home / ".credentials").exists())
+
+    def test_reference_sync_refuses_symlinked_destinations(self):
+        sync = runpy.run_path(str(ROOT / "amp/scripts/sync-agent-secret-references.py"))
+        source = self.reference_source()
+        home = self.home / "fresh-orb"
+        home.mkdir()
+        outside = self.home / "outside"
+        outside.mkdir()
+        (home / ".credentials").symlink_to(outside)
+        with self.assertRaises(ValueError):
+            sync["sync_references"](source, home)
+        self.assertEqual([], list(outside.iterdir()))
+
     def test_interactive_run_preserves_arguments_and_builds_a_sanitized_child_environment(self):
         output = self.home / "child.json"
         self.bootstrap.chmod(0o666)
@@ -305,6 +356,73 @@ class AgentSecretsTests(unittest.TestCase):
         self.assertIn("does not match a registered command class", result.stderr)
         self.assertEqual([], self.op_events())
 
+    def test_named_command_runs_at_different_install_locations_with_unrelated_tools_missing(self):
+        self.manifest["command_classes"]["agent"] = {"executableNames": ["agent-child"]}
+        self.manifest["command_classes"]["publisher"] = {"executablePaths": ["/missing/tool"]}
+        self.write_manifest()
+        for layout in ("macbook-local/bin", "orb/bin"):
+            with self.subTest(layout=layout):
+                location = self.home / layout
+                location.mkdir(parents=True)
+                write_executable(location / "agent-child", FAKE_CHILD)
+                output = self.home / "portable.json"
+                result = self.run_cli(
+                    "run", "--bundle", "alpha", "--", "agent-child", output,
+                    PATH=f"{location}:{self.bin_root}:{os.environ.get('PATH', '')}",
+                )
+                self.assertEqual(0, result.returncode, result.stderr)
+                self.assertEqual("resolved-alpha-value", json.loads(output.read_text())["environment"]["ALPHA_TOKEN"])
+
+    def test_shared_executable_name_is_authorized_by_selected_bundle(self):
+        for command_class in self.manifest["command_classes"]:
+            self.manifest["command_classes"][command_class] = {"executableNames": ["agent-child"]}
+        self.write_manifest()
+        output = self.home / "shared-name.json"
+        result = self.run_cli("run", "--bundle", "alpha", "--", "agent-child", output)
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.manifest["bundles"]["alpha"]["allowedCommandClasses"].append("publisher")
+        self.write_manifest()
+        self.op_log.unlink()
+        result = self.run_cli("run", "--bundle", "alpha", "--", "agent-child", output)
+        self.assertNotEqual(0, result.returncode)
+        self.assertIn("more than one allowed command class", result.stderr)
+        self.assertEqual([], self.op_events())
+
+    def test_runtime_lookup_launches_the_selected_path_without_a_second_path_search(self):
+        self.manifest["command_classes"]["agent"] = {"executableNames": ["agent-child"]}
+        self.write_manifest()
+        alternate = self.home / "alternate-bin"
+        alternate.mkdir()
+        write_executable(alternate / "agent-child", "#!/usr/bin/env python3\nraise SystemExit(91)\n")
+        environment = self.environment()
+        original = RUNTIME["child_environment"]
+
+        def changed_child_path(environment, values):
+            child = original(environment, values)
+            child["PATH"] = f"{alternate}:{environment['PATH']}"
+            return child
+
+        output = self.home / "pinned.json"
+        with mock.patch.dict(RUNTIME["run_command"].__globals__, child_environment=changed_child_path):
+            result = RUNTIME["main"](
+                ["run", "--bundle", "alpha", "--", "agent-child", str(output)], environment
+            )
+        self.assertEqual(0, result)
+        self.assertTrue(output.is_file())
+
+    def test_named_interpreter_preserves_virtual_environment_path(self):
+        self.manifest["command_classes"]["agent"] = {"executableNames": ["python3"]}
+        self.write_manifest()
+        venv = self.home / "venv"
+        subprocess.run([sys.executable, "-m", "venv", "--without-pip", str(venv)], check=True)
+        output = self.home / "prefix.txt"
+        result = self.run_cli(
+            "run", "--bundle", "alpha", "--", venv / "bin/python3", "-c",
+            "import sys; from pathlib import Path; Path(sys.argv[1]).write_text(sys.prefix)", output,
+        )
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual(str(venv), output.read_text())
+
     def test_bundle_and_command_policy_fail_before_1password_access(self):
         cases = [
             (["run", "--bundle", "unknown", "--", self.agent], "unknown bundle"),
@@ -403,6 +521,39 @@ class AgentSecretsTests(unittest.TestCase):
         payload = json.loads(output.read_text())
         self.assertNotIn("OP_SERVICE_ACCOUNT_TOKEN", payload["environment"])
         self.assertNotIn("AGENT_SECRET_AUTH", payload["environment"])
+
+    def test_injected_service_account_token_takes_precedence_and_stays_out_of_child(self):
+        for bootstrap_state in ("unsafe", "missing"):
+            with self.subTest(bootstrap_state=bootstrap_state):
+                if bootstrap_state == "unsafe":
+                    self.bootstrap.chmod(0o644)
+                else:
+                    self.bootstrap.unlink()
+                output = self.home / "injected.json"
+                result = self.run_cli(
+                    "run", "--bundle", "alpha", "--", self.agent, output,
+                    auth="service-account",
+                    OP_SERVICE_ACCOUNT_TOKEN="injected-test-token",
+                    FAKE_OP_EXPECTED_TOKEN="injected-test-token",
+                )
+                self.assertEqual(0, result.returncode, result.stderr)
+                payload = json.loads(output.read_text())
+                self.assertEqual("resolved-alpha-value", payload["environment"]["ALPHA_TOKEN"])
+                self.assertNotIn("OP_SERVICE_ACCOUNT_TOKEN", payload["environment"])
+                self.assertNotIn("injected-test-token", result.stdout + result.stderr)
+
+    def test_invalid_injected_token_fails_without_bootstrap_fallback(self):
+        for token in ("", " ", "injected\ntoken", "injected\r", "token=value"):
+            with self.subTest(token=token):
+                result = self.run_cli(
+                    "run", "--bundle", "alpha", "--", self.agent, self.home / "invalid.json",
+                    auth="service-account",
+                    OP_SERVICE_ACCOUNT_TOKEN=token,
+                )
+                self.assertNotEqual(0, result.returncode)
+                self.assertIn("injected service-account token", result.stderr)
+                self.assertEqual([], self.op_events())
+                self.assertFalse((self.home / "invalid.json").exists())
 
     def test_service_account_operational_failure_does_not_fall_back_interactively(self):
         output = self.home / "fallback.json"

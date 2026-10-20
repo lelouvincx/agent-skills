@@ -56,6 +56,42 @@ ensure_uv() {
 
 ensure_uv
 
+ensure_op() {
+	if command -v op >/dev/null 2>&1; then
+		op --version
+		return 0
+	fi
+
+	local elevate=()
+	if [ "${EUID:-$(id -u)}" -ne 0 ]; then
+		if ! command -v sudo >/dev/null 2>&1; then
+			echo "[agent-skills] root or sudo is required to install 1Password CLI" >&2
+			return 1
+		fi
+		elevate=(sudo -n)
+	fi
+
+	echo "[agent-skills] 1Password CLI missing; installing from its signed APT repository"
+	"${elevate[@]}" apt-get update
+	"${elevate[@]}" env DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends curl ca-certificates gnupg
+	"${elevate[@]}" install -d /usr/share/keyrings /etc/apt/sources.list.d \
+		/etc/debsig/policies/AC2D62742012EA22 /usr/share/debsig/keyrings/AC2D62742012EA22
+	curl -fsSL https://downloads.1password.com/linux/keys/1password.asc | \
+		"${elevate[@]}" gpg --batch --yes --dearmor --output /usr/share/keyrings/1password-archive-keyring.gpg
+	printf 'deb [arch=%s signed-by=/usr/share/keyrings/1password-archive-keyring.gpg] https://downloads.1password.com/linux/debian/%s stable main\n' \
+		"$(dpkg --print-architecture)" "$(dpkg --print-architecture)" | \
+		"${elevate[@]}" tee /etc/apt/sources.list.d/1password.list >/dev/null
+	curl -fsSL https://downloads.1password.com/linux/debian/debsig/1password.pol | \
+		"${elevate[@]}" tee /etc/debsig/policies/AC2D62742012EA22/1password.pol >/dev/null
+	"${elevate[@]}" cp /usr/share/keyrings/1password-archive-keyring.gpg \
+		/usr/share/debsig/keyrings/AC2D62742012EA22/debsig.gpg
+	"${elevate[@]}" apt-get update
+	"${elevate[@]}" env DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends 1password-cli
+	op --version
+}
+
+ensure_op
+
 # Amp-managed orbs may not include rsync by default. Install it when possible
 # because sync-skills.sh uses rsync to project Amp plugins/docs into ~/.config/amp.
 if ! command -v rsync >/dev/null 2>&1; then

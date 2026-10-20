@@ -58,6 +58,7 @@ jobs:
               - "amp/scripts/test-agent-secrets-lib.sh"
               - "amp/scripts/test_validate_agent_secrets.py"
               - "amp/scripts/validate-agent-secrets.py"
+              - "amp/scripts/sync-agent-secret-references.py"
               - "amp/scripts/test_validate_github_thread_events.py"
               - "amp/scripts/validate-github-thread-events.py"
               - "amp/scripts/git-diff-mcp.test.ts"

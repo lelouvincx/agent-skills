@@ -2,6 +2,7 @@
 
 import json
 import posixpath
+import runpy
 import sys
 from pathlib import Path
 
@@ -199,6 +200,12 @@ def validate_tree(root=ROOT):
             )
         )
         errors.extend(semantic_errors(manifest_path, data))
+        if not errors:
+            reference_sync = runpy.run_path(str(Path(__file__).with_name("sync-agent-secret-references.py")))
+            try:
+                reference_sync["read_references"](root, data)
+            except (OSError, ValueError, reference_sync["RUNTIME"]["AgentSecretsError"]):
+                errors.append("source bundle references are missing or invalid (values omitted)")
     except (PolicyConfigurationError, ValueError) as error:
         errors.append(str(error))
 

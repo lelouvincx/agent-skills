@@ -1,52 +1,75 @@
 {
   "version": 1,
   "command_classes": {
+    "amp-claude-selector": {
+      "executableNames": ["amp-claude-selector"]
+    },
+    "braintrust-export": {
+      "executableNames": ["braintrust-export"]
+    },
+    "slb-harness": {
+      "executableNames": ["python", "python3"]
+    },
     "amp": {
-      "executablePaths": ["/Users/lelouvincx/.amp/bin/amp"]
+      "executableNames": ["amp"]
     },
     "claude-code": {
-      "executablePaths": [
-        "/Users/lelouvincx/.local/share/mise/installs/claude/latest/bin/claude"
-      ]
+      "executableNames": ["claude"]
     },
     "pi": {
-      "executablePaths": [
-        "/Users/lelouvincx/.local/share/mise/installs/pi/latest/pi"
-      ]
+      "executableNames": ["pi"]
     },
     "amp-runner-rclone": {
-      "executablePaths": ["/opt/homebrew/bin/rclone"]
+      "executableNames": ["rclone"]
     },
     "smartclass-wrangler-dev": {
-      "executablePaths": [
-        "/Users/lelouvincx/Developer/agent-skills/bin/smartclass-wrangler-dev"
-      ]
+      "executableNames": ["smartclass-wrangler-dev"]
     },
     "smartclass-openrouter-poc": {
-      "executablePaths": [
-        "/Users/lelouvincx/.local/share/mise/installs/python/3.11.10/bin/python3"
-      ]
+      "executableNames": ["python", "python3"]
     },
     "logseq-agent-preflight": {
-      "executablePaths": [
-        "/Users/lelouvincx/Developer/second-brain-logseq/automation/validate-agent-credentials"
-      ]
+      "executableNames": ["validate-agent-credentials"]
     },
     "logseq-publisher": {
-      "executablePaths": [
-        "/Users/lelouvincx/Developer/second-brain-logseq/automation/publish-approved-output"
-      ]
+      "executableNames": ["publish-approved-output"]
     },
     "github-cli": {
-      "executablePaths": ["/opt/homebrew/bin/gh"]
+      "executableNames": ["gh"]
     },
     "smartclass-teacher-api": {
-      "executablePaths": [
-        "/Users/lelouvincx/.local/share/mise/installs/node/26.8.1/bin/node"
-      ]
+      "executableNames": ["node"]
     }
   },
   "bundles": {
+    "amp-claude-selector": {
+      "audience": "agent",
+      "owner": "lelouvincx/agent-skills",
+      "variables": ["CLIPROXY_MANAGEMENT_KEY"],
+      "compatibleBundles": [],
+      "allowedCommandClasses": ["amp-claude-selector"]
+    },
+    "braintrust-export": {
+      "audience": "agent",
+      "owner": "holistics/demo-amql-sl-benchmark",
+      "variables": ["BRAINTRUST_API_KEY"],
+      "compatibleBundles": [],
+      "allowedCommandClasses": ["braintrust-export"]
+    },
+    "slb-databricks": {
+      "audience": "agent",
+      "owner": "holistics/demo-amql-sl-benchmark",
+      "variables": ["DATABRICKS_TOKEN"],
+      "compatibleBundles": [],
+      "allowedCommandClasses": ["slb-harness"]
+    },
+    "slb-snowflake": {
+      "audience": "agent",
+      "owner": "holistics/demo-amql-sl-benchmark",
+      "variables": ["SNOWFLAKE_PAT"],
+      "compatibleBundles": [],
+      "allowedCommandClasses": ["slb-harness"]
+    },
     "amp-runtime": {
       "audience": "agent",
       "owner": "lelouvincx/agent-skills",
