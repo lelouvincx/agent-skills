@@ -89,6 +89,13 @@ repos:
         language: system
         types: [shell]
 
+      - id: test-orb-setup
+        name: Test orb setup self-update
+        entry: bash scripts/test-orb-setup.sh
+        language: system
+        pass_filenames: false
+        files: ^(?:\.agents/setup|scripts/test-orb-setup\.sh|\.pre-commit-config\.yaml)$
+
       - id: test-agent-browser-wrapper
         name: Test the agent-browser wrapper and config migration
         entry: python3 -m unittest scripts/test_agent_browser_wrapper.py amp/scripts/test_migrate_agent_browser_config.py
