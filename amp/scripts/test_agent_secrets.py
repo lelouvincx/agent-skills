@@ -356,6 +356,73 @@ class AgentSecretsTests(unittest.TestCase):
         self.assertIn("does not match a registered command class", result.stderr)
         self.assertEqual([], self.op_events())
 
+    def test_named_command_runs_at_different_install_locations_with_unrelated_tools_missing(self):
+        self.manifest["command_classes"]["agent"] = {"executableNames": ["agent-child"]}
+        self.manifest["command_classes"]["publisher"] = {"executablePaths": ["/missing/tool"]}
+        self.write_manifest()
+        for layout in ("macbook-local/bin", "orb/bin"):
+            with self.subTest(layout=layout):
+                location = self.home / layout
+                location.mkdir(parents=True)
+                write_executable(location / "agent-child", FAKE_CHILD)
+                output = self.home / "portable.json"
+                result = self.run_cli(
+                    "run", "--bundle", "alpha", "--", "agent-child", output,
+                    PATH=f"{location}:{self.bin_root}:{os.environ.get('PATH', '')}",
+                )
+                self.assertEqual(0, result.returncode, result.stderr)
+                self.assertEqual("resolved-alpha-value", json.loads(output.read_text())["environment"]["ALPHA_TOKEN"])
+
+    def test_shared_executable_name_is_authorized_by_selected_bundle(self):
+        for command_class in self.manifest["command_classes"]:
+            self.manifest["command_classes"][command_class] = {"executableNames": ["agent-child"]}
+        self.write_manifest()
+        output = self.home / "shared-name.json"
+        result = self.run_cli("run", "--bundle", "alpha", "--", "agent-child", output)
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.manifest["bundles"]["alpha"]["allowedCommandClasses"].append("publisher")
+        self.write_manifest()
+        self.op_log.unlink()
+        result = self.run_cli("run", "--bundle", "alpha", "--", "agent-child", output)
+        self.assertNotEqual(0, result.returncode)
+        self.assertIn("more than one allowed command class", result.stderr)
+        self.assertEqual([], self.op_events())
+
+    def test_runtime_lookup_launches_the_selected_path_without_a_second_path_search(self):
+        self.manifest["command_classes"]["agent"] = {"executableNames": ["agent-child"]}
+        self.write_manifest()
+        alternate = self.home / "alternate-bin"
+        alternate.mkdir()
+        write_executable(alternate / "agent-child", "#!/usr/bin/env python3\nraise SystemExit(91)\n")
+        environment = self.environment()
+        original = RUNTIME["child_environment"]
+
+        def changed_child_path(environment, values):
+            child = original(environment, values)
+            child["PATH"] = f"{alternate}:{environment['PATH']}"
+            return child
+
+        output = self.home / "pinned.json"
+        with mock.patch.dict(RUNTIME["run_command"].__globals__, child_environment=changed_child_path):
+            result = RUNTIME["main"](
+                ["run", "--bundle", "alpha", "--", "agent-child", str(output)], environment
+            )
+        self.assertEqual(0, result)
+        self.assertTrue(output.is_file())
+
+    def test_named_interpreter_preserves_virtual_environment_path(self):
+        self.manifest["command_classes"]["agent"] = {"executableNames": ["python3"]}
+        self.write_manifest()
+        venv = self.home / "venv"
+        subprocess.run([sys.executable, "-m", "venv", "--without-pip", str(venv)], check=True)
+        output = self.home / "prefix.txt"
+        result = self.run_cli(
+            "run", "--bundle", "alpha", "--", venv / "bin/python3", "-c",
+            "import sys; from pathlib import Path; Path(sys.argv[1]).write_text(sys.prefix)", output,
+        )
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual(str(venv), output.read_text())
+
     def test_bundle_and_command_policy_fail_before_1password_access(self):
         cases = [
             (["run", "--bundle", "unknown", "--", self.agent], "unknown bundle"),

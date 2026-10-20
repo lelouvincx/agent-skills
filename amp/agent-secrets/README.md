@@ -9,6 +9,35 @@ files. Repeated syncs update managed references without resolving any secrets.
 The injected service-account token and local bootstrap token are never committed
 or copied by sync.
 
+## Runtime command lookup on MacBook and orbs
+
+The shared policy declares `executableNames`, such as `amp`, `claude`, `gh`, or
+`braintrust-export`, instead of machine-specific install paths. Use the same
+bundle names and reference files on both machines:
+
+```bash
+agent-secrets run --bundle work -- amp
+agent-secrets run --bundle braintrust-export -- /absolute/checkout/bin/braintrust-export
+```
+
+For a bare command, the helper resolves its path from the invocation's `PATH`.
+For an absolute command, it matches the executable filename. Both forms must name
+an existing executable and match a command class allowed by every selected bundle.
+Unrelated missing tools do not block the invocation. Repository tools must either
+be on `PATH` or be passed by absolute path; relative paths are not accepted.
+
+The helper launches the exact path it checked, without repeating the `PATH`
+search or replacing virtual-environment interpreter symlinks with their targets.
+When an executable name belongs to several classes, the selected bundles must
+identify exactly one allowed class. Existing `executablePaths` policies remain
+supported for callers that still need fixed absolute paths.
+
+Runtime lookup trusts the caller's `PATH` and executable names. It does not verify
+program identity or restrict script arguments. The existing Python and Node
+classes therefore permit arbitrary code run by those interpreters, not only a
+particular application script. Bundle policy is a guardrail, not process isolation.
+The service account's vault permissions remain the credential-access boundary.
+
 ## Runtime and doctor checks
 
 `agent-secrets run` is the hot path. It validates the selected bundle files, command class, child environment and selected 1Password references. In service-account mode, it does not list vaults or run the full posture check.

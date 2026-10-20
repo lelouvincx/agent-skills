@@ -40,6 +40,16 @@ class AgentSecretPolicyValidationTests(unittest.TestCase):
     def test_checked_in_policy_is_valid(self):
         self.assertEqual([], validator.validate_tree(SOURCE))
 
+    def test_source_command_policy_is_machine_independent_and_rejects_unsafe_names(self):
+        manifest = self.read_manifest()
+        for command_class in manifest["command_classes"].values():
+            self.assertEqual({"executableNames"}, set(command_class))
+        for invalid in ("../gh", "/usr/bin/gh", "gh --version", "$(gh)", ""):
+            with self.subTest(invalid=invalid):
+                manifest["command_classes"]["github-cli"] = {"executableNames": [invalid]}
+                self.write_manifest(manifest)
+                self.assertTrue(validator.validate_tree(self.root))
+
     def test_source_reference_validation_rejects_missing_and_plaintext_files(self):
         path = self.root / "bundle-references/work.env"
         path.unlink()
@@ -137,9 +147,7 @@ class AgentSecretPolicyValidationTests(unittest.TestCase):
         self.assertEqual(manifest["bundles"]["braintrust-export"]["variables"], ["BRAINTRUST_API_KEY"])
         self.assertEqual(manifest["bundles"]["braintrust-export"]["compatibleBundles"], [])
         self.assertEqual(manifest["bundles"]["braintrust-export"]["allowedCommandClasses"], ["braintrust-export"])
-        self.assertEqual(manifest["command_classes"]["braintrust-export"]["executablePaths"], [
-            "/Users/lelouvincx/Developer/holistics/presales/demo-amql-sl-benchmark/bin/braintrust-export"
-        ])
+        self.assertEqual(manifest["command_classes"]["braintrust-export"]["executableNames"], ["braintrust-export"])
         for bundle, variable in (("slb-databricks", "DATABRICKS_TOKEN"), ("slb-snowflake", "SNOWFLAKE_PAT")):
             self.assertEqual(manifest["bundles"][bundle]["variables"], [variable])
             self.assertEqual(manifest["bundles"][bundle]["compatibleBundles"], [])
@@ -206,10 +214,8 @@ class AgentSecretPolicyValidationTests(unittest.TestCase):
             manifest["bundles"]["lelouvincx-bot"],
         )
         self.assertEqual(
-            [
-                "/opt/homebrew/bin/gh"
-            ],
-            manifest["command_classes"]["github-cli"]["executablePaths"],
+            ["gh"],
+            manifest["command_classes"]["github-cli"]["executableNames"],
         )
 
     def test_schema_is_closed(self):
@@ -270,11 +276,11 @@ class AgentSecretPolicyValidationTests(unittest.TestCase):
 
     def test_duplicate_or_unnormalized_executable_paths_fail(self):
         manifest = self.read_manifest()
-        duplicate = manifest["command_classes"]["amp"]["executablePaths"][0]
-        manifest["command_classes"]["pi"]["executablePaths"] = [duplicate]
-        manifest["command_classes"]["claude-code"]["executablePaths"] = [
-            "/Users/lelouvincx/bin/../bin/claude"
-        ]
+        manifest["command_classes"]["amp"] = {"executablePaths": ["/test/bin/amp"]}
+        manifest["command_classes"]["pi"] = {"executablePaths": ["/test/bin/amp"]}
+        manifest["command_classes"]["claude-code"] = {
+            "executablePaths": ["/test/bin/../bin/claude"]
+        }
         self.write_manifest(manifest)
         errors = validator.validate_tree(self.root)
         self.assertTrue(any("more than one command class" in error for error in errors))
