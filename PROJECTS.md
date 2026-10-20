@@ -52,6 +52,7 @@ AGENTS_REGISTRY_ENV=vps project-resolve prefect --path
 | `contribute` | `open-source` | `~/Developer/contribute` | `null` |
 | `anfra` | `holistics` | `~/Developer/anfra` | `null` |
 | `anfra-demo-data` | `holistics` | `~/Developer/anfra/anfra-demo-data` | `holistics/anfra-demo-data` |
+| `malloy` | `holistics` | `~/Developer/experiments/malloy` | `null` |
 | `data` | `holistics` | `~/Developer/holistics/data` | `null` |
 | `presales` | `holistics` | `~/Developer/holistics/presales` | `null` |
 | `presales-calls` | `holistics` | `~/Developer/holistics/presales/presales-calls` | `null` |

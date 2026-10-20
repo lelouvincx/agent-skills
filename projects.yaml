@@ -102,6 +102,15 @@ projects:
       - anfra demo data
     description: Anfra demo data repository.
 
+  malloy:
+    github: null
+    owner: holistics
+    dir: experiments/malloy
+    aliases:
+      - malloy experiment
+      - malloy publisher
+    description: Experiment evaluating Malloy and Malloy Publisher as an agentic BI tool.
+
   data:
     github: null
     owner: holistics
