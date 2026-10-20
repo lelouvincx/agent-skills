@@ -102,6 +102,15 @@ projects:
       - anfra demo data
     description: Anfra demo data repository.
 
+  anfra-docs:
+    github: holistics/anfra-docs
+    owner: holistics
+    dir: anfra/anfra-docs
+    aliases:
+      - anfra docs
+      - anfra documentation
+    description: Anfra documentation repository.
+
   malloy:
     github: null
     owner: holistics
