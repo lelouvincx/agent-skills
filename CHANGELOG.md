@@ -9,6 +9,7 @@ and this project does not currently use versioned releases.
 
 ### Changed
 
+- Restart orb setup when refreshing its source and test first-run handoff to the current prerequisite installer. [#273](https://github.com/lelouvincx/agent-skills/pull/273)
 - Resolve approved secret-bundle commands at runtime by executable name on MacBook and orbs, preserve virtual environments, and ignore unrelated missing tools. [#272](https://github.com/lelouvincx/agent-skills/pull/272)
 - Provision all 11 reference-only secret bundles under ~/.credentials/agent-secrets/, support injected 1Password service-account tokens, and install 1Password CLI during orb setup. [#272](https://github.com/lelouvincx/agent-skills/pull/272)
 - Require only OpenRouter in the local SmartClass Wrangler wrapper and stop accepting or forwarding Cohere credentials. [#270](https://github.com/lelouvincx/agent-skills/pull/270)
