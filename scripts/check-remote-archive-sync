@@ -24,6 +24,11 @@ Local instructions.
 EOF
 cp "$test_repo/skills/demo/PERSONAL.md" "$tmp/expected-personal.md"
 
+printf '%s\n' '{"demo":{"url":"https://example.com/free","includeTools":["search"]}}' > "$test_repo/skills/demo/mcp.json"
+cp "$test_repo/skills/demo/mcp.json" "$tmp/expected-mcp.json"
+git -C "$test_repo" init -q
+git -C "$test_repo" add skills/demo/mcp.json
+
 cat > "$test_repo/remote-skills.yaml" <<EOF
 skills:
   - name: demo
@@ -40,12 +45,17 @@ build_archive() {
 	cat > "$source_root/plugin/skills/demo/SKILL.md" <<'EOF'
 ---
 name: demo
-description: Remote demo skill.
+description: >
+  Remote demo skill.
+  More upstream description.
+metadata:
+  category: demo
 disable-model-invocation: true
 ---
 
 # Demo
 EOF
+	printf '%s\n' '{"premium":{"url":"https://example.com/paid"}}' > "$source_root/plugin/skills/demo/mcp.json"
 	printf "export const version = '%s';\n" "$version" > "$source_root/plugin/skills/demo/scripts/lib/version.mjs"
 	cat > "$source_root/plugin/skills/demo/scripts/live.mjs" <<'EOF'
 import { version } from './lib/version.mjs';
@@ -65,8 +75,14 @@ run_sync() {
 build_archive v1
 run_sync
 cmp "$tmp/expected-personal.md" "$test_repo/skills/demo/PERSONAL.md"
+cmp "$tmp/expected-mcp.json" "$test_repo/skills/demo/mcp.json"
 grep -q '^description: Demo skill with a local overlay\.$' "$test_repo/skills/demo/SKILL.md"
 grep -q '^Local instructions\.$' "$test_repo/skills/demo/SKILL.md"
+if grep -q 'upstream description\|Remote demo skill' "$test_repo/skills/demo/SKILL.md"; then
+	echo "error: description override kept upstream block-scalar lines" >&2
+	exit 1
+fi
+grep -q '^  category: demo$' "$test_repo/skills/demo/SKILL.md"
 if grep -q '^disable-model-invocation:' "$test_repo/skills/demo/SKILL.md"; then
 	echo "error: archive sync kept unsupported frontmatter" >&2
 	exit 1
@@ -77,6 +93,7 @@ touch "$test_repo/skills/demo/stale.txt"
 build_archive v2
 run_sync
 cmp "$tmp/expected-personal.md" "$test_repo/skills/demo/PERSONAL.md"
+cmp "$tmp/expected-mcp.json" "$test_repo/skills/demo/mcp.json"
 node "$test_repo/skills/demo/scripts/live.mjs" --help | grep -q '^live v2$'
 if [ -e "$test_repo/skills/demo/stale.txt" ]; then
 	echo "error: archive sync kept a stale remote-owned file" >&2

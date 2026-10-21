@@ -295,8 +295,12 @@ merge_personal_overlay() {
 				in_frontmatter && /^description:[[:space:]]*/ {
 					print description
 					replaced = 1
+					in_description = 1
 					next
 				}
+				in_frontmatter && in_description && /^[[:space:]]/ { next }
+				in_frontmatter && in_description && /^$/ { next }
+				{ in_description = 0 }
 				{ print }
 			' "$remote_file" > "$merged_remote"; then
 				return 1
@@ -395,6 +399,10 @@ sync_remote_archive_skill() {
 	if [ -f "$personal_file" ]; then
 		cp "$personal_file" "$publish_dir/PERSONAL.md"
 		personal_hash="$(shasum -a 256 "$personal_file" | awk '{print $1}')"
+	fi
+	# Keep the repository-owned MCP allowlist alongside the personal overlay.
+	if git -C "$REPO_DIR" ls-files --error-unmatch "$skill_dir/mcp.json" &>/dev/null; then
+		cp "$skill_dir/mcp.json" "$publish_dir/mcp.json"
 	fi
 	if command -v sha256sum &>/dev/null; then
 		archive_hash="$(sha256sum "$archive_file" | awk '{print $1}')"

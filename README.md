@@ -127,6 +127,7 @@ Local skills are maintained in this repository. Remote skills are fetched and pr
 | [impeccable](skills/impeccable/SKILL.md) | Remote | design, review, and improve frontend interfaces |
 | [linear-cli](skills/linear-cli/SKILL.md) | Remote | manage Linear issues from the command line |
 | [modern-web-guidance](skills/modern-web-guidance/SKILL.md) | Remote | check current web platform guidance before frontend work |
+| [motion](skills/motion/SKILL.md) | Remote | use official Motion animation best practices and search free documentation and examples |
 | [notion](skills/notion/SKILL.md) | Remote | manage Notion pages, databases, and comments |
 | [prototype](skills/prototype/SKILL.md) | Remote | build throwaway logic or UI prototypes to test a design |
 | [proto](skills/proto/SKILL.md) | Local | deploy static sites, SPAs, and images with route-specific preflight and verification |
@@ -144,6 +145,27 @@ Local skills are maintained in this repository. Remote skills are fetched and pr
 | [write-aql](skills/write-aql/SKILL.md) | Remote | write and run Holistics AQL queries |
 | [writing-for-agents](skills/writing-for-agents/SKILL.md) | Remote | write documents for agents, including skills and agent instructions |
 | [writing-investigation-docs](skills/writing-investigation-docs/SKILL.md) | Local | write evidence-first investigation and decision docs |
+
+### Motion AI Kit (free)
+
+The [official Motion AI Kit](https://motion.dev/docs/ai-kit) is fetched from
+`motiondivision/ai-kit` at a pinned revision, including its companion guides.
+The global skill links make `/motion` available in Amp and Claude Code.
+Amp loads the skill's `mcp.json`, which allows only `search-motion-docs` from
+https://mcp.motion.dev. No account, API key or Motion+ server is configured.
+The local `PERSONAL.md` limits the upstream instructions to free features.
+
+Claude Code does not load Amp's skill-bundled MCP configuration. Register the
+same free hosted server once per machine:
+
+```bash
+claude mcp add --scope user --transport http motion https://mcp.motion.dev
+claude mcp get motion
+```
+
+For archive-based remote skills, a Git-tracked `mcp.json` is a local override
+and survives remote refreshes, like `PERSONAL.md`. Untracked upstream MCP files
+remain generated payloads.
 
 ### Amp and plugin skills
 
