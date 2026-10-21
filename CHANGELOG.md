@@ -40,6 +40,7 @@ and this project does not currently use versioned releases.
 
 ### Added
 
+- Add the official free Motion AI Kit skill and hosted documentation MCP server, preserve local MCP allowlists during archive refreshes, and support folded upstream skill descriptions. [#278](https://github.com/lelouvincx/agent-skills/pull/278)
 - Add a private work-repository orb preparation skill with access-route decisions, lifecycle verification, and evidence from the anfra-landing hosted-launcher experiments. [#277](https://github.com/lelouvincx/agent-skills/pull/277)
 - Add a reusable project pre-setup dispatcher that refreshes agent-skills and runs its canonical orb bootstrap. [#275](https://github.com/lelouvincx/agent-skills/pull/275)
 - Register the Anfra parent workspace and demo data repository in the shared project registry. [#267](https://github.com/lelouvincx/agent-skills/pull/267)
