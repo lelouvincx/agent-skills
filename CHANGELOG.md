@@ -40,6 +40,7 @@ and this project does not currently use versioned releases.
 
 ### Added
 
+- Add a private work-repository orb preparation skill with access-route decisions, lifecycle verification, and evidence from the anfra-landing hosted-launcher experiments. [#277](https://github.com/lelouvincx/agent-skills/pull/277)
 - Add a reusable project pre-setup dispatcher that refreshes agent-skills and runs its canonical orb bootstrap. [#275](https://github.com/lelouvincx/agent-skills/pull/275)
 - Register the Anfra parent workspace and demo data repository in the shared project registry. [#267](https://github.com/lelouvincx/agent-skills/pull/267)
 - Support isolated SmartClass Wrangler servers from authorized Git worktrees. [#260](https://github.com/lelouvincx/agent-skills/pull/260)
