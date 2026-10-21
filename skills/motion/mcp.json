@@ -1,0 +1,7 @@
+{
+  "motion": {
+    "url": "https://mcp.motion.dev",
+    "transport": "http",
+    "includeTools": ["search-motion-docs"]
+  }
+}

@@ -16,6 +16,11 @@
 #   6. Fetch listed companion files, or stage and replace the skill from an archive
 
 skills:
+  - name: motion
+    archive: https://codeload.github.com/motiondivision/ai-kit/tar.gz/78a83b1485fa70dab9037c480de0c7cf53930df7
+    archive_path: plugins/motion/skills/motion
+    enabled: true
+
   - name: figma-design-to-code
     url: https://raw.githubusercontent.com/figma/mcp-server-guide/main/skills/figma-design-to-code/SKILL.md
     enabled: true

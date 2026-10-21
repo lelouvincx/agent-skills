@@ -5,6 +5,14 @@
 # skills/example-remote-skill/SKILL.md
 # skills/example-remote-skill/.remote-source
 
+skills/motion/SKILL.md
+skills/motion/.remote-source
+skills/motion/best-practices/
+skills/motion/codex/
+skills/motion/css-spring/
+skills/motion/performance-audit/
+skills/motion/transition-preview/
+
 skills/notion/SKILL.md
 skills/notion/.remote-source
 
