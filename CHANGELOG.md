@@ -40,6 +40,7 @@ and this project does not currently use versioned releases.
 
 ### Added
 
+- Add the syncing-obsidian-notes skill so local threads and orbs read and write the second-brain vault through Obsidian Sync. [#279](https://github.com/lelouvincx/agent-skills/pull/279)
 - Add the official free Motion AI Kit skill and hosted documentation MCP server, preserve local MCP allowlists during archive refreshes, and support folded upstream skill descriptions. [#278](https://github.com/lelouvincx/agent-skills/pull/278)
 - Add a private work-repository orb preparation skill with access-route decisions, lifecycle verification, and evidence from the anfra-landing hosted-launcher experiments. [#277](https://github.com/lelouvincx/agent-skills/pull/277)
 - Add a reusable project pre-setup dispatcher that refreshes agent-skills and runs its canonical orb bootstrap. [#275](https://github.com/lelouvincx/agent-skills/pull/275)

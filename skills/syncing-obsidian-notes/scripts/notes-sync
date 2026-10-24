@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+# Pull and push Chinh's notes vault through Obsidian Sync from a headless machine (an Amp orb).
+# Run it before reading and again after editing. The first run downloads the whole vault (~2 minutes).
+# Per-file sync output goes to $NOTES_SYNC_LOG; this script prints only a one-line result.
+set -euo pipefail
+
+VAULT_NAME="${NOTES_VAULT_NAME:-second-brain-logseq}"
+NOTES_DIR="${NOTES_DIR:-$HOME/notes}"
+LOG="${NOTES_SYNC_LOG:-$HOME/.cache/notes-sync.log}"
+
+if [[ "$(uname -s)" == Darwin && -z "${AMP_ORB:-}" ]]; then
+	echo "notes-sync: on the Mac, the Obsidian app syncs the vault. Edit the files in place: $(project-resolve logseq --path 2>/dev/null || echo '~/Developer/second-brain-logseq')" >&2
+	exit 2
+fi
+
+: "${OBSIDIAN_AUTH_TOKEN:?notes-sync: set the personal Amp secret OBSIDIAN_AUTH_TOKEN}"
+mkdir -p "$(dirname "$LOG")"
+: >"$LOG"
+
+fail() {
+	echo "notes-sync: $1 failed; last log lines from $LOG:" >&2
+	tail -n 20 "$LOG" >&2
+	exit 1
+}
+
+if ! command -v ob >/dev/null 2>&1; then
+	node_major="$(node -p 'process.versions.node.split(".")[0]' 2>/dev/null || echo 0)"
+	if ((node_major < 22)); then
+		echo "notes-sync: obsidian-headless needs Node 22 or later (found ${node_major})" >&2
+		exit 1
+	fi
+	npm install -g obsidian-headless >>"$LOG" 2>&1 || fail "npm install"
+fi
+
+# `ob sync-status` exits non-zero until this folder is linked to the remote vault.
+if ! ob sync-status --path "$NOTES_DIR" --json >/dev/null 2>&1; then
+	: "${OBSIDIAN_VAULT_PASSWORD:?notes-sync: set the personal Amp secret OBSIDIAN_VAULT_PASSWORD}"
+	mkdir -p "$NOTES_DIR"
+	ob sync-setup --vault "$VAULT_NAME" --path "$NOTES_DIR" --password "$OBSIDIAN_VAULT_PASSWORD" \
+		--device-name "amp-orb-$(hostname)" --json >>"$LOG" 2>&1 || fail "ob sync-setup"
+fi
+
+start=$SECONDS
+ob sync --path "$NOTES_DIR" >>"$LOG" 2>&1 || fail "ob sync"
+echo "notes-sync: $NOTES_DIR is in sync with $VAULT_NAME in $((SECONDS - start))s (details: $LOG)"
