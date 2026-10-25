@@ -83,6 +83,7 @@ AGENTS_REGISTRY_ENV=vps project-resolve prefect --path
 | `personal-finance` | `lelouvincx` | `~/Developer/personal-finance` | `lelouvincx/personal-finance` |
 | `blog` | `lelouvincx` | `~/Developer/lelouvincx.github.io` | `lelouvincx/lelouvincx.github.io` |
 | `smartclass` | `lelouvincx` | `~/Developer/smartclass` | `lelouvincx/smartclass` |
+| `lookup-vocab` | `lelouvincx` | `~/Developer/lookup-vocab` | `null` |
 | `wwi-data-platform` | `lelouvincx` | `~/Developer/wwi-data-platform` | `lelouvincx/wwi-data-platform` |
 
 ## Matching policy
