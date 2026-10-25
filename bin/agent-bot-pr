@@ -22,7 +22,9 @@ Usage:
 merge squash-merges only when every check run on the PR head has passed, and
 pins the merge to that head commit.
 
-Commits and pushes use the hardened bot SSH identity. GitHub writes go through
+Commits and pushes use the hardened bot SSH identity when its key exists. Without
+the key, as in orbs, they use HTTPS with the lelouvincx-bot token from
+agent-secrets, and commits are unsigned. GitHub writes always go through
 agent-secrets with the lelouvincx-bot bundle, so the script never reads the bot
 token value.
 EOF
@@ -77,7 +79,7 @@ repository_from_origin() {
 		remote="${remote#git@github.com:}"
 		printf '%s\n' "${remote%.git}"
 		;;
-	https://github.com/*.git)
+	https://github.com/*)
 		remote="${remote#https://github.com/}"
 		printf '%s\n' "${remote%.git}"
 		;;
@@ -94,6 +96,52 @@ current_branch() {
 bot_gh() {
 	AGENT_SECRET_AUTH="${AGENT_SECRET_AUTH:-service-account}" \
 		"$AGENT_SECRETS_BIN" run --bundle lelouvincx-bot -- "$GH_BIN" "$@"
+}
+
+# Orbs have no bot SSH key. There, Git authenticates over HTTPS with a credential
+# helper that runs `gh auth git-credential` under agent-secrets, so the token
+# exists only in that child process. Commits are unsigned; squash merges are
+# signed by GitHub.
+use_https_transport() {
+	[[ ! -e "$AGENT_BOT_SSH_KEY" ]]
+}
+
+bot_https_git() {
+	env \
+		-u GH_TOKEN \
+		-u GITHUB_TOKEN \
+		-u GH_TOKEN_BOT \
+		-u GIT_ASKPASS \
+		-u SSH_ASKPASS \
+		-u GIT_CONFIG \
+		-u GIT_CONFIG_COUNT \
+		-u GIT_CONFIG_PARAMETERS \
+		AGENT_SECRET_AUTH="${AGENT_SECRET_AUTH:-service-account}" \
+		GIT_CONFIG_GLOBAL=/dev/null \
+		GIT_CONFIG_NOSYSTEM=1 \
+		GIT_TERMINAL_PROMPT=0 \
+		git \
+		-c credential.helper= \
+		-c "credential.helper=!'$AGENT_SECRETS_BIN' run --bundle lelouvincx-bot -- '$GH_BIN' auth git-credential" \
+		-c user.name="$AGENT_BOT_GITHUB_LOGIN" \
+		-c user.email="$AGENT_BOT_GIT_EMAIL" \
+		-c commit.gpgsign=false \
+		-c core.hooksPath=/dev/null \
+		-c core.fsmonitor=false \
+		"$@"
+}
+
+https_commit_files() {
+	local message="$1" path
+	shift
+	git add -- "$@"
+	while IFS= read -r path; do
+		[[ -n "$path" ]] || continue
+		agent_path_is_allowed "$path" "$@" || fail "Refusing to commit unapproved staged file: $path"
+	done < <(git diff --cached --name-only)
+	if ! git diff --cached --quiet; then
+		bot_https_git commit -m "$message"
+	fi
 }
 
 command_commit() {
@@ -117,13 +165,21 @@ command_commit() {
 	done
 	[[ -n "$message" ]] || fail 'commit requires -m MESSAGE'
 	[[ "${#paths[@]}" -gt 0 ]] || fail 'commit requires -- FILE [FILE...]'
-	agent_commit_files /dev/null "$AGENT_BOT_SSH_KEY" "$message" "${paths[@]}"
+	if use_https_transport; then
+		https_commit_files "$message" "${paths[@]}"
+	else
+		agent_commit_files /dev/null "$AGENT_BOT_SSH_KEY" "$message" "${paths[@]}"
+	fi
 }
 
 command_push() {
 	local branch="${1:-$(current_branch)}"
 	[[ $# -le 1 ]] || fail 'push accepts at most one branch'
-	agent_push_branch /dev/null "$AGENT_BOT_SSH_KEY" "$branch"
+	if use_https_transport; then
+		bot_https_git push "https://github.com/$AGENT_GITHUB_REPOSITORY.git" "$branch"
+	else
+		agent_push_branch /dev/null "$AGENT_BOT_SSH_KEY" "$branch"
+	fi
 }
 
 command_open() {

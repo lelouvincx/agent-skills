@@ -72,7 +72,7 @@ agent-bot-pr checks
 agent-bot-pr merge --pr 233
 ```
 
-The helper reuses the hardened bot SSH identity for commits and pushes. GitHub writes go through `agent-secrets` and the `lelouvincx-bot` bundle. The approved repository set lives in `amp/agent-secrets/github-identities.json`.
+The helper reuses the hardened bot SSH identity for commits and pushes. Where that key is missing, as in orbs, it pushes over HTTPS with the `lelouvincx-bot` bundle token and makes unsigned commits. GitHub writes go through `agent-secrets` and the `lelouvincx-bot` bundle. The approved repository set lives in `amp/agent-secrets/github-identities.json`.
 
 Agent Browser uses a pinned stock release (version in `amp/agent-browser/version`) installed by `sync-skills.sh` under `~/.local/libexec/agent-browser-stock` and wrapped by `bin/agent-browser` (RFC-0013).
 
