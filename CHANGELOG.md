@@ -9,6 +9,7 @@ and this project does not currently use versioned releases.
 
 ### Changed
 
+- Register the local Lookup vocabulary app and its spoken-name alias in the project registry. [#287](https://github.com/lelouvincx/agent-skills/pull/287)
 - Register Anfra landing in the project registry and point orb creation to its canonical Amp-hosted launcher while preserving the GitHub application source. [#286](https://github.com/lelouvincx/agent-skills/pull/286)
 - Let agent-bot-pr commit and push from orbs over HTTPS with the lelouvincx-bot bundle token when the bot SSH key is missing. [#285](https://github.com/lelouvincx/agent-skills/pull/285)
 - Renamed the global `logseq-manual-log` plugin to `second-brain-log` because Chinh now edits the vault in Obsidian and Logseq is only its content format. The command `Logseq: Log Current Task` became `Second Brain: Log`, and the `AMP_LOGSEQ_GRAPH_DIR` and `AMP_LOGSEQ_TIME_ZONE` overrides became `AMP_SECOND_BRAIN_DIR` and `AMP_SECOND_BRAIN_TIME_ZONE` with no fallback [#284](https://github.com/lelouvincx/agent-skills/pull/284)

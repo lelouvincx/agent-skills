@@ -393,6 +393,14 @@ projects:
       - smart class
     description: Smartclass repository.
 
+  lookup-vocab:
+    github: null
+    owner: lelouvincx
+    dir: lookup-vocab
+    aliases:
+      - lookup vocab
+    description: English-to-Vietnamese vocabulary app and paired browser extension.
+
   wwi-data-platform:
     github: lelouvincx/wwi-data-platform
     owner: lelouvincx
