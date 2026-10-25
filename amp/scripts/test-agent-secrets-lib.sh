@@ -113,4 +113,26 @@ MD
 	[[ "$(grep -Fc 'Test bot PR helper' CHANGELOG.md)" == 1 ]]
 )
 
+# Without the bot SSH key (orbs), commit and push use HTTPS with an unsigned bot commit.
+git init -q --bare "$TMP_DIR/https-remote.git"
+(
+	cd "$BOT_PR_REPO"
+	git remote set-url origin https://github.com/lelouvincx/smartclass
+	git config "url.file://$TMP_DIR/https-remote.git.insteadOf" https://github.com/lelouvincx/smartclass.git
+	export AGENT_SKILLS_ROOT="$ROOT" PATH="$TMP_DIR:$PATH" AGENT_BOT_SSH_KEY="$TMP_DIR/missing-key"
+	git checkout -q -b https-test
+	echo one >approved.txt
+	echo two >unapproved.txt
+	git add unapproved.txt
+	if ./bin/agent-bot-pr commit -m 'test: https' -- approved.txt 2>/dev/null; then
+		echo "HTTPS commit accepted an unapproved staged file" >&2
+		exit 1
+	fi
+	git reset -q unapproved.txt
+	./bin/agent-bot-pr commit -m 'test: https' -- approved.txt CHANGELOG.md
+	[[ "$(git log -1 --format='%an <%ae> %G?')" == 'lelouvincx-bot <bot@lelouvincx.com> N' ]]
+	./bin/agent-bot-pr push 2>/dev/null
+	[[ "$(git -C "$TMP_DIR/https-remote.git" rev-parse https-test)" == "$(git rev-parse HEAD)" ]]
+)
+
 echo "Shared agent library contract passed"
