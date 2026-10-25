@@ -163,5 +163,43 @@ if ! command -v rsync >/dev/null 2>&1; then
 	export -f rsync
 fi
 
+# Entire records Amp threads as checkpoints linked to commits. Install it in every
+# orb, then wire hooks only into checkouts that commit .entire/settings.json.
+ENTIRE_AGENT_AMP_VERSION="v0.0.0-20261020003721-23c64f2861dd"
+
+ensure_entire() {
+	local local_bin="${HOME:-/home/user}/.local/bin"
+
+	if ! command -v entire >/dev/null 2>&1; then
+		echo "[agent-skills] installing Entire CLI"
+		curl -fsSL https://entire.com/install.sh | bash </dev/null
+	fi
+
+	if ! command -v entire-agent-amp >/dev/null 2>&1; then
+		echo "[agent-skills] building entire-agent-amp $ENTIRE_AGENT_AMP_VERSION"
+		local go_bin
+		go_bin="$(command -v go || true)"
+		if [ -z "$go_bin" ]; then
+			local go_version
+			go_version="$(curl -fsSL 'https://go.dev/VERSION?m=text' | head -1)"
+			rm -rf "${HOME:-/home/user}/.local/go"
+			curl -fsSL "https://go.dev/dl/${go_version}.linux-amd64.tar.gz" | tar -C "${HOME:-/home/user}/.local" -xz
+			go_bin="${HOME:-/home/user}/.local/go/bin/go"
+		fi
+		GOBIN="$local_bin" "$go_bin" install \
+			"github.com/entireio/external-agents/agents/entire-agent-amp/cmd/entire-agent-amp@$ENTIRE_AGENT_AMP_VERSION"
+	fi
+
+	local checkout
+	for checkout in /home/user/workspace/repo /home/user/workspace/repos/*; do
+		if git -C "$checkout" ls-files --error-unmatch .entire/settings.json >/dev/null 2>&1; then
+			echo "[agent-skills] enabling Entire for Amp in $checkout"
+			(cd "$checkout" && entire enable --agent amp --yes --local --telemetry=false </dev/null >/dev/null)
+		fi
+	done
+}
+
+ensure_entire || echo "[agent-skills] Entire setup failed; continuing without it" >&2
+
 echo "[agent-skills] syncing default skills and Amp plugins"
 "$AGENT_SKILLS_DIR/sync-skills.sh" --remote
