@@ -9,6 +9,7 @@ and this project does not currently use versioned releases.
 
 ### Changed
 
+- Let agent-bot-pr commit and push from orbs over HTTPS with the lelouvincx-bot bundle token when the bot SSH key is missing. [#285](https://github.com/lelouvincx/agent-skills/pull/285)
 - Renamed the global `logseq-manual-log` plugin to `second-brain-log` because Chinh now edits the vault in Obsidian and Logseq is only its content format. The command `Logseq: Log Current Task` became `Second Brain: Log`, and the `AMP_LOGSEQ_GRAPH_DIR` and `AMP_LOGSEQ_TIME_ZONE` overrides became `AMP_SECOND_BRAIN_DIR` and `AMP_SECOND_BRAIN_TIME_ZONE` with no fallback [#284](https://github.com/lelouvincx/agent-skills/pull/284)
 - Store Entire checkpoints in the private lelouvincx/agent-checkpoints repo instead of this public repo, and give orbs a URL-scoped git credential for it. [#283](https://github.com/lelouvincx/agent-skills/pull/283)
 - Moved the `syncing-obsidian-notes` skill to Chinh's global User Skills repo so no-project orbs get it, and removed the agent-skills copy [#282](https://github.com/lelouvincx/agent-skills/pull/282)
