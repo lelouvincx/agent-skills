@@ -9,6 +9,7 @@ and this project does not currently use versioned releases.
 
 ### Changed
 
+- Store Entire checkpoints in the private lelouvincx/agent-checkpoints repo instead of this public repo, and give orbs a URL-scoped git credential for it. [#283](https://github.com/lelouvincx/agent-skills/pull/283)
 - Moved the `syncing-obsidian-notes` skill to Chinh's global User Skills repo so no-project orbs get it, and removed the agent-skills copy [#282](https://github.com/lelouvincx/agent-skills/pull/282)
 - Pilot Entire checkpoints for Amp threads in agent-skills: commit the Entire settings and Amp plugin, and install and enable Entire during orb setup. [#281](https://github.com/lelouvincx/agent-skills/pull/281)
 - Moved the `logseq-manual-log` plugin to Chinh's global User Plugins repo so local and orb threads both load it, and removed the agent-skills copy, its test and its doc [#280](https://github.com/lelouvincx/agent-skills/pull/280)
