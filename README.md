@@ -252,7 +252,7 @@ Run the relevant repository command directly:
 | [Claude Opus 4.7](amp/docs/tools/claude-opus-4-7.md) | Agent mode | Mode picker | run Amp high mode on Claude Opus 4.7 |
 | [Claude Opus 5.5](amp/docs/tools/claude-opus-5-5.md) | Agent mode | Mode picker | run Amp high mode on Claude Opus 5.5 |
 | [Local Claude CLIProxyAPI runtime](amp/docs/tools/local-claude-cliproxy.md) | Command | Command palette | open and review the projected local Claude proxy runtime |
-| Logseq log current task (global User Plugins: `logseq-manual-log/`) | Command | Command palette | log the current Amp task into Logseq from local and orb threads |
+| Second Brain: Log (global User Plugins: `second-brain-log/`) | Command | Command palette | log the current Amp task into the Obsidian-synced second-brain vault from local and orb threads |
 | [Track event](amp/docs/tools/track-event.md) | Command | Command palette | record skill or plugin usage manually |
 | [Capture skill and plugin magic words](amp/docs/tools/capture-skill-plugin-magic-words.md) | Event handler | Plugin event pipeline | record usage events from trigger phrases |
 | [Holistics MCP error logger](amp/docs/tools/holistics-mcp-errors.md) | Event handler | Plugin event pipeline | log Holistics MCP CLI failures |

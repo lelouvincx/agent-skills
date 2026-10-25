@@ -43,7 +43,7 @@ PR #98 added a process-scoped coordinator and worker-attested read-back checks. 
 
 The command now queues a turn in the active parent thread. The parent uses its live conversation context to write a standalone brief for built-in Task. This replaces the hidden worker's dependence on lossy `read_thread` reconstruction and its separate lifecycle. Task may use a targeted thread lookup for a specific missing fact when that tool is available. Task-link labels, customer-aware titles, graph configuration and timezone behaviour remain open.
 
-The command moved to the global User Plugins repository (`logseq-manual-log/` in `ampcode.com/@lelouvincx/-/plugins`) on 24 October 2026, so it loads in local and orb threads in every project. Its contract is `logseq-manual-log/docs/tools/logseq-log-current-task-command.md` in that repository. This issue remains the source of truth for historical evidence, revised intent, decisions and follow-up.
+The command moved to the global User Plugins repository (`logseq-manual-log/` in `ampcode.com/@lelouvincx/-/plugins`) on 24 October 2026, so it loads in local and orb threads in every project. On 25 October 2026 it was renamed from `logseq-manual-log` to `second-brain-log`, because Chinh now edits the vault in Obsidian and Logseq is only its content format. The command became `Second Brain: Log` (ID `second-brain-log`), and the `AMP_LOGSEQ_GRAPH_DIR` and `AMP_LOGSEQ_TIME_ZONE` overrides became `AMP_SECOND_BRAIN_DIR` and `AMP_SECOND_BRAIN_TIME_ZONE` with no fallback. Its contract is `second-brain-log/docs/tools/second-brain-log-command.md` in that repository. Older names below are historical. This issue remains the source of truth for historical evidence, revised intent, decisions and follow-up.
 
 ## Trigger
 
