@@ -190,6 +190,15 @@ ensure_entire() {
 			"github.com/entireio/external-agents/agents/entire-agent-amp/cmd/entire-agent-amp@$ENTIRE_AGENT_AMP_VERSION"
 	fi
 
+	# Checkpoints go to the private lelouvincx/agent-checkpoints store. Amp's own
+	# git credential cannot see it, so reset the helper list for that URL alone
+	# and read GH_TOKEN_PERSONAL at push time instead of writing it to disk.
+	local checkpoint_helper='credential.https://github.com/lelouvincx/agent-checkpoints.git.helper'
+	git config --global --unset-all "$checkpoint_helper" || true
+	git config --global --add "$checkpoint_helper" ''
+	git config --global --add "$checkpoint_helper" \
+		'!f() { test "$1" = get && test -n "${GH_TOKEN_PERSONAL:-}" && printf "username=x-access-token\npassword=%s\n" "$GH_TOKEN_PERSONAL"; }; f'
+
 	local checkout
 	for checkout in /home/user/workspace/repo /home/user/workspace/repos/*; do
 		if git -C "$checkout" ls-files --error-unmatch .entire/settings.json >/dev/null 2>&1; then
