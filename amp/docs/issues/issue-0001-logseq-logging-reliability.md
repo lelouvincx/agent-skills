@@ -16,12 +16,8 @@ amp_thread_id:
   T-019f645f-41cb-7434-a0d9-d9d4d88fa5c3: "reviewed and tightened the P0 implementation plan"
   T-019f644b-4e40-7721-be21-ad60c2cfd428: "organized the issue record and revised its scope after the command-only change"
   T-01a064f2-224c-7097-8e0f-5ce6b560b10e: "made a parent-authored Task brief the primary intent source"
-artifacts:
-  - "logseq-log-current-task-command"
-implementation:
-  - path: "../tools/logseq-log-current-task-command.md"
-  - path: "../../plugins/logseq-manual-log.ts"
-  - path: "../../scripts/logseq-manual-log.test.ts"
+artifacts: []
+implementation: []
 pull_requests:
   - "https://github.com/lelouvincx/agent-skills/pull/98"
   - "https://github.com/lelouvincx/agent-skills/pull/108"
@@ -47,7 +43,7 @@ PR #98 added a process-scoped coordinator and worker-attested read-back checks. 
 
 The command now queues a turn in the active parent thread. The parent uses its live conversation context to write a standalone brief for built-in Task. This replaces the hidden worker's dependence on lossy `read_thread` reconstruction and its separate lifecycle. Task may use a targeted thread lookup for a specific missing fact when that tool is available. Task-link labels, customer-aware titles, graph configuration and timezone behaviour remain open.
 
-The current contract is [Logseq: log current task command](../tools/logseq-log-current-task-command.md). This issue remains the source of truth for historical evidence, revised intent, decisions and follow-up.
+The command moved to the global User Plugins repository (`logseq-manual-log/` in `ampcode.com/@lelouvincx/-/plugins`) on 24 October 2026, so it loads in local and orb threads in every project. Its contract is `logseq-manual-log/docs/tools/logseq-log-current-task-command.md` in that repository. This issue remains the source of truth for historical evidence, revised intent, decisions and follow-up.
 
 ## Trigger
 
@@ -280,11 +276,15 @@ The plugin defaults to `/Users/lelouvincx/Developer/second-brain-logseq`. Other 
 
 Prefer explicit environment configuration, then project-registry resolution, then a clear configuration failure.
 
+Resolved on 24 October 2026: `AMP_LOGSEQ_GRAPH_DIR` still wins; otherwise orbs use the Obsidian-synced copy in `~/notes` through the `syncing-obsidian-notes` skill.
+
 #### “Today” depends on the plugin process timezone
 
 The journal filename is derived from `new Date()` in the runtime process. A remote process or orb can disagree with the user's local date.
 
 The graph or plugin configuration should specify the journal timezone explicitly.
+
+Resolved on 24 October 2026: journal dates use `Asia/Ho_Chi_Minh`, overridable with `AMP_LOGSEQ_TIME_ZONE`.
 
 #### Worker registry cleanup was undefined
 

@@ -34,7 +34,7 @@ repos:
         language: python
         additional_dependencies: [PyYAML==6.0.3]
         pass_filenames: false
-        files: ^(?:amp/(?:docs/(?:experiments|issues|tools)|plugins)/|amp/scripts/(?:logseq-manual-log\.test\.ts|(?:test_validate_plugin_docs|validate-plugin-docs)\.py)$|\.github/workflows/ci\.yml$|\.pre-commit-config\.yaml$)
+        files: ^(?:amp/(?:docs/(?:experiments|issues|tools)|plugins)/|amp/scripts/(?:(?:test_validate_plugin_docs|validate-plugin-docs)\.py)$|\.github/workflows/ci\.yml$|\.pre-commit-config\.yaml$)
 
       - id: validate-amp-artifacts
         name: Validate Amp artifact, issue and experiment docs
@@ -42,7 +42,7 @@ repos:
         language: python
         additional_dependencies: [PyYAML==6.0.3]
         pass_filenames: false
-        files: ^(?:amp/(?:docs/(?:experiments|issues|tools)|plugins)/|amp/scripts/(?:logseq-manual-log\.test\.ts|(?:test_validate_plugin_docs|validate-plugin-docs)\.py)$|\.github/workflows/ci\.yml$|\.pre-commit-config\.yaml$)
+        files: ^(?:amp/(?:docs/(?:experiments|issues|tools)|plugins)/|amp/scripts/(?:(?:test_validate_plugin_docs|validate-plugin-docs)\.py)$|\.github/workflows/ci\.yml$|\.pre-commit-config\.yaml$)
 
       - id: validate-amp-rfcs
         name: Validate Amp RFCs
@@ -172,7 +172,7 @@ repos:
         language: system
         pass_filenames: false
         stages: [pre-push]
-        files: ^(?:amp/(?:mcp-servers/.*\.mjs$|plugins/.*\.ts$|scripts/(?:git-diff-mcp\.test|github-thread-events\.test|logseq-manual-log\.test|test-claude-design-subagent)\.ts$)|scripts/check-plugin-builds$|\.pre-commit-config\.yaml$)
+        files: ^(?:amp/(?:mcp-servers/.*\.mjs$|plugins/.*\.ts$|scripts/(?:git-diff-mcp\.test|github-thread-events\.test|test-claude-design-subagent)\.ts$)|scripts/check-plugin-builds$|\.pre-commit-config\.yaml$)
 
       - id: validate-sdk
         name: Validate SDK dependencies
