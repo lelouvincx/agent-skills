@@ -9,6 +9,7 @@ and this project does not currently use versioned releases.
 
 ### Changed
 
+- Pilot Entire checkpoints for Amp threads in agent-skills: commit the Entire settings and Amp plugin, and install and enable Entire during orb setup. [#281](https://github.com/lelouvincx/agent-skills/pull/281)
 - Moved the `logseq-manual-log` plugin to Chinh's global User Plugins repo so local and orb threads both load it, and removed the agent-skills copy, its test and its doc [#280](https://github.com/lelouvincx/agent-skills/pull/280)
 - Register the Anfra documentation repository and spoken-name aliases in the project registry. [#276](https://github.com/lelouvincx/agent-skills/pull/276)
 - Register the malloy experiment project for evaluating Malloy and Malloy Publisher. [#274](https://github.com/lelouvincx/agent-skills/pull/274)
