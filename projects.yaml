@@ -111,6 +111,19 @@ projects:
       - anfra documentation
     description: Anfra documentation repository.
 
+  anfra-landing:
+    github: holistics/anfra-landing
+    owner: holistics
+    dir: anfra/anfra-landing
+    aliases:
+      - anfra landing
+      - anfra website
+    description: >-
+      Anfra marketing site and clickable product prototype. For orbs, use the
+      Amp-hosted project lelouvincx/anfra-landing
+      (https://ampcode.com/@lelouvincx/anfra-landing); the GitHub application
+      checkout is source/ inside the orb launcher.
+
   malloy:
     github: null
     owner: holistics
