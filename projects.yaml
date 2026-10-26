@@ -111,6 +111,19 @@ projects:
       - anfra documentation
     description: Anfra documentation repository.
 
+  anfra-interaction-patterns:
+    github: holistics/anfra-interaction-patterns
+    owner: holistics
+    dir: anfra/anfra-interaction-patterns
+    aliases:
+      - anfra interaction patterns
+      - anfra interaction gallery
+    description: >-
+      Anfra analytical interaction patterns gallery. For orbs, use the
+      Amp-hosted project lelouvincx/anfra-interaction-patterns
+      (https://ampcode.com/@lelouvincx/anfra-interaction-patterns); the GitHub
+      application checkout is source/ inside the orb launcher.
+
   anfra-landing:
     github: holistics/anfra-landing
     owner: holistics
