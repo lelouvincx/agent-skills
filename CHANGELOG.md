@@ -49,6 +49,7 @@ and this project does not currently use versioned releases.
 
 ### Added
 
+- Register the Anfra interaction patterns gallery with its local checkout, spoken aliases, and Amp-hosted orb launcher. [#289](https://github.com/lelouvincx/agent-skills/pull/289)
 - Add the syncing-obsidian-notes skill so local threads and orbs read and write the second-brain vault through Obsidian Sync. [#279](https://github.com/lelouvincx/agent-skills/pull/279)
 - Add the official free Motion AI Kit skill and hosted documentation MCP server, preserve local MCP allowlists during archive refreshes, and support folded upstream skill descriptions. [#278](https://github.com/lelouvincx/agent-skills/pull/278)
 - Add a private work-repository orb preparation skill with access-route decisions, lifecycle verification, and evidence from the anfra-landing hosted-launcher experiments. [#277](https://github.com/lelouvincx/agent-skills/pull/277)
