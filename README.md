@@ -135,6 +135,7 @@ Local skills are maintained in this repository. Remote skills are fetched and pr
 | [reading-social-posts](skills/reading-social-posts/SKILL.md) | Local | read social posts and inspect all attached media through TikHub |
 | [resolving-projects](skills/resolving-projects/SKILL.md) | Local | resolve spoken project names to paths and GitHub repositories |
 | [search-docs](skills/search-docs/SKILL.md) | Remote | search Holistics documentation |
+| [security-audit](skills/security-audit/SKILL.md) | Remote | review security boundaries and run coverage-led audits with independently verified findings |
 | [show-me](skills/show-me/SKILL.md) | Remote | explain technical topics with concise diagrams, code-shape sketches, and focused HTML artifacts |
 | [slackcli](skills/slackcli/SKILL.md) | Local | read, send, and manage Slack messages from the CLI |
 | [syncing-holistics-external-git](skills/syncing-holistics-external-git/SKILL.md) | Local | bootstrap local sync for a new, empty external Git repository connected to Holistics |

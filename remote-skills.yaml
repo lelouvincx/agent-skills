@@ -197,6 +197,11 @@ skills:
     archive_path: skills/diagram-design
     enabled: true
 
+  - name: security-audit
+    archive: https://codeload.github.com/cloudflare/security-audit-skill/tar.gz/c1c8a8c1471069fb0e188eeaff69b8e8db6564a8
+    archive_path: skills/security-audit
+    enabled: true
+
   - name: herdr
     url: https://raw.githubusercontent.com/herdrdev/herdr/master/skills/herdr/SKILL.md
     enabled: true
