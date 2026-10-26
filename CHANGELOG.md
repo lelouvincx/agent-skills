@@ -9,6 +9,7 @@ and this project does not currently use versioned releases.
 
 ### Changed
 
+- Adopt Cloudflare security-audit from a pinned archive with companion guides, validators and local delegation integration. [#288](https://github.com/lelouvincx/agent-skills/pull/288)
 - Register the local Lookup vocabulary app and its spoken-name alias in the project registry. [#287](https://github.com/lelouvincx/agent-skills/pull/287)
 - Register Anfra landing in the project registry and point orb creation to its canonical Amp-hosted launcher while preserving the GitHub application source. [#286](https://github.com/lelouvincx/agent-skills/pull/286)
 - Let agent-bot-pr commit and push from orbs over HTTPS with the lelouvincx-bot bundle token when the bot SSH key is missing. [#285](https://github.com/lelouvincx/agent-skills/pull/285)
