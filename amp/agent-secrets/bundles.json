@@ -39,6 +39,9 @@
     },
     "smartclass-teacher-api": {
       "executableNames": ["node"]
+    },
+    "elevenlabs-tts": {
+      "executableNames": ["python", "python3"]
     }
   },
   "bundles": {
@@ -138,6 +141,13 @@
       ],
       "compatibleBundles": [],
       "allowedCommandClasses": ["smartclass-teacher-api"]
+    },
+    "elevenlabs": {
+      "audience": "agent",
+      "owner": "holistics/anfra-remotion",
+      "variables": ["ELEVENLABS_API_KEY"],
+      "compatibleBundles": [],
+      "allowedCommandClasses": ["elevenlabs-tts"]
     }
   }
 }
