@@ -128,6 +128,7 @@ class AgentSecretPolicyValidationTests(unittest.TestCase):
                 "smartclass-cohere",
                 "openrouter",
                 "toanthaythanh-teacher",
+                "elevenlabs",
                 "slb-databricks",
                 "slb-snowflake",
                 "braintrust-export",
@@ -164,6 +165,16 @@ class AgentSecretPolicyValidationTests(unittest.TestCase):
                 "allowedCommandClasses": ["smartclass-teacher-api"],
             },
             manifest["bundles"]["toanthaythanh-teacher"],
+        )
+        self.assertEqual(
+            {
+                "audience": "agent",
+                "owner": "holistics/anfra-remotion",
+                "variables": ["ELEVENLABS_API_KEY"],
+                "compatibleBundles": [],
+                "allowedCommandClasses": ["elevenlabs-tts"],
+            },
+            manifest["bundles"]["elevenlabs"],
         )
         self.assertEqual(
             {
