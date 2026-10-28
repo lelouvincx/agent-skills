@@ -55,6 +55,7 @@ AGENTS_REGISTRY_ENV=vps project-resolve prefect --path
 | `anfra-docs` | `holistics` | `~/Developer/anfra/anfra-docs` | `holistics/anfra-docs` |
 | `anfra-interaction-patterns` | `holistics` | `~/Developer/anfra/anfra-interaction-patterns` | `holistics/anfra-interaction-patterns` |
 | `anfra-landing` | `holistics` | `~/Developer/anfra/anfra-landing` | `holistics/anfra-landing` |
+| `anfra-remotion` | `holistics` | `~/Developer/anfra/anfra-remotion` | `holistics/anfra-remotion` |
 | `malloy` | `holistics` | `~/Developer/experiments/malloy` | `null` |
 | `data` | `holistics` | `~/Developer/holistics/data` | `null` |
 | `presales` | `holistics` | `~/Developer/holistics/presales` | `null` |
