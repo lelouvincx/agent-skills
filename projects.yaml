@@ -137,6 +137,20 @@ projects:
       (https://ampcode.com/@lelouvincx/anfra-landing); the GitHub application
       checkout is source/ inside the orb launcher.
 
+  anfra-remotion:
+    github: holistics/anfra-remotion
+    owner: holistics
+    dir: anfra/anfra-remotion
+    aliases:
+      - anfra remotion
+      - anfra video
+      - anfra tutorial video
+    description: >-
+      Remotion toolkit and edit for the Anfra tutorial video. For orbs, use the
+      Amp-hosted project lelouvincx/anfra-remotion
+      (https://ampcode.com/@lelouvincx/anfra-remotion); the GitHub application
+      checkout is source/ inside the orb launcher, on branch wip/anfra-video-1.
+
   malloy:
     github: null
     owner: holistics
