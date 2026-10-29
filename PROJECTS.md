@@ -51,6 +51,7 @@ AGENTS_REGISTRY_ENV=vps project-resolve prefect --path
 | `nvim` | `lelouvincx` | `~/Developer/dotfiles/nvim` | `lelouvincx/dotfiles` |
 | `contribute` | `open-source` | `~/Developer/contribute` | `null` |
 | `anfra` | `holistics` | `~/Developer/anfra` | `null` |
+| `anfra-core` | `holistics` | `~/Developer/anfra/anfra` | `holistics/anfra` |
 | `anfra-demo-data` | `holistics` | `~/Developer/anfra/anfra-demo-data` | `holistics/anfra-demo-data` |
 | `anfra-docs` | `holistics` | `~/Developer/anfra/anfra-docs` | `holistics/anfra-docs` |
 | `anfra-interaction-patterns` | `holistics` | `~/Developer/anfra/anfra-interaction-patterns` | `holistics/anfra-interaction-patterns` |

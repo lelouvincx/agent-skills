@@ -94,6 +94,18 @@ projects:
       - anfra workspace
     description: Parent Anfra workspace containing Anfra-related repositories.
 
+  anfra-core:
+    github: holistics/anfra
+    owner: holistics
+    dir: anfra/anfra
+    aliases:
+      - anfra core
+      - anfra framework
+    description: >-
+      Anfra framework, CLI, server and SDK source. For orbs, use the
+      GitHub-mapped project lelouvincx/anfra-core
+      (https://ampcode.com/@lelouvincx/anfra-core).
+
   anfra-demo-data:
     github: holistics/anfra-demo-data
     owner: holistics
