@@ -9,7 +9,7 @@
 - Before drafting text that Chinh will send to someone else, including Slack messages and emails, load `clear-writing`.
 - Store screenshots, recordings, and other visual artifacts under `.amp/in/artifacts/`.
 - When creating a subdirectory under `.amp/in/artifacts/`, add a `.thread-metadata` file in that subdirectory containing the current Amp thread ID.
-- When Chinh asks to create an Amp runner for a directory path, run `amp-runner install --workdir <path> macbook.<directory-basename>` and verify it is running with `amp-runner status macbook.<directory-basename>`.
+- Enable `--share-network` by default when creating local Amp runners, unless Chinh asks otherwise. For a directory path, run `amp-runner install --workdir <path> macbook.<directory-basename> -- --share-network` and verify it is running with `amp-runner status macbook.<directory-basename>`.
 
 ## Decisions
 
