@@ -9,6 +9,7 @@ and this project does not currently use versioned releases.
 
 ### Changed
 
+- Enable network sharing by default when creating local Amp runners. [#293](https://github.com/lelouvincx/agent-skills/pull/293)
 - Register Anfra core with its nested local checkout and GitHub-mapped Amp project, preserving the existing Anfra workspace. [#292](https://github.com/lelouvincx/agent-skills/pull/292)
 - Register Anfra Remotion in the project registry and point orb creation to its Amp-hosted launcher, whose application checkout tracks wip/anfra-video-1. [#291](https://github.com/lelouvincx/agent-skills/pull/291)
 - Adopt Cloudflare security-audit from a pinned archive with companion guides, validators and local delegation integration. [#288](https://github.com/lelouvincx/agent-skills/pull/288)
