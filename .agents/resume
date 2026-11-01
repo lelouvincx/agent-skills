@@ -8,13 +8,20 @@ export PATH="${HOME:-/home/user}/.local/bin:$PATH"
 
 echo "[agent-skills] resuming repository at $AGENT_SKILLS_DIR"
 
-if [ ! -d "$AGENT_SKILLS_DIR/.git" ]; then
-	rm -rf "$AGENT_SKILLS_DIR"
+if [ ! -e "$AGENT_SKILLS_DIR" ] && [ ! -L "$AGENT_SKILLS_DIR" ]; then
 	git clone "$AGENT_SKILLS_REPO" "$AGENT_SKILLS_DIR"
-elif git -C "$AGENT_SKILLS_DIR" diff --quiet && git -C "$AGENT_SKILLS_DIR" diff --cached --quiet; then
-	git -C "$AGENT_SKILLS_DIR" pull --ff-only
 else
-	echo "[agent-skills] local changes detected; skipping pull"
+	if ! repository_root="$(git -C "$AGENT_SKILLS_DIR" rev-parse --show-toplevel)" ||
+		[ "$(cd "$AGENT_SKILLS_DIR" && pwd -P)" != "$(cd "$repository_root" && pwd -P)" ]; then
+		echo "[agent-skills] refusing to replace non-checkout or non-root: $AGENT_SKILLS_DIR" >&2
+		exit 1
+	fi
+	checkout_status="$(git -C "$AGENT_SKILLS_DIR" status --porcelain --untracked-files=all)"
+	if [ -z "$checkout_status" ]; then
+		git -C "$AGENT_SKILLS_DIR" pull --ff-only
+	else
+		echo "[agent-skills] local changes detected; skipping pull"
+	fi
 fi
 
 echo "[agent-skills] syncing default skills and Amp plugins"

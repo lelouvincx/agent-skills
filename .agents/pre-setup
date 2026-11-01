@@ -6,15 +6,13 @@ set -euo pipefail
 export AGENT_SKILLS_REPO="${AGENT_SKILLS_REPO:-https://github.com/lelouvincx/agent-skills.git}"
 export AGENT_SKILLS_DIR="${AGENT_SKILLS_DIR:-/home/user/workspace/agent-skills}"
 
-if [ ! -e "$AGENT_SKILLS_DIR" ]; then
+if [ ! -e "$AGENT_SKILLS_DIR" ] && [ ! -L "$AGENT_SKILLS_DIR" ]; then
 	git clone "$AGENT_SKILLS_REPO" "$AGENT_SKILLS_DIR"
-elif [ ! -d "$AGENT_SKILLS_DIR/.git" ]; then
-	echo "[agent-skills] refusing to replace non-checkout: $AGENT_SKILLS_DIR" >&2
+elif ! repository_root="$(git -C "$AGENT_SKILLS_DIR" rev-parse --show-toplevel)" ||
+	[ "$(cd "$AGENT_SKILLS_DIR" && pwd -P)" != "$(cd "$repository_root" && pwd -P)" ]; then
+	echo "[agent-skills] refusing to replace non-checkout or non-root: $AGENT_SKILLS_DIR" >&2
 	exit 1
-elif [ -z "$(git -C "$AGENT_SKILLS_DIR" status --porcelain)" ]; then
-	git -C "$AGENT_SKILLS_DIR" pull --ff-only
-else
-	echo "[agent-skills] local changes detected; skipping pull"
 fi
 
+# The canonical setup owns the single refresh and all installer work.
 exec bash "$AGENT_SKILLS_DIR/.agents/setup" "$@"
