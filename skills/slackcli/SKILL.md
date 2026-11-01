@@ -18,6 +18,8 @@ Run requested read-only commands without extra confirmation. Before a side effec
 
 ## Finding Slack content
 
+Look up known people, DMs, and channels in [reference/directory.json](reference/directory.json), scoped to its workspace and account. Use live search for missing, ambiguous, or stale entries.
+
 Prefer targeted search over listing and scanning:
 
 ```bash
