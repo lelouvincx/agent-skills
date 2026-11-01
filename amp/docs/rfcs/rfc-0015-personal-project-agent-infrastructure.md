@@ -7,7 +7,7 @@ file: "rfc-0015-personal-project-agent-infrastructure.md"
 status: "Accepted"
 summary: "Centralize Orb agent infrastructure, project customizations, and personal Amp project configuration."
 created: "2026-11-01"
-updated: "2026-11-01"
+updated: "2026-11-02"
 amp_thread_id:
   T-01a19705-d7e6-724a-81d8-1d17cc98a738: "Define shared infrastructure, record cleanup, and begin phase-one discovery"
 dependency: []
@@ -34,7 +34,9 @@ Apply one configuration policy to selected Amp projects whose primary GitHub rep
 Use agent-skills and smartclass as the combined baseline. Share policy, not repository identity or application setup.
 
 The shared infrastructure must support its own development Orb, consuming projects, an explicit sync command, and project-specific customizations.
-Phase 1 is complete with an explicit backup waiver for 2 settings. Shared checkout safety and the SmartClass consumer lifecycle have shipped; live settings updates have not started.
+The shared runtime, shipping skill and hardened publisher have shipped. All 13 approved Amp projects now have GitHub-connected mappings, the canonical pre-setup script and the common custom Ship prompt.
+The SmartClass readiness repair has merged and deployed with passing release probes. Settings readback limitations and deferred work are recorded below; configuration does not prove bot write access.
+The dotfiles and personal-finance consumer migrations have also shipped. Chinh chose to leave the Logseq migration unpublished.
 
 ## Context
 
@@ -358,8 +360,8 @@ An Amp-hosted project named `prefect` is not a substitute for a direct mapping t
 
 ## Behavior
 
-Phase 1 is complete with the scoped backup waiver below. Shared checkout safety and the SmartClass consumer lifecycle from phase 3 have shipped at Chinh's request; the remaining infrastructure, publishing-skill migration and live settings rollout remain pending.
-Keep the historical inventory above separate from the approved target list and current phase-one results below.
+Phase 1 is complete with the scoped backup waiver below. Shared infrastructure and publishing controls have shipped; both live pilots and the SmartClass readiness repair passed, and the approved settings rollout is applied.
+Keep the historical inventory and phase-one results separate from the current delivery record in Maintenance notes.
 
 ### Phase 1: Approve scope and capture current settings
 
@@ -627,7 +629,7 @@ Treat settings configuration and shipping readiness separately while these grant
 
 ### Development-sync verification: 1 November 2026
 
-The new development sync and checkout selection are implemented locally, not yet published or applied to project settings.
+The new development sync and checkout selection were unpublished during the checks below. They subsequently shipped in PR #301 and were applied to both pilot projects, as recorded below.
 The parent ran all 57 lifecycle fixture groups on macOS. Isolated runtime projection, documentation validation and policy validation passed.
 The existing policy-inventory unit test initially rejected the newly approved repositories; its expected inventory was updated to match the 8 approved additions.
 
@@ -649,7 +651,72 @@ The preliminary test queried Entire Git-tracking metadata in existing checkouts,
 The Linux historical migration suite was not run because its required Git object was absent; the parent's local isolated projection suite passed separately.
 Reports and evidence were retrieved into private `.amp/in/rfc-0015-rollout/`, their hashes verified, and the disposable thread archived.
 
+### Live pilot delivery: 1 November 2026
+
+The shared runtime, canonical shipping skill, approved bot-policy additions and hardened publisher merged in [agent-skills PR #301](https://github.com/lelouvincx/agent-skills/pull/301). PR and main CI passed.
+The dotfiles consumer migration merged in [PR #36](https://github.com/lelouvincx/dotfiles/pull/36), and personal-finance merged in [PR #7](https://github.com/lelouvincx/personal-finance/pull/7). Both default-branch checks passed.
+Dotfiles and finance use pinned canonical hooks in their lifecycle CI. Their offline suites passed 11 and 12 groups, respectively; finance's 15 existing unit tests also passed without processing real financial data.
+
+Chinh authorized isolated worktrees for dotfiles and Logseq to exclude unrelated branch commits. The Logseq sparse worktree triggered the publisher's rejection of `extensions.worktreeconfig` before any commit or push.
+Chinh chose to leave Logseq unpublished rather than expand the publisher's configuration support in this rollout. Preserve its local lifecycle edits; do not bypass the guard.
+
+Stored project settings are applied only to agent-skills and SmartClass at this checkpoint. Both have the canonical pre-setup and custom Ship prompt; SmartClass switched to GitHub-connected mode.
+Separate supported refresh reads confirmed the stored scripts and prompts. Exposed unmanaged fields, existing project IDs and Orb sizes were unchanged.
+Both update requests cleared additional repositories. Chinh independently confirmed the agent-skills list is empty; the CLI still omits this field from readback.
+After requests to add each standard SSH alias, the CLI returned only the HTTPS repository identity. Chinh authorized proceeding on the assumption that Amp combines those identities; this is not a verified normalization claim.
+
+Both new pilot Orbs used warm baselines, not empty-image installations. Real working-source projection, repeated sync, customization application/removal, unrelated runtime preservation and direct resume passed.
+Agent-skills repeated projection preserved a bounded manifest of 189 runtime file/link entries. Source HEAD, status and own edits were restored in both pilots.
+Chinh authorized temporary archive/restore of both test threads. Fresh automatic resume logs then showed shared projection at 16:45:14 UTC for agent-skills and completed SmartClass projection and local seeding at 16:48:29 UTC, before any manual hook invocation.
+This establishes automatic lifecycle re-entry after archive/restore, not independent evidence of the underlying VM suspension. Both threads were restored.
+
+SmartClass's seeded local HTTP and browser-login smoke checks passed. Its unit, Worker and integration suites passed 1,967, 340 and 1,125 tests, respectively; the build passed.
+However, `amp orb services ensure` failed: both API readiness probes returned HTTP 404 through `127.0.0.1`, while localhost and frontend proxies returned HTTP 200.
+The loopback origin is routed to MCP hosting before the Hono health handler. The platform probe-host implementation was not independently inspected in the pilot.
+Chinh requested root-cause investigation and repair before continuing. This failed setup check was not waived by successful application tests; the repair and subsequent rollout are recorded below.
+
+Both pilots retained the existing optional Entire installer failure and remote-overlay scratch files. These were offered as separate follow-ups, not silently repaired or treated as full installation success.
+The global `syncing-obsidian-notes` skill loaded successfully in SmartClass, but notes sync, plugin installation and credential availability remain unverified. Password transport remains explicitly deferred.
+No pilot read notes, resolved credentials, changed production data or deployed production code.
+
+Evidence is retained in the [agent-skills live pilot](https://ampcode.com/threads/T-01a197f5-948c-772c-ba11-2574a7bdb15e) and [SmartClass live pilot](https://ampcode.com/threads/T-01a197f5-b6eb-7609-af86-0e2fe48cc0e4).
+Reports and archives were also retrieved into private `.amp/in/rfc-0015-rollout/`; archive hashes and gzip integrity passed.
+
+### Readiness repair and settings rollout: 2 November 2026
+
+A temporary supervised probe server confirmed that Amp sends readiness requests with `Host: 127.0.0.1:<port>`.
+SmartClass RFC-24 intentionally assigns that origin to MCP and rejects `/api/*` there. The incorrect API health paths in `.amp/services.yaml`, not failed services, caused the readiness failure.
+[SmartClass PR #374](https://github.com/lelouvincx/smartclass/pull/374) changed the 2 API probes to `/.well-known/oauth-protected-resource`, retained frontend `/api/health` probes, and added a regression exercising paths read from the actual YAML through the final Worker.
+The regression failed before the fix and passed afterward. Real `amp orb services ensure` changed from exit 1 with two 404s to exit 0 with all 4 probes returning 200.
+Localhost API health still returns 200; MCP API health returns 404, discovery returns 200, and unauthenticated MCP requests return 401. No host-boundary exception was added.
+
+Chinh explicitly authorized the normal production redeployment rather than a deployment-filter change.
+All final-head PR checks, main Test run 41331468223 and Deploy Worker run 41332355932 passed for merge commit `06bf27102ef0b0b61c97ffcdf9a6ccfc1fcd5b9e`.
+The prescribed release probe passed twice, and both production API version endpoints returned that full revision.
+Local checks passed 1,967 frontend, 340 Worker, 1,126 integration and 56 script tests, plus build and diff checks.
+The parent retrieved the final evidence archive and verified SHA256 `9aaaeca553f17b4c103412e0b6d207cd3935e659b690c367bc840fbe9797c53f` and gzip integrity.
+
+After this gate passed, the remaining 5 existing projects were updated without changing their IDs, names, icons, Orb sizes or exposed unmanaged settings.
+Duty-support and blog switched from mapped to GitHub-connected mode. Logseq settings were updated, but its separately deferred repository migration remains unpublished.
+All 6 approved missing personal mappings were created, their IDs recorded before configuration, and their GitHub integration linked successfully:
+
+| Repository | New Amp project ID |
+| --- | --- |
+| agent-checkpoints | `1c05c7a9-7cb5-4ff7-900e-2ec8c9fc01ff` |
+| holistics-performance-review | `0814601c-174b-40c7-b2c8-3f186ac1ca79` |
+| nvim | `063b744d-7085-4911-9056-95878f4f3c1d` |
+| self-taught-amql | `03c8ba23-b8c0-4a56-b34d-5064eef7ea31` |
+| self-taught-design | `5cb4f75e-66af-4232-8331-da15600ae47c` |
+| self-taught-lsp | `14244f00-9e06-4198-be35-4112a0108d4b` |
+
+New projects retain Amp's default `a1.medium` size. No unrelated project settings or collaborator grants were intentionally changed.
+A separate final read of all 13 targets matched the canonical pre-setup script byte-for-byte, the canonical Ship prompt without its file's trailing newline, GitHub mode, thread-creator author, default-branch policy and empty exposed script/Store fields.
+Matching fields were not rewritten during that comparison. Accepted updates cleared additional repositories for every target, but the supported readback still omits those lists; independent UI confirmation exists only for agent-skills.
+Standard SSH aliases were requested for each target under Chinh's explicit deduplication assumption. HTTPS-only readback does not independently prove SSH alias matching.
+This is settings application and exposed-field verification, not a fresh runtime or publishing test for each of the 11 non-pilot projects.
+Owner-managed bot access grants remain separate from Amp's GitHub integration. Notes/password transport, cold-image installation and independent proof of VM suspension remain outside the verified result.
+
 ## Open questions
 
 - Have the 7 owner-managed GitHub access grants completed, and does the bot's effective access match the approved policy?
-- Do the two settings-driven pilots pass fresh setup, resume and repeated explicit sync before broad application?
+- Can supported readback independently confirm additional-repository lists and SSH alias matching for every target?
