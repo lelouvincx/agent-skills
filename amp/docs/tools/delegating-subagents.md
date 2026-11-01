@@ -61,7 +61,7 @@ safety:
     - "Prefer direct or specialist tools when delegation overhead exceeds the task."
     - "Give every delegated task a bounded brief with scope, constraints, non-goals, success criteria, validation, and a completion contract."
     - "Use Task for bounded work whose result is needed in the current parent turn."
-    - "create_thread may create a child only on the verified live parent runner and in the parent's exact working directory; otherwise ask the user."
+    - "Use the verified live parent runner and exact working directory for child threads, except for an explicit request from another project to ship agent-skills changes in an agent-skills orb."
     - "Choose exactly one create_thread result path: asynchronous reply or blocking wait."
     - "Use available native thread tools for follow-up and user-authorized metadata operations."
     - "Use wait_for_threads and read_thread when the parent must block for and inspect a complete child result."
@@ -140,7 +140,13 @@ Do not use `Task` for simple reads, exact searches, one localized edit, ordinary
 
 Use `create_thread` when the work should continue across turns or needs an addressable thread for later follow-up.
 
-Before `create_thread`:
+If Chinh asks to ship `agent-skills` changes from a thread in another project, use an `agent-skills` orb:
+
+1. Resolve `agent-skills` through the project registry.
+2. Call `create_thread` with `executor: "orb"` and the resolved repository as `project`. Ask the child to ship the requested changes under that repository's instructions.
+3. Transfer any required unpushed changes with the file-transfer tools. The child must receive those changes before shipping; an orb starts from the remote repository.
+
+For all other child threads, before `create_thread`:
 
 1. Obtain the parent thread's runner ID and absolute working directory from thread or runtime context, or from explicit user input. A matching repository or machine is insufficient evidence.
 2. Immediately before creation, call `list_runners`. Confirm that the exact runner ID is live and that it serves the parent's working directory.
