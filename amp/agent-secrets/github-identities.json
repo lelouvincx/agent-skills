@@ -4,11 +4,19 @@
     "lelouvincx-bot": {
       "repositoryAllowlist": [
         "lelouvincx-bot/smartclass",
+        "lelouvincx/agent-checkpoints",
         "lelouvincx/agent-skills",
         "lelouvincx/dotfiles",
+        "lelouvincx/duty-support",
+        "lelouvincx/holistics-performance-review",
+        "lelouvincx/lelouvincx.github.io",
         "lelouvincx/lms-leitner-material",
         "lelouvincx/nvim",
+        "lelouvincx/personal-finance",
         "lelouvincx/second-brain-logseq",
+        "lelouvincx/self-taught-amql",
+        "lelouvincx/self-taught-design",
+        "lelouvincx/self-taught-lsp",
         "lelouvincx/smartclass"
       ]
     }

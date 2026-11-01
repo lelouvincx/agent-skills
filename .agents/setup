@@ -2,7 +2,19 @@
 set -euo pipefail
 
 AGENT_SKILLS_REPO="${AGENT_SKILLS_REPO:-https://github.com/lelouvincx/agent-skills.git}"
-AGENT_SKILLS_DIR="${AGENT_SKILLS_DIR:-/home/user/workspace/agent-skills}"
+# A canonical hook belongs to its working checkout. A copied standalone
+# bootstrap still acquires the fallback unless its caller selects a source.
+if [ -z "${AGENT_SKILLS_DIR:-}" ]; then
+	source_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
+	if [ "$(git -C "$source_dir" rev-parse --show-toplevel 2>/dev/null || true)" = "$source_dir" ] &&
+		[ "$(basename "$(dirname "${BASH_SOURCE[0]}")")" = .agents ] &&
+		[ -x "$source_dir/sync-skills.sh" ]; then
+		AGENT_SKILLS_DIR="$source_dir"
+		AGENT_SKILLS_NO_REFRESH=1
+	else
+		AGENT_SKILLS_DIR=/home/user/workspace/agent-skills
+	fi
+fi
 
 setup_source="$(cat "${BASH_SOURCE[0]}")"
 export PATH="${HOME:-/home/user}/.local/bin:$PATH"
@@ -18,17 +30,22 @@ else
 		exit 1
 	fi
 	checkout_status="$(git -C "$AGENT_SKILLS_DIR" status --porcelain --untracked-files=all)"
-	if [ -z "$checkout_status" ]; then
+	if [ "${AGENT_SKILLS_NO_REFRESH:-0}" = 1 ]; then
+		echo "[agent-skills] source refresh disabled; using working checkout (no pull)"
+	elif [ -z "$checkout_status" ]; then
+		echo "[agent-skills] refreshing clean source with pull --ff-only"
 		git -C "$AGENT_SKILLS_DIR" pull --ff-only
 	else
 		echo "[agent-skills] local changes detected; skipping pull"
 	fi
 fi
 
+echo "[agent-skills] source: $AGENT_SKILLS_DIR revision $(git -C "$AGENT_SKILLS_DIR" rev-parse HEAD)"
+
 # Pulling replaces files, not the setup body already running in this shell.
 if [ "$setup_source" != "$(cat "$AGENT_SKILLS_DIR/.agents/setup")" ]; then
 	echo "[agent-skills] restarting with the current setup"
-	exec env AGENT_SKILLS_REPO="$AGENT_SKILLS_REPO" AGENT_SKILLS_DIR="$AGENT_SKILLS_DIR" \
+	exec env AGENT_SKILLS_REPO="$AGENT_SKILLS_REPO" AGENT_SKILLS_DIR="$AGENT_SKILLS_DIR" AGENT_SKILLS_NO_REFRESH=1 \
 		bash "$AGENT_SKILLS_DIR/.agents/setup" "$@"
 fi
 

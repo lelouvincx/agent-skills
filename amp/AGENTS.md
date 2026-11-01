@@ -4,7 +4,7 @@
 
 ## Working style
 
-- When Chinh's response shows that an explanation did not land, load `clear-writing` and use its technical explanation mode.
+- Load `clear-writing` before answering Chinh. When an explanation did not land, use its technical explanation mode.
 - For plans, separate the actions for the agent and Chinh, then state the expected outcome.
 - Before drafting text that Chinh will send to someone else, including Slack messages and emails, load `clear-writing`.
 - Start every Slack message you send on Chinh's behalf, including DMs, with `[AI] ` so the recipient knows an agent wrote it. This does not apply to text Chinh copies and sends himself.
@@ -42,6 +42,7 @@ This section is Chinh's standing request to ask decision questions with `ask_use
 - Before reading or writing Notion content, read `{AMP_CONFIG_DIR:~/.config/amp}/conventions/notion.md`.
 - Before changing or operating Logseq report automation, its service-account authentication, or its bot repository allowlist, read `{AMP_CONFIG_DIR:~/.config/amp}/conventions/logseq-report-automation.md`.
 - Before bot-owned repository maintenance such as bot commits, pushes, pull requests, changelog updates or check polling, read `{AMP_CONFIG_DIR:~/.config/amp}/conventions/bot-repository-maintenance.md`.
+- For authorized personal-repository shipping, load `shipping-personal-projects`; preserve repository-specific release gates.
 
 ## Secrets and local env files
 

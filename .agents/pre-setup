@@ -4,9 +4,34 @@ set -euo pipefail
 # Publish this dispatcher as an Amp project's pre-setup script. Keep installation
 # logic in the canonical checkout rather than copying it into project settings.
 export AGENT_SKILLS_REPO="${AGENT_SKILLS_REPO:-https://github.com/lelouvincx/agent-skills.git}"
-export AGENT_SKILLS_DIR="${AGENT_SKILLS_DIR:-/home/user/workspace/agent-skills}"
+if [ -n "${AGENT_SKILLS_DIR:-}" ]; then
+	selection='explicit override'
+else
+	current_root="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+	current_remote="$(git remote get-url origin 2>/dev/null || true)"
+	if [ -n "$current_root" ] &&
+		{ [ "${current_remote%.git}" = "${AGENT_SKILLS_REPO%.git}" ] ||
+			[ "${current_remote%.git}" = git@github.com:lelouvincx/agent-skills ]; }; then
+		AGENT_SKILLS_DIR="$current_root"
+		export AGENT_SKILLS_NO_REFRESH=1
+		selection='primary working checkout; no refresh'
+	elif [ -e /home/user/workspace/repos/agent-skills ] || [ -L /home/user/workspace/repos/agent-skills ]; then
+		AGENT_SKILLS_DIR=/home/user/workspace/repos/agent-skills
+		selection='existing additional checkout'
+	elif [ -n "$current_root" ] &&
+		{ [ -e "$(dirname "$current_root")/agent-skills" ] || [ -L "$(dirname "$current_root")/agent-skills" ]; }; then
+		AGENT_SKILLS_DIR="$(dirname "$current_root")/agent-skills"
+		selection='existing sibling checkout'
+	else
+		AGENT_SKILLS_DIR=/home/user/workspace/agent-skills
+		selection='fallback checkout'
+	fi
+fi
+export AGENT_SKILLS_DIR
+echo "[agent-skills] selected $AGENT_SKILLS_DIR ($selection)"
 
 if [ ! -e "$AGENT_SKILLS_DIR" ] && [ ! -L "$AGENT_SKILLS_DIR" ]; then
+	echo "[agent-skills] cloning missing source"
 	git clone "$AGENT_SKILLS_REPO" "$AGENT_SKILLS_DIR"
 elif ! repository_root="$(git -C "$AGENT_SKILLS_DIR" rev-parse --show-toplevel)" ||
 	[ "$(cd "$AGENT_SKILLS_DIR" && pwd -P)" != "$(cd "$repository_root" && pwd -P)" ]; then
@@ -14,5 +39,5 @@ elif ! repository_root="$(git -C "$AGENT_SKILLS_DIR" rev-parse --show-toplevel)"
 	exit 1
 fi
 
-# The canonical setup owns the single refresh and all installer work.
+# The canonical setup owns refresh policy and all installer work.
 exec bash "$AGENT_SKILLS_DIR/.agents/setup" "$@"

@@ -28,6 +28,7 @@ All active documents use `amp-artifact/v2`, which supports skills, local CLIs, a
 ### Skills
 
 - [Delegating Subagents](./delegating-subagents.md)
+- [Shipping personal projects](./shipping-personal-projects.md)
 
 ### Local CLIs
 

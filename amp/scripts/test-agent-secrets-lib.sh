@@ -33,6 +33,24 @@ AGENT_MAINTENANCE_PROTECTED_PATTERNS=("notes/Generated -*")
 # shellcheck source=/dev/null
 source "$LIB"
 
+# Reproduce GNU stat emitting filesystem information before rejecting the
+# BSD format. Failed-probe output must never contaminate ownership or mode.
+(
+	stat() {
+		if [[ "$1" == -f ]]; then
+			printf 'filesystem information from a failed probe\n'
+			return 1
+		fi
+		case "$2" in
+		'%u') id -u ;;
+		'%a') printf '600\n' ;;
+		*) return 2 ;;
+		esac
+	}
+	[[ "$(agent_stat_owner "$TMP_DIR")" == "$(id -u)" ]]
+	[[ "$(agent_stat_mode "$TMP_DIR")" == 600 ]]
+)
+
 agent_run_preflight
 agent_run_publisher doctor --repo test/repository
 agent_setup claude
@@ -58,9 +76,13 @@ mkdir "$SNAPSHOT_REPO"
 grep -Eq '^[[:xdigit:]]{64}[[:space:]]+\-\.png$' "$TMP_DIR/snapshot.manifest"
 grep -Eq '^[[:xdigit:]]{64}[[:space:]]+\-\-sample\.jpg$' "$TMP_DIR/snapshot.manifest"
 
-EXPECTED_REPOSITORIES=$'lelouvincx-bot/smartclass\nlelouvincx/agent-skills\nlelouvincx/dotfiles\nlelouvincx/lms-leitner-material\nlelouvincx/nvim\nlelouvincx/second-brain-logseq\nlelouvincx/smartclass'
 AGENT_BOT_GITHUB_LOGIN=lelouvincx-bot
-[[ "$(agent_bot_repository_allowlist)" == "$EXPECTED_REPOSITORIES" ]]
+agent_bot_repository_allowlist | grep -Fxq lelouvincx/agent-skills
+VALID_POLICY_DIR="$TMP_DIR/valid-policy"
+mkdir "$VALID_POLICY_DIR"
+cp "$LIB" "$VALID_POLICY_DIR/lib-agent.sh"
+printf '%s\n' '{"version":1,"identities":{"lelouvincx-bot":{"repositoryAllowlist":["fixture/first","fixture/second"]}}}' >"$VALID_POLICY_DIR/github-identities.json"
+[[ "$(bash -c 'AGENT_BOT_GITHUB_LOGIN=lelouvincx-bot; source "$1"; agent_bot_repository_allowlist' _ "$VALID_POLICY_DIR/lib-agent.sh")" == $'fixture/first\nfixture/second' ]]
 
 MISSING_POLICY_DIR="$TMP_DIR/missing-policy"
 mkdir "$MISSING_POLICY_DIR"
@@ -113,26 +135,7 @@ MD
 	[[ "$(grep -Fc 'Test bot PR helper' CHANGELOG.md)" == 1 ]]
 )
 
-# Without the bot SSH key (orbs), commit and push use HTTPS with an unsigned bot commit.
-git init -q --bare "$TMP_DIR/https-remote.git"
-(
-	cd "$BOT_PR_REPO"
-	git remote set-url origin https://github.com/lelouvincx/smartclass
-	git config "url.file://$TMP_DIR/https-remote.git.insteadOf" https://github.com/lelouvincx/smartclass.git
-	export AGENT_SKILLS_ROOT="$ROOT" PATH="$TMP_DIR:$PATH" AGENT_BOT_SSH_KEY="$TMP_DIR/missing-key"
-	git checkout -q -b https-test
-	echo one >approved.txt
-	echo two >unapproved.txt
-	git add unapproved.txt
-	if ./bin/agent-bot-pr commit -m 'test: https' -- approved.txt 2>/dev/null; then
-		echo "HTTPS commit accepted an unapproved staged file" >&2
-		exit 1
-	fi
-	git reset -q unapproved.txt
-	./bin/agent-bot-pr commit -m 'test: https' -- approved.txt CHANGELOG.md
-	[[ "$(git log -1 --format='%an <%ae> %G?')" == 'lelouvincx-bot <bot@lelouvincx.com> N' ]]
-	./bin/agent-bot-pr push 2>/dev/null
-	[[ "$(git -C "$TMP_DIR/https-remote.git" rev-parse https-test)" == "$(git rev-parse HEAD)" ]]
-)
+# The transport test must not rely on a URL rewrite the hardened helper rejects.
+bash "$ROOT/amp/scripts/test-agent-bot-pr.sh"
 
 echo "Shared agent library contract passed"
