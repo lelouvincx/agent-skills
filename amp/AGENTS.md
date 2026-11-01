@@ -7,7 +7,7 @@
 - When Chinh's response shows that an explanation did not land, load `clear-writing` and use its technical explanation mode.
 - For plans, separate the actions for the agent and Chinh, then state the expected outcome.
 - Before drafting text that Chinh will send to someone else, including Slack messages and emails, load `clear-writing`.
-- Start every message you send to another person on Chinh's behalf, including Slack messages, Slack DMs and emails, with `[AI] ` so the recipient knows an agent wrote it. This does not apply to text Chinh copies and sends himself, or to pull request descriptions and commit messages.
+- Start every Slack message you send on Chinh's behalf, including DMs, with `[AI] ` so the recipient knows an agent wrote it. This does not apply to text Chinh copies and sends himself.
 - Store screenshots, recordings, and other visual artifacts under `.amp/in/artifacts/`.
 - When creating a subdirectory under `.amp/in/artifacts/`, add a `.thread-metadata` file in that subdirectory containing the current Amp thread ID.
 - Enable `--share-network` by default when creating local Amp runners, unless Chinh asks otherwise. For a directory path, run `amp-runner install --workdir <path> macbook.<directory-basename> -- --share-network` and verify it is running with `amp-runner status macbook.<directory-basename>`.
@@ -58,6 +58,7 @@ This section is Chinh's standing request to ask decision questions with `ask_use
 - Use the current working tree by default. Create a Git worktree only when Chinh explicitly asks for one. When requested, create it under `<repository-root>/.amp/worktrees/`, where `<repository-root>` is the output of `git rev-parse --show-toplevel`, and verify that `git worktree list --porcelain` reports it there before use.
 - Before opening a pull request, find and use the repository's pull request template.
 - For GitHub authentication:
+  - In orbs, Chinh authorizes using an already-injected GitHub token when the default connected account lacks repository write access, without asking again. Match the token identity to the repository's authentication rules and use its approved publisher. Keep tokens runtime-only, out of output, files and command arguments. This authorizes authentication, not unrequested writes or changes to publisher policy; obey any later explicit restriction.
   - Use `GH_TOKEN_BOT` when the user explicitly requests the bot token.
   - Use `GH_TOKEN_WORK` when the user explicitly requests the work token.
   - Otherwise, use the `chinh-dm-holistics` GitHub profile for Holistics repositories and the `lelouvincx` GitHub profile for personal repositories.
