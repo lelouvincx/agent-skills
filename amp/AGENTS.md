@@ -7,7 +7,7 @@
 - When Chinh's response shows that an explanation did not land, load `clear-writing` and use its technical explanation mode.
 - For plans, separate the actions for the agent and Chinh, then state the expected outcome.
 - Before drafting text that Chinh will send to someone else, including Slack messages and emails, load `clear-writing`.
-- Start every message you send to another person on Chinh's behalf, including Slack messages, Slack DMs and emails, with `[AI] ` so the recipient knows an agent wrote it. This does not apply to text Chinh copies and sends himself, or to pull request descriptions and commit messages.
+- Start every Slack message you send on Chinh's behalf, including DMs, with `[AI] ` so the recipient knows an agent wrote it. This does not apply to text Chinh copies and sends himself.
 - Store screenshots, recordings, and other visual artifacts under `.amp/in/artifacts/`.
 - When creating a subdirectory under `.amp/in/artifacts/`, add a `.thread-metadata` file in that subdirectory containing the current Amp thread ID.
 - Enable `--share-network` by default when creating local Amp runners, unless Chinh asks otherwise. For a directory path, run `amp-runner install --workdir <path> macbook.<directory-basename> -- --share-network` and verify it is running with `amp-runner status macbook.<directory-basename>`.
