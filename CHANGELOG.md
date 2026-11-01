@@ -9,6 +9,7 @@ and this project does not currently use versioned releases.
 
 ### Changed
 
+- Explicitly deactivate the unselected ChatGPT subscription so quota-based selection works when Amp keeps multiple ChatGPT connections active. [#299](https://github.com/lelouvincx/agent-skills/pull/299)
 - Create an agent-skills orb when asked to ship agent-skills changes from another project, transferring unpushed changes before shipping. [#298](https://github.com/lelouvincx/agent-skills/pull/298)
 - Separate Amp-managed orb browser workflows from Mac wrapper profiles and authorize already-injected runtime GitHub tokens while preserving approved publisher restrictions. [#297](https://github.com/lelouvincx/agent-skills/pull/297)
 - Limit the [AI] prefix rule to Slack messages, including DMs. [#296](https://github.com/lelouvincx/agent-skills/pull/296)
