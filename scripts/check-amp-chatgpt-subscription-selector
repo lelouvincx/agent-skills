@@ -20,7 +20,7 @@ show)
 		fail) exit 8 ;;
 	 esac
 	active=false
-	[ -f "$TEST_ACTIVE" ] && [ "$(cat "$TEST_ACTIVE")" = "$id" ] && active=true
+	[ -f "$TEST_ACTIVE" ] && grep -Fxq "$id" "$TEST_ACTIVE" && active=true
 	name="$id-name"
 	printf '{\n  "id": "%s",\n  "name": "%s",\n  "type": "model_provider_openai_chatgpt",\n  "active": %s\n}\n' "$id" "$name" "$active"
 	;;
@@ -40,8 +40,16 @@ test)
 	;;
 activate)
 	printf 'activate %s\n' "$4" >> "$TEST_CALLS"
-	printf '%s\n' "$4" > "$TEST_ACTIVE"
+	[ "${TEST_ACTIVATE_FAIL:-0}" = 0 ] || exit 8
+	grep -Fxq "$4" "$TEST_ACTIVE" || printf '%s\n' "$4" >> "$TEST_ACTIVE"
 	printf '%s\n' "$4" >> "$TEST_ACTIVATIONS"
+	;;
+deactivate)
+	printf 'deactivate %s\n' "$4" >> "$TEST_CALLS"
+	[ "$5" = --yes ] || exit 8
+	[ "${TEST_DEACTIVATE_FAIL:-0}" = 0 ] || exit 8
+	grep -Fxv "$4" "$TEST_ACTIVE" > "$TEST_ACTIVE.tmp" || true
+	mv "$TEST_ACTIVE.tmp" "$TEST_ACTIVE"
 	;;
 *) exit 8 ;;
 esac
@@ -393,6 +401,31 @@ grep -Fxq 'THRESHOLD=40' "$tmp/state/config"
 [ ! -f "$tmp/loaded" ] && [ -f "$tmp/state/paused" ]
 run_tool resume >/dev/null
 [ -f "$tmp/loaded" ] && [ ! -f "$tmp/state/paused" ]
+
+# Both-active recovery, switchback, and failures use Amp's independent activation semantics.
+printf '%s\n' "$primary" "$fallback" > "$tmp/active"
+TEST_QUOTA="$threshold_quota" run_tool run >/dev/null
+[ "$(cat "$tmp/active")" = "$fallback" ]
+grep -Fxq 'result=ok' "$tmp/state/last-run"
+calls_before="$(wc -l < "$tmp/calls" | tr -d ' ')"
+TEST_QUOTA="$threshold_quota" run_tool run >/dev/null
+if tail -n +"$((calls_before + 1))" "$tmp/calls" | grep -Eq '^(activate|deactivate) '; then exit 1; fi
+TEST_QUOTA="$valid_quota" run_tool run >/dev/null
+[ "$(cat "$tmp/active")" = "$primary" ]
+
+calls_before="$(wc -l < "$tmp/calls" | tr -d ' ')"
+if TEST_ACTIVATE_FAIL=1 TEST_QUOTA="$threshold_quota" run_tool run >/dev/null; then exit 1; fi
+[ "$(cat "$tmp/active")" = "$primary" ]
+grep -Fxq 'detail=activation-failed' "$tmp/state/last-run"
+if tail -n +"$((calls_before + 1))" "$tmp/calls" | grep -q '^deactivate '; then exit 1; fi
+
+if TEST_DEACTIVATE_FAIL=1 TEST_QUOTA="$threshold_quota" run_tool run >/dev/null; then exit 1; fi
+grep -Fxq "$primary" "$tmp/active"
+grep -Fxq "$fallback" "$tmp/active"
+grep -Fxq 'result=failed' "$tmp/state/last-run"
+grep -Fxq 'detail=deactivation-failed' "$tmp/state/last-run"
+TEST_QUOTA="$threshold_quota" run_tool run >/dev/null
+[ "$(cat "$tmp/active")" = "$fallback" ]
 run_tool uninstall >/dev/null
 
 printf '%s\n' 'Amp ChatGPT subscription selector contracts passed.'
