@@ -424,8 +424,8 @@ command_runs() {
 
 command_jobs() {
 	[[ $# == 2 && "$1" == --run && "$2" =~ ^[0-9]+$ ]] || fail 'jobs requires --run NUMBER'
-	bot_gh api --paginate --slurp "repos/$AGENT_GITHUB_REPOSITORY/actions/runs/$2/jobs?per_page=100" \
-		--jq '[.[].jobs[] | {id, name, status, conclusion, html_url, steps: [.steps[] | {name, number, status, conclusion}]}]'
+	bot_gh api --paginate --slurp "repos/$AGENT_GITHUB_REPOSITORY/actions/runs/$2/jobs?per_page=100" |
+		jq '[.[].jobs[] | {id, name, status, conclusion, html_url, steps: [.steps[] | {name, number, status, conclusion}]}]'
 }
 
 command_merge() {

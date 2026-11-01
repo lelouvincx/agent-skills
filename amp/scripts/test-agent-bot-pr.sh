@@ -57,6 +57,10 @@ while [[ $# -gt 0 ]]; do
     *) endpoint="$1"; shift ;;
     esac
 done
+if "$slurp" && [[ -n "$query" ]]; then
+    echo 'gh does not support --slurp with --jq' >&2
+    exit 1
+fi
 sha=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 case "$endpoint" in
 user) data="{\"login\":\"${TEST_LOGIN:-lelouvincx-bot}\"}" ;;
@@ -103,7 +107,11 @@ repos/fixture/project/pulls)
     if [[ "$method" == POST ]]; then data='{"number":7}'; else data='[]'; fi ;;
 */requested_reviewers|*/assignees) data='{}' ;;
 */actions/runs) data='{"total_count":0,"workflow_runs":[]}' ;;
-*/actions/runs/1/jobs*) data='{"jobs":[]}' ;;
+*/actions/runs/1/jobs*)
+    data='{"jobs":[{"id":1,"name":"first","status":"completed","conclusion":"success","steps":[]}]}'
+    if "$paginate"; then
+        data="$data"$'\n''{"jobs":[{"id":2,"name":"second","status":"completed","conclusion":"failure","steps":[]}]}'
+    fi ;;
 *) echo "Unexpected mocked endpoint: $endpoint" >&2; exit 1 ;;
 esac
 if "$slurp"; then data=$(printf '%s\n' "$data" | jq -s .); fi
@@ -192,6 +200,9 @@ expect_failure "$BOT_PR" repo --anything
 expect_success "$BOT_PR" pr --pr 7
 expect_success "$BOT_PR" runs
 expect_success "$BOT_PR" jobs --run 1
+jobs_result=$(cat "$TMP_DIR/output")
+expect_success test "$(printf '%s' "$jobs_result" | jq -r 'length')" = 2
+expect_success test "$(printf '%s' "$jobs_result" | jq -r '.[1].conclusion')" = failure
 expect_success "$BOT_PR" repo
 expect_success "$BOT_PR" open --title 'test: fixture' --body-file body.md
 expect_success grep -q 'base=master' "$TEST_LOG"

@@ -71,11 +71,23 @@ agent_run_publisher() {
 }
 
 agent_stat_mode() {
-	stat -f '%Lp' "$1" 2>/dev/null || stat -c '%a' "$1" 2>/dev/null
+	local value
+	if value=$(stat -f '%Lp' "$1" 2>/dev/null); then
+		printf '%s\n' "$value"
+	else
+		stat -c '%a' "$1" 2>/dev/null
+	fi
 }
 
 agent_stat_owner() {
-	stat -f '%u' "$1" 2>/dev/null || stat -c '%u' "$1" 2>/dev/null
+	local value
+	# GNU stat -f can print filesystem data before failing on the BSD format.
+	# Only emit a successful invocation, never concatenate both dialects.
+	if value=$(stat -f '%u' "$1" 2>/dev/null); then
+		printf '%s\n' "$value"
+	else
+		stat -c '%u' "$1" 2>/dev/null
+	fi
 }
 
 

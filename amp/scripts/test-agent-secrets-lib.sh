@@ -33,6 +33,24 @@ AGENT_MAINTENANCE_PROTECTED_PATTERNS=("notes/Generated -*")
 # shellcheck source=/dev/null
 source "$LIB"
 
+# Reproduce GNU stat emitting filesystem information before rejecting the
+# BSD format. Failed-probe output must never contaminate ownership or mode.
+(
+	stat() {
+		if [[ "$1" == -f ]]; then
+			printf 'filesystem information from a failed probe\n'
+			return 1
+		fi
+		case "$2" in
+		'%u') id -u ;;
+		'%a') printf '600\n' ;;
+		*) return 2 ;;
+		esac
+	}
+	[[ "$(agent_stat_owner "$TMP_DIR")" == "$(id -u)" ]]
+	[[ "$(agent_stat_mode "$TMP_DIR")" == 600 ]]
+)
+
 agent_run_preflight
 agent_run_publisher doctor --repo test/repository
 agent_setup claude
