@@ -122,7 +122,9 @@ The selector does not read local Codex CLI authentication and does not require a
 
 The command runs `amp config model-providers test` for the preferred connection. This sends a small inference request and returns current quota headers. Amp can exit with an error when the subscription has reached its limit. The selector still uses the response when it contains both header pairs and at least one supported active window.
 
-The command calculates remaining quota as `100 - used_percent`. It checks the selected connection with `amp config model-providers show`. It runs `amp config model-providers activate` only when a change is needed.
+The command calculates remaining quota as `100 - used_percent`. It checks both configured connections with `amp config model-providers show`. It activates the selected connection if needed, then explicitly deactivates the other connection with `amp config model-providers deactivate --yes`. It does not rely on activation deactivating another ChatGPT subscription: Amp can keep both active and route through the one with higher priority. Provider priorities are unchanged.
+
+Activation happens first so an activation failure does not disable the current subscription. If deactivation fails, the check records a failure and warns that routing may still use the other connection. A later check retries deactivation even when the selected connection is already active.
 
 A kernel-managed file lock prevents checks, installation, configuration, pause, resume and removal from overlapping. A response with a missing window header pair, no supported active window, invalid percentage or invalid provider state leaves the current subscription active and records a failed result.
 

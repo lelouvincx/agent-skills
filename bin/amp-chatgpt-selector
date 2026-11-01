@@ -282,7 +282,10 @@ format_detail() {
 		invalid-quota-percentage) printf 'preferred subscription returned an invalid quota percentage\n' ;;
 		selected-provider-unavailable) printf 'could not inspect the selected subscription\n' ;;
 		invalid-selected-provider-state) printf 'selected subscription returned an invalid active state\n' ;;
+		unselected-provider-unavailable) printf 'could not inspect the unselected subscription\n' ;;
+		invalid-unselected-provider-state) printf 'unselected subscription returned an invalid active state\n' ;;
 		activation-failed) printf 'could not activate the selected subscription\n' ;;
+		deactivation-failed) printf 'selected subscription is active, but could not deactivate the other subscription; routing may still use it\n' ;;
 		never-run) printf 'selector has not run yet\n' ;;
 		*) printf '%s\n' "$1" ;;
 	esac
@@ -301,7 +304,7 @@ run_selector() {
 		fi
 		fail 'selector is paused; run resume first'
 	fi
-	local output weekly_used weekly_remaining fallback_weekly_remaining selected detail show state test_status=0
+	local output weekly_used weekly_remaining fallback_weekly_remaining selected unselected detail show state other_state test_status=0
 	output="$("$amp_command" config model-providers test "$preferred" 9>&- 2>&1)" || test_status=$?
 	if ! weekly_used="$(printf '%s\n' "$output" | quota_usage)"; then
 		if [ "$test_status" -eq 0 ]; then detail=quota-windows-missing; else detail=provider-test-failed; fi
@@ -316,9 +319,11 @@ run_selector() {
 	fi
 	weekly_remaining="$(format_remaining "$weekly_used")"
 	selected="$preferred"
+	unselected="$fallback"
 	detail=preferred-has-capacity
 	if at_or_below_threshold "$weekly_used"; then
 		selected="$fallback"
+		unselected="$preferred"
 		detail=preferred-at-threshold
 	fi
 	if ! show="$("$amp_command" config model-providers show "$selected" 9>&- 2>&1)"; then
@@ -331,6 +336,16 @@ run_selector() {
 		log 'selected provider returned an invalid active state; kept the current subscription'
 		return 1
 	fi
+	if ! show="$("$amp_command" config model-providers show "$unselected" 9>&- 2>&1)"; then
+		write_result failed unchanged "$weekly_remaining" unknown unselected-provider-unavailable
+		log 'could not inspect the unselected provider; kept the current subscriptions'
+		return 1
+	fi
+	if ! other_state="$(printf '%s\n' "$show" | active_state)"; then
+		write_result failed unchanged "$weekly_remaining" unknown invalid-unselected-provider-state
+		log 'unselected provider returned an invalid active state; kept the current subscriptions'
+		return 1
+	fi
 	if [ "$state" = false ]; then
 		if ! "$amp_command" config model-providers activate "$selected" 9>&- >/dev/null; then
 			write_result failed unchanged "$weekly_remaining" unknown activation-failed
@@ -338,6 +353,13 @@ run_selector() {
 			return 1
 		fi
 		detail="$detail-activated"
+	fi
+	if [ "$other_state" = true ]; then
+		if ! "$amp_command" config model-providers deactivate "$unselected" --yes 9>&- >/dev/null; then
+			write_result failed "$selected" "$weekly_remaining" unknown deactivation-failed
+			log 'selected provider is active, but could not deactivate the other provider; routing may still use it'
+			return 1
+		fi
 	fi
 	fallback_weekly_remaining="$(weekly_remaining_for_connection "$fallback")"
 	write_result ok "$selected" "$weekly_remaining" "$fallback_weekly_remaining" "$detail"
