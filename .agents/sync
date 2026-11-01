@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Explicit development projection never acquires or refreshes source. An
+# override selects an existing checkout, not a destination to clone into.
+source_dir="${AGENT_SKILLS_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)}"
+if ! repository_root="$(git -C "$source_dir" rev-parse --show-toplevel)" ||
+	[ "$(cd "$source_dir" && pwd -P)" != "$(cd "$repository_root" && pwd -P)" ]; then
+	echo "[agent-skills] refusing non-checkout or non-root source: $source_dir" >&2
+	exit 1
+fi
+echo "[agent-skills] source: $source_dir revision $(git -C "$source_dir" rev-parse HEAD)"
+echo "[agent-skills] source refresh disabled; projecting working files (no clone/pull/reset)"
+exec "$source_dir/sync-skills.sh" "$@"

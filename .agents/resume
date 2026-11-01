@@ -2,7 +2,10 @@
 set -euo pipefail
 
 AGENT_SKILLS_REPO="${AGENT_SKILLS_REPO:-https://github.com/lelouvincx/agent-skills.git}"
-AGENT_SKILLS_DIR="${AGENT_SKILLS_DIR:-/home/user/workspace/agent-skills}"
+if [ -z "${AGENT_SKILLS_DIR:-}" ]; then
+	AGENT_SKILLS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
+	AGENT_SKILLS_NO_REFRESH=1
+fi
 
 export PATH="${HOME:-/home/user}/.local/bin:$PATH"
 
@@ -17,12 +20,16 @@ else
 		exit 1
 	fi
 	checkout_status="$(git -C "$AGENT_SKILLS_DIR" status --porcelain --untracked-files=all)"
-	if [ -z "$checkout_status" ]; then
+	if [ "${AGENT_SKILLS_NO_REFRESH:-0}" = 1 ]; then
+		echo "[agent-skills] source refresh disabled; using working checkout (no pull)"
+	elif [ -z "$checkout_status" ]; then
+		echo "[agent-skills] refreshing clean source with pull --ff-only"
 		git -C "$AGENT_SKILLS_DIR" pull --ff-only
 	else
 		echo "[agent-skills] local changes detected; skipping pull"
 	fi
 fi
 
+echo "[agent-skills] source: $AGENT_SKILLS_DIR revision $(git -C "$AGENT_SKILLS_DIR" rev-parse HEAD)"
 echo "[agent-skills] syncing default skills and Amp plugins"
 "$AGENT_SKILLS_DIR/sync-skills.sh"

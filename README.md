@@ -21,6 +21,10 @@ This copies the runtime files into `~/.config/amp` and fetches remote skills.
 It symlinks every skill into `~/.agents/skills` and `~/.claude/skills`. The latter makes the skills available to Claude Desktop local Code sessions and the Claude Code CLI. Claude Desktop Cowork and cloud sessions use skills synced through the claude.ai **Customize** settings instead of local filesystem skills.
 It also symlinks scripts from `bin/` into `~/.local/bin`, so they can be used from any project when `~/.local/bin` is on `PATH`.
 
+In an agent-skills development Orb, run `.agents/sync` to project the current working checkout. It never clones, pulls or resets source. Pass `--remote` only to refresh remote skill payloads as well.
+Setup and resume use their own working checkout without pulling when no source override is supplied. Consuming projects explicitly select infrastructure source; their clean checkouts refresh with `pull --ff-only`, while dirty source is projected without a pull.
+Keep consuming-project customizations after the shared baseline, as SmartClass does in `.agents/project`. Do not put application installation or database work in an explicit runtime sync.
+
 ## Use the project registry
 
 `projects.yaml` maps short project names to local paths and GitHub repositories.
@@ -136,6 +140,7 @@ Local skills are maintained in this repository. Remote skills are fetched and pr
 | [resolving-projects](skills/resolving-projects/SKILL.md) | Local | resolve spoken project names to paths and GitHub repositories |
 | [search-docs](skills/search-docs/SKILL.md) | Remote | search Holistics documentation |
 | [security-audit](skills/security-audit/SKILL.md) | Remote | review security boundaries and run coverage-led audits with independently verified findings |
+| [shipping-personal-projects](skills/shipping-personal-projects/SKILL.md) | Local | ship approved personal projects through the bot publisher and repository release gates |
 | [show-me](skills/show-me/SKILL.md) | Remote | explain technical topics with concise diagrams, code-shape sketches, and focused HTML artifacts |
 | [slackcli](skills/slackcli/SKILL.md) | Local | read, send, and manage Slack messages from the CLI |
 | [syncing-holistics-external-git](skills/syncing-holistics-external-git/SKILL.md) | Local | bootstrap local sync for a new, empty external Git repository connected to Holistics |
@@ -224,6 +229,8 @@ Run the relevant repository command directly:
 | Validate Amp RFCs | `python3 amp/scripts/validate-rfcs.py` |
 | Test the agent secret resolver | `uvx --with jsonschema==4.25.1 python -m unittest amp/scripts/test_validate_agent_secrets.py amp/scripts/test_agent_secrets.py amp/scripts/test_agent_secrets_good_outcomes.py` |
 | Test shared agent helper contracts | `amp/scripts/test-agent-secrets-lib.sh` |
+| Test bot publishing controls | `bash amp/scripts/test-agent-bot-pr.sh` |
+| Test shared Orb lifecycle and development sync | `bash scripts/test-orb-setup.sh` |
 | Validate agent secret policy | `uvx --with jsonschema==4.25.1 python amp/scripts/validate-agent-secrets.py` |
 | Test the agent-browser wrapper without Chrome | `python3 -m unittest scripts/test_agent_browser_wrapper.py` |
 | Test legacy agent-browser config migration | `python3 -m unittest amp/scripts/test_migrate_agent_browser_config.py` |

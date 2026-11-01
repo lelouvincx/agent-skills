@@ -9,7 +9,7 @@
 - Add a `CHANGELOG.md` entry for every pull request. Wait until the pull request is open, then add the entry with its number and link in a separate commit.
 - Check `CHANGELOG.md` before searching Git or pull-request history for a historical change.
 - "Open bot PR": open it in the current worktree, then watch it until it merges.
-- "Ship": open the bot PR, then merge it with `agent-bot-pr merge --pr <number>` once every check passes. No approval is needed.
+- "Ship": load `shipping-personal-projects`; merge through `agent-bot-pr` after checks and repository gates pass. No additional approval is needed.
 - Clean up after the merge once the PR checks and the `main` CI run pass and no work remains outside the PR: sync, return to the previous branch, prune the worktree, run `./sync-skills.sh`, reload Amp plugins, remove this thread's `.amp/in/` files, stop this thread's browser and processes, clear its schedule, and archive it. If more requested work remains, continue from `origin/main` and archive after the last task.
 
 ## Source and projection

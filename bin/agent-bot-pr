@@ -12,12 +12,16 @@ Original intention:
   updates and check polling so agents do not rebuild that path by hand.
 
 Usage:
-  agent-bot-pr commit -m MESSAGE -- FILE [FILE...]
+  agent-bot-pr commit [--staged] -m MESSAGE -- FILE [FILE...]
   agent-bot-pr push [BRANCH]
   agent-bot-pr open --title TITLE --body-file FILE [--base BRANCH] [--branch BRANCH]
   agent-bot-pr changelog --pr NUMBER --entry TEXT [--section SECTION]
   agent-bot-pr checks [BRANCH]
-  agent-bot-pr merge --pr NUMBER
+  agent-bot-pr merge --pr NUMBER [--base BRANCH]
+  agent-bot-pr pr --pr NUMBER
+  agent-bot-pr runs [BRANCH]
+  agent-bot-pr jobs --run NUMBER
+  agent-bot-pr repo
 
 merge squash-merges only when every check run on the PR head has passed, and
 pins the merge to that head commit.
@@ -33,6 +37,11 @@ EOF
 fail() {
 	printf 'ERROR: %s\n' "$*" >&2
 	exit 1
+}
+
+# Disable executable repository hooks even during staging and local reads.
+git() {
+	command git -c core.hooksPath=/dev/null -c core.fsmonitor=false "$@"
 }
 
 repo_root() {
@@ -56,24 +65,52 @@ agent_skills_root() {
 }
 
 load_contract() {
+	# This is a trusted-runtime guardrail, not a sandbox. Source/binary overrides
+	# support isolated tests, but never change the expected publishing identity.
+	local variable
+	for variable in "${!GIT_@}"; do unset "$variable"; done
+	unset EMAIL SSH_AUTH_SOCK SSH_AGENT_PID HTTP_PROXY HTTPS_PROXY ALL_PROXY
+	unset http_proxy https_proxy all_proxy
+	export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 GIT_TERMINAL_PROMPT=0
 	ROOT="$(repo_root)"
 	AGENT_SKILLS_ROOT="$(agent_skills_root)"
 	# shellcheck source=/dev/null
 	source "$AGENT_SKILLS_ROOT/amp/agent-secrets/lib-agent.sh"
-	AGENT_BOT_GITHUB_LOGIN="${AGENT_BOT_GITHUB_LOGIN:-lelouvincx-bot}"
-	AGENT_BOT_GIT_EMAIL="${AGENT_BOT_GIT_EMAIL:-bot@lelouvincx.com}"
+	[[ "${AGENT_BOT_GITHUB_LOGIN:-lelouvincx-bot}" == lelouvincx-bot ]] || fail 'unexpected bot login override'
+	[[ "${AGENT_BOT_GIT_EMAIL:-bot@lelouvincx.com}" == bot@lelouvincx.com ]] || fail 'unexpected bot email override'
+	AGENT_BOT_GITHUB_LOGIN=lelouvincx-bot
+	AGENT_BOT_GIT_EMAIL=bot@lelouvincx.com
+	# Git's author.* and committer.* settings override user.*. Bind both
+	# identities explicitly for either transport, including partial commits.
+	export GIT_AUTHOR_NAME="$AGENT_BOT_GITHUB_LOGIN" GIT_AUTHOR_EMAIL="$AGENT_BOT_GIT_EMAIL"
+	export GIT_COMMITTER_NAME="$AGENT_BOT_GITHUB_LOGIN" GIT_COMMITTER_EMAIL="$AGENT_BOT_GIT_EMAIL"
 	AGENT_BOT_SSH_KEY="${AGENT_BOT_SSH_KEY:-$HOME/.ssh/lelouvincx_bot_ed25519}"
 	AGENT_BOT_SIGNING_KEY_CONFIG="${AGENT_BOT_SIGNING_KEY_CONFIG:-$AGENT_BOT_SSH_KEY}"
 	AGENT_GITHUB_REVIEWER="${AGENT_GITHUB_REVIEWER:-lelouvincx}"
-	AGENT_GITHUB_REPOSITORY="${AGENT_GITHUB_REPOSITORY:-$(repository_from_origin)}"
+	local origin_repository policy
+	validate_local_config
+	origin_repository="$(repository_from_origin)"
+	[[ "$origin_repository" =~ ^[a-z0-9][a-z0-9-]*/[a-z0-9._-]+$ ]] || fail 'origin must identify exactly one canonical repository'
+	[[ "${AGENT_GITHUB_REPOSITORY:-$origin_repository}" == "$origin_repository" ]] || fail 'repository override does not match origin'
+	AGENT_GITHUB_REPOSITORY="$origin_repository"
+	policy=$(agent_bot_repository_allowlist) || fail 'could not load shared repository policy'
+	grep -Fxq -- "$AGENT_GITHUB_REPOSITORY" <<<"$policy" || fail 'repository is not in the shared bot policy'
 	AGENT_SECRETS_BIN="${AGENT_SECRETS_BIN:-$HOME/.local/bin/agent-secrets}"
 	GH_BIN="${GH_BIN:-$(command -v gh || true)}"
 	[[ -n "$GH_BIN" && -x "$GH_BIN" ]] || fail 'gh is not available or executable'
+	[[ "$GH_BIN" != *"'"* && "$AGENT_SECRETS_BIN" != *"'"* ]] || fail 'credential helper executable paths may not contain single quotes'
+}
+
+validate_local_config() {
+	local unsafe
+	unsafe=$(git config --local --name-only --get-regexp \
+		'^(include.*\.|url\.|http\.|https\.|credential\.|protocol\.|filter\.|ssh\.|core\.(sshcommand|gitproxy|worktree|attributesfile)$|extensions\.|remote\..*\.(pushurl|proxy|proxyauthmethod|uploadpack|receivepack|vcs|mirror)$)' || true)
+	[[ -z "$unsafe" ]] || fail "unsafe local Git overrides: $unsafe"
 }
 
 repository_from_origin() {
 	local remote
-	remote=$(git remote get-url origin 2>/dev/null) || fail 'origin remote is missing'
+	remote=$(git config --local --get-all remote.origin.url) || fail 'origin remote is missing'
 	case "$remote" in
 	git@github.com:*.git)
 		remote="${remote#git@github.com:}"
@@ -94,8 +131,36 @@ current_branch() {
 }
 
 bot_gh() {
-	AGENT_SECRET_AUTH="${AGENT_SECRET_AUTH:-service-account}" \
+	env -u GH_TOKEN -u GITHUB_TOKEN -u GH_TOKEN_BOT \
+		-u GH_ENTERPRISE_TOKEN -u GITHUB_ENTERPRISE_TOKEN -u GH_HTTP_UNIX_SOCKET \
+		GH_HOST=github.com GH_PROMPT_DISABLED=1 \
+		AGENT_SECRET_AUTH="${AGENT_SECRET_AUTH:-service-account}" \
 		"$AGENT_SECRETS_BIN" run --bundle lelouvincx-bot -- "$GH_BIN" "$@"
+}
+
+validate_publisher() {
+	local login permissions
+	login=$(bot_gh api user --jq .login) || fail 'bot authentication failed'
+	[[ "$login" == lelouvincx-bot ]] || fail 'authenticated GitHub user is not lelouvincx-bot'
+	permissions=$(bot_gh api "repos/$AGENT_GITHUB_REPOSITORY" --jq '[.permissions.push, .permissions.admin] | @tsv') || fail 'could not read repository permissions'
+	# Preserve the shared library's bot-owned repository exception. Personal
+	# repositories must always grant push without administration.
+	[[ "$permissions" == $'true\tfalse' || ( "$AGENT_GITHUB_REPOSITORY" == lelouvincx-bot/* && "$permissions" == $'true\ttrue' ) ]] || fail 'bot requires push access without admin access on personal repositories'
+}
+
+validate_ssh_transport() {
+	local output status
+	[[ "$AGENT_BOT_SIGNING_KEY_CONFIG" == "$AGENT_BOT_SSH_KEY" ]] || fail 'signing key must match the bot SSH key'
+	agent_validate_bot_ssh_key "$AGENT_BOT_SSH_KEY" || fail 'invalid bot SSH key'
+	if output=$(/usr/bin/ssh -T -F /dev/null -o HostName=github.com \
+		-o ProxyCommand=none -o ProxyJump=none -o BatchMode=yes \
+		-o IdentitiesOnly=yes -o IdentityAgent=none -o PasswordAuthentication=no \
+		-o KbdInteractiveAuthentication=no -i "$AGENT_BOT_SSH_KEY" git@github.com 2>&1); then
+		status=0
+	else
+		status=$?
+	fi
+	[[ "$status" == 1 && "$output" == *"Hi lelouvincx-bot! You've successfully authenticated"* ]] || fail 'SSH key did not authenticate as lelouvincx-bot'
 }
 
 # Orbs have no bot SSH key. There, Git authenticates over HTTPS with a credential
@@ -103,7 +168,7 @@ bot_gh() {
 # exists only in that child process. Commits are unsigned; squash merges are
 # signed by GitHub.
 use_https_transport() {
-	[[ ! -e "$AGENT_BOT_SSH_KEY" ]]
+	[[ ! -e "$AGENT_BOT_SSH_KEY" && ! -L "$AGENT_BOT_SSH_KEY" ]]
 }
 
 bot_https_git() {
@@ -111,6 +176,9 @@ bot_https_git() {
 		-u GH_TOKEN \
 		-u GITHUB_TOKEN \
 		-u GH_TOKEN_BOT \
+		-u GH_ENTERPRISE_TOKEN \
+		-u GITHUB_ENTERPRISE_TOKEN \
+		-u GH_HTTP_UNIX_SOCKET \
 		-u GIT_ASKPASS \
 		-u SSH_ASKPASS \
 		-u GIT_CONFIG \
@@ -120,6 +188,8 @@ bot_https_git() {
 		GIT_CONFIG_GLOBAL=/dev/null \
 		GIT_CONFIG_NOSYSTEM=1 \
 		GIT_TERMINAL_PROMPT=0 \
+		GH_HOST=github.com \
+		GH_PROMPT_DISABLED=1 \
 		git \
 		-c credential.helper= \
 		-c "credential.helper=!'$AGENT_SECRETS_BIN' run --bundle lelouvincx-bot -- '$GH_BIN' auth git-credential" \
@@ -132,22 +202,30 @@ bot_https_git() {
 }
 
 https_commit_files() {
-	local message="$1" path
-	shift
-	git add -- "$@"
-	while IFS= read -r path; do
+	local message="$1" staged="$2" path
+	shift 2
+	if [[ "$staged" == false ]]; then git add -- "$@"; fi
+	while IFS= read -r -d '' path; do
 		[[ -n "$path" ]] || continue
 		agent_path_is_allowed "$path" "$@" || fail "Refusing to commit unapproved staged file: $path"
-	done < <(git diff --cached --name-only)
+	done < <(git diff --cached --name-only -z)
 	if ! git diff --cached --quiet; then
-		bot_https_git commit -m "$message"
+		if use_https_transport; then
+			bot_https_git commit -m "$message"
+		else
+			agent_bot_git /dev/null "$AGENT_BOT_SSH_KEY" commit -m "$message"
+		fi
 	fi
 }
 
 command_commit() {
-	local message="" paths=()
+	local message="" staged=false paths=()
 	while [[ $# -gt 0 ]]; do
 		case "$1" in
+		--staged)
+			staged=true
+			shift
+			;;
 		-m|--message)
 			[[ $# -ge 2 ]] || fail "$1 requires a value"
 			message="$2"
@@ -165,25 +243,26 @@ command_commit() {
 	done
 	[[ -n "$message" ]] || fail 'commit requires -m MESSAGE'
 	[[ "${#paths[@]}" -gt 0 ]] || fail 'commit requires -- FILE [FILE...]'
-	if use_https_transport; then
-		https_commit_files "$message" "${paths[@]}"
-	else
-		agent_commit_files /dev/null "$AGENT_BOT_SSH_KEY" "$message" "${paths[@]}"
-	fi
+	validate_publisher
+	if ! use_https_transport; then validate_ssh_transport; fi
+	https_commit_files "$message" "$staged" "${paths[@]}"
 }
 
 command_push() {
 	local branch="${1:-$(current_branch)}"
 	[[ $# -le 1 ]] || fail 'push accepts at most one branch'
+	git check-ref-format --branch "$branch" >/dev/null || fail 'invalid push branch'
+	validate_publisher
 	if use_https_transport; then
-		bot_https_git push "https://github.com/$AGENT_GITHUB_REPOSITORY.git" "$branch"
+		bot_https_git push --recurse-submodules=no --no-follow-tags "https://github.com/$AGENT_GITHUB_REPOSITORY.git" "refs/heads/$branch:refs/heads/$branch"
 	else
-		agent_push_branch /dev/null "$AGENT_BOT_SSH_KEY" "$branch"
+		validate_ssh_transport
+		agent_bot_git /dev/null "$AGENT_BOT_SSH_KEY" push --recurse-submodules=no --no-follow-tags "git@github.com:$AGENT_GITHUB_REPOSITORY.git" "refs/heads/$branch:refs/heads/$branch"
 	fi
 }
 
 command_open() {
-	local title="" body_file="" base="main" branch=""
+	local title="" body_file="" base="" branch=""
 	while [[ $# -gt 0 ]]; do
 		case "$1" in
 		--title)
@@ -215,6 +294,8 @@ command_open() {
 	[[ -n "$body_file" ]] || fail 'open requires --body-file'
 	[[ -f "$body_file" && ! -L "$body_file" && -s "$body_file" ]] || fail "body file must be a non-empty regular file: $body_file"
 	branch="${branch:-$(current_branch)}"
+	base="${base:-$(bot_gh api "repos/$AGENT_GITHUB_REPOSITORY" --jq .default_branch)}"
+	git check-ref-format --branch "$base" >/dev/null || fail 'invalid base branch'
 	command_push "$branch"
 
 	local owner pr_number
@@ -232,11 +313,12 @@ command_open() {
 			--field "body=@$body_file" \
 			--jq .number)
 	else
+		[[ "$pr_number" =~ ^[0-9]+$ ]] || fail 'invalid pull request number'
 		bot_gh api --method PATCH "repos/$AGENT_GITHUB_REPOSITORY/pulls/$pr_number" \
 			--raw-field "title=$title" \
 			--field "body=@$body_file" >/dev/null
 	fi
-	[[ -n "$pr_number" ]] || fail 'pull request creation did not return a number'
+	[[ "$pr_number" =~ ^[0-9]+$ ]] || fail 'pull request creation did not return a number'
 	bot_gh api --method POST "repos/$AGENT_GITHUB_REPOSITORY/pulls/$pr_number/requested_reviewers" \
 		--field "reviewers[]=$AGENT_GITHUB_REVIEWER" >/dev/null || \
 		printf 'WARNING: could not request reviewer: %s\n' "$AGENT_GITHUB_REVIEWER" >&2
@@ -298,17 +380,66 @@ PY
 command_checks() {
 	local branch="${1:-$(current_branch)}"
 	[[ $# -le 1 ]] || fail 'checks accepts at most one branch'
-	bot_gh api "repos/$AGENT_GITHUB_REPOSITORY/commits/$branch/check-runs" \
-		--jq '{check_runs: [.check_runs[] | {name, status, conclusion}], pending: ([.check_runs[] | select(.status != "completed")] | length), failures: ([.check_runs[] | select(.status == "completed" and (.conclusion | IN("success", "skipped", "neutral") | not))] | length)}'
+	git check-ref-format --branch "$branch" >/dev/null || fail 'invalid checks branch'
+	local head
+	head=$(bot_gh api --method GET "repos/$AGENT_GITHUB_REPOSITORY/commits" --field "sha=$branch" --field per_page=1 --jq '.[0].sha')
+	check_summary "$head"
+}
+
+check_summary() {
+	local head="$1" checks statuses
+	[[ "$head" =~ ^[a-f0-9]{40}$ ]] || fail 'invalid head SHA'
+	checks=$(bot_gh api --paginate --slurp "repos/$AGENT_GITHUB_REPOSITORY/commits/$head/check-runs?filter=latest&per_page=100") || fail 'could not read all check runs'
+	statuses=$(bot_gh api --paginate --slurp "repos/$AGENT_GITHUB_REPOSITORY/commits/$head/statuses?per_page=100") || fail 'could not read all commit statuses'
+	python3 -c '
+import json, sys
+head, checks, statuses = sys.argv[1:]
+runs = [run for page in json.loads(checks) for run in page["check_runs"]]
+latest = {}
+for page in json.loads(statuses):
+    for status in page:
+        latest.setdefault(status["context"], status)
+states = list(latest.values())
+pending = sum(r["status"] != "completed" for r in runs) + sum(s["state"] == "pending" for s in states)
+failures = sum(r["status"] == "completed" and r["conclusion"] not in ("success", "skipped", "neutral") for r in runs)
+failures += sum(s["state"] not in ("success", "pending") for s in states)
+print(json.dumps(dict(head=head, check_runs=runs, statuses=states, pending=pending, failures=failures, total=len(runs)+len(states))))
+' "$head" "$checks" "$statuses"
+}
+
+command_pr() {
+	[[ $# == 2 && "$1" == --pr && "$2" =~ ^[0-9]+$ ]] || fail 'pr requires --pr NUMBER'
+	bot_gh api "repos/$AGENT_GITHUB_REPOSITORY/pulls/$2" \
+		--jq '{number, html_url, state, merged, draft, title, body, user: .user.login, head: {sha: .head.sha, ref: .head.ref, repository: .head.repo.full_name}, base: {ref: .base.ref, repository: .base.repo.full_name}, mergeable, mergeable_state}'
+}
+
+command_runs() {
+	[[ $# -le 1 ]] || fail 'runs accepts at most one branch'
+	local branch="${1:-$(current_branch)}"
+	git check-ref-format --branch "$branch" >/dev/null || fail 'invalid workflow branch'
+	bot_gh api --method GET "repos/$AGENT_GITHUB_REPOSITORY/actions/runs" \
+		--field "branch=$branch" --field per_page=100 \
+		--jq '{total_count, workflow_runs: [.workflow_runs[] | {id, name, event, status, conclusion, head_sha, head_branch, html_url}]}'
+}
+
+command_jobs() {
+	[[ $# == 2 && "$1" == --run && "$2" =~ ^[0-9]+$ ]] || fail 'jobs requires --run NUMBER'
+	bot_gh api --paginate --slurp "repos/$AGENT_GITHUB_REPOSITORY/actions/runs/$2/jobs?per_page=100" \
+		--jq '[.[].jobs[] | {id, name, status, conclusion, html_url, steps: [.steps[] | {name, number, status, conclusion}]}]'
 }
 
 command_merge() {
-	local pr=""
+	local pr="" base=""
 	while [[ $# -gt 0 ]]; do
 		case "$1" in
 		--pr)
 			[[ $# -ge 2 ]] || fail '--pr requires a value'
 			pr="$2"
+			shift 2
+			;;
+		--base)
+			[[ $# -ge 2 ]] || fail '--base requires a value'
+			base="$2"
 			shift 2
 			;;
 		*)
@@ -318,18 +449,29 @@ command_merge() {
 	done
 	[[ "$pr" =~ ^[0-9]+$ ]] || fail 'merge requires --pr NUMBER'
 
-	local head blocked
-	head=$(bot_gh api "repos/$AGENT_GITHUB_REPOSITORY/pulls/$pr" --jq '.head.sha')
-	[[ -n "$head" ]] || fail "could not read head commit of PR #$pr"
-	blocked=$(bot_gh api "repos/$AGENT_GITHUB_REPOSITORY/commits/$head/check-runs" \
-		--jq 'if (.check_runs | length) == 0 then "no" else ([.check_runs[] | select(.status != "completed" or (.conclusion | IN("success", "skipped", "neutral") | not))] | length) end')
-	[[ "$blocked" != no ]] || fail "PR #$pr has no check runs on $head yet"
-	[[ "$blocked" == 0 ]] || fail "PR #$pr has $blocked pending or failed check runs on $head"
-
-	bot_gh api --method PUT "repos/$AGENT_GITHUB_REPOSITORY/pulls/$pr/merge" \
+	validate_publisher
+	local head metadata summary result state draft head_repo base_repo base_ref
+	base="${base:-$(bot_gh api "repos/$AGENT_GITHUB_REPOSITORY" --jq .default_branch)}"
+	git check-ref-format --branch "$base" >/dev/null || fail 'invalid merge base'
+	metadata=$(merge_metadata "$pr")
+	IFS=$'\t' read -r head state draft head_repo base_repo base_ref <<<"$metadata"
+	[[ "$head" =~ ^[a-f0-9]{40}$ && "$state" == open && "$draft" == false && \
+		"$head_repo" == "$AGENT_GITHUB_REPOSITORY" && "$base_repo" == "$AGENT_GITHUB_REPOSITORY" && \
+		"$base_ref" == "$base" ]] || fail 'PR must be open, non-draft, and target the intended repository and base'
+	summary=$(check_summary "$head") || fail 'could not evaluate checks'
+	python3 -c 'import json,sys; s=json.loads(sys.argv[1]); sys.exit(not (s["total"] > 0 and s["pending"] == 0 and s["failures"] == 0))' "$summary" || fail 'PR has missing, pending or failed checks/statuses'
+	[[ "$(merge_metadata "$pr")" == "$metadata" ]] || fail 'PR changed while checks were evaluated'
+	result=$(bot_gh api --method PUT "repos/$AGENT_GITHUB_REPOSITORY/pulls/$pr/merge" \
 		--raw-field merge_method=squash \
 		--raw-field "sha=$head" \
-		--jq '{merged, sha, message}'
+		--jq '{merged, sha, message}') || fail 'merge request failed'
+	printf '%s\n' "$result"
+	python3 -c 'import json,sys; sys.exit(json.loads(sys.argv[1]).get("merged") is not True)' "$result" || fail 'GitHub declined the merge'
+}
+
+merge_metadata() {
+	bot_gh api "repos/$AGENT_GITHUB_REPOSITORY/pulls/$1" \
+		--jq '[.head.sha, .state, .draft, .head.repo.full_name, .base.repo.full_name, .base.ref] | @tsv'
 }
 
 main() {
@@ -350,6 +492,13 @@ main() {
 	changelog) command_changelog "$@" ;;
 	checks) command_checks "$@" ;;
 	merge) command_merge "$@" ;;
+	pr) command_pr "$@" ;;
+	runs) command_runs "$@" ;;
+	jobs) command_jobs "$@" ;;
+	repo)
+		[[ $# == 0 ]] || fail 'repo accepts no arguments'
+		bot_gh api "repos/$AGENT_GITHUB_REPOSITORY" --jq '{full_name, default_branch, permissions}'
+		;;
 	*) usage; fail "unknown command: $command" ;;
 	esac
 }

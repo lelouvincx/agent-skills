@@ -94,7 +94,14 @@ repos:
         entry: bash scripts/test-orb-setup.sh
         language: system
         pass_filenames: false
-        files: ^(?:\.agents/(?:setup|resume|pre-setup)|scripts/test-orb-setup\.sh|\.pre-commit-config\.yaml)$
+        files: ^(?:\.agents/(?:setup|resume|pre-setup|sync)|scripts/test-orb-setup\.sh|\.pre-commit-config\.yaml)$
+
+      - id: test-agent-bot-pr
+        name: Test bot publishing controls
+        entry: bash amp/scripts/test-agent-bot-pr.sh
+        language: system
+        pass_filenames: false
+        files: ^(?:bin/agent-bot-pr|amp/scripts/test-agent-bot-pr\.sh|amp/agent-secrets/|\.pre-commit-config\.yaml)
 
       - id: test-agent-browser-wrapper
         name: Test the agent-browser wrapper and config migration

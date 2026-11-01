@@ -3,6 +3,7 @@ set -euo pipefail
 
 root="$(git rev-parse --show-toplevel)"
 scratch="$(mktemp -d)"
+scratch="$(cd "$scratch" && pwd -P)"
 trap 'rm -rf "$scratch"' EXIT
 export HOME="$scratch/home"
 export GIT_CONFIG_NOSYSTEM=1
@@ -209,3 +210,142 @@ for hook in setup resume pre-setup; do
 	done
 done
 test "$failures" -eq 0
+
+# A copied bootstrap can live in a consumer's .agents directory. Its pathname
+# alone must not make that application checkout the infrastructure source.
+unset AGENT_SKILLS_DIR AGENT_SKILLS_NO_REFRESH
+mkdir -p "$scratch/copied-consumer/.agents"
+git -C "$scratch/copied-consumer" init -q -b main
+sed "s|/home/user/workspace/agent-skills|$scratch/copied-source|g" "$root/.agents/setup" > "$scratch/copied-consumer/.agents/setup"
+bash "$scratch/copied-consumer/.agents/setup" > "$scratch/copied-output" 2>&1
+test -d "$scratch/copied-source/.git"
+test ! -e "$scratch/copied-consumer/sync-skills.sh"
+grep -F "source: $scratch/copied-source revision" "$scratch/copied-output" >/dev/null
+echo 'PASS: copied consumer setup acquires infrastructure instead of treating application as source'
+
+# The development checkout is source, not a consumer cache. Advance its real
+# upstream while it stays clean, then exercise both clean and dirty working files.
+unset AGENT_SKILLS_DIR AGENT_SKILLS_NO_REFRESH
+cp "$root/.agents/sync" "$scratch/safety-upstream/.agents/sync"
+cat > "$scratch/safety-upstream/sync-skills.sh" <<'SYNC'
+#!/usr/bin/env bash
+set -euo pipefail
+source_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+cp "$source_dir/tracked" "$HOME/projected"
+printf '%s\n' "$@" > "$MARKER"
+SYNC
+git -C "$scratch/safety-upstream" add .
+git -C "$scratch/safety-upstream" -c user.name=Fixture -c user.email=fixture@example.invalid -c commit.gpgsign=false commit -qm development-fixture
+git clone -q "$AGENT_SKILLS_REPO" "$scratch/primary"
+primary_head="$(git -C "$scratch/primary" rev-parse HEAD)"
+printf 'new upstream content\n' > "$scratch/safety-upstream/tracked"
+git -C "$scratch/safety-upstream" add tracked
+git -C "$scratch/safety-upstream" -c user.name=Fixture -c user.email=fixture@example.invalid -c commit.gpgsign=false commit -qm upstream-update
+export MARKER="$scratch/development-projection"
+cp "$root/.agents/pre-setup" "$scratch/stored-pre-setup"
+for state in clean dirty; do
+	if [ "$state" = dirty ]; then
+		printf 'unpublished working content\n' > "$scratch/primary/tracked"
+	fi
+	status_before="$(git -C "$scratch/primary" status --porcelain --untracked-files=all)"
+	for hook in setup resume pre-setup sync; do
+		: > "$GIT_OPERATIONS"
+		if [ "$hook" = pre-setup ]; then
+			(cd "$scratch/primary" && bash "$scratch/stored-pre-setup") > "$scratch/development-output" 2>&1
+		else
+			# Invoke from elsewhere to ensure source selection follows the hook,
+			# not the caller's unrelated checkout or working directory.
+			bash "$scratch/primary/.agents/$hook" > "$scratch/development-output" 2>&1
+		fi
+		test "$(git -C "$scratch/primary" rev-parse HEAD)" = "$primary_head"
+		test "$(git -C "$scratch/primary" status --porcelain --untracked-files=all)" = "$status_before"
+		cmp "$scratch/primary/tracked" "$HOME/projected"
+		! grep -Eq '(^| )(clone|pull|reset)( |$)' "$GIT_OPERATIONS"
+		grep -F "$primary_head" "$scratch/development-output" >/dev/null
+		grep -F 'no pull' "$scratch/development-output" >/dev/null || grep -F 'no clone/pull/reset' "$scratch/development-output" >/dev/null
+		echo "PASS: $hook projects $state primary without refreshing newer upstream"
+	done
+done
+
+# Explicit sync forwards argument boundaries and reprojects changed working
+# files on every invocation without calling setup or refreshing source.
+for content in first second second; do
+	printf '%s\n' "$content" > "$scratch/primary/tracked"
+	: > "$GIT_OPERATIONS"
+	AGENT_SKILLS_DIR="$scratch/primary" bash "$root/.agents/sync" --remote 'argument with spaces' > "$scratch/sync-output"
+	test "$(cat "$HOME/projected")" = "$content"
+	test "$(cat "$MARKER")" = "$(printf '%s\n' --remote 'argument with spaces')"
+	! grep -Eq '(^| )(clone|pull|reset)( |$)' "$GIT_OPERATIONS"
+done
+echo 'PASS: explicit sync projects changed working files repeatedly and forwards arguments'
+
+for selection in "$scratch/missing-source" "$scratch/setup-file/checkout" "$scratch/setup-dangling-symlink/checkout" "$scratch/primary/.agents"; do
+	: > "$GIT_OPERATIONS"
+	if AGENT_SKILLS_DIR="$selection" bash "$root/.agents/sync" > "$scratch/sync-output" 2>&1; then
+		echo "FAIL: sync accepted malformed source $selection" >&2
+		exit 1
+	fi
+	! grep -Eq '(^| )(clone|pull|reset)( |$)' "$GIT_OPERATIONS"
+done
+echo 'PASS: explicit sync rejects malformed selections without acquiring source'
+
+# A valid linked worktree remains an eligible development source.
+git -C "$scratch/primary" worktree add -qb development-linked "$scratch/development-linked"
+AGENT_SKILLS_DIR="$scratch/development-linked" bash "$root/.agents/sync" > "$scratch/sync-output"
+cmp "$scratch/development-linked/tracked" "$HOME/projected"
+test -f "$scratch/development-linked/.git"
+echo 'PASS: explicit sync supports linked worktrees'
+
+# Projection failures must reach the caller, not be reported as success.
+printf '#!/usr/bin/env bash\nexit 47\n' > "$scratch/primary/sync-skills.sh"
+result=0
+bash "$scratch/primary/.agents/sync" > "$scratch/sync-output" 2>&1 || result=$?
+test "$result" -eq 47
+echo 'PASS: explicit sync propagates projection failure'
+
+# Exercise stored-string discovery without touching absolute live workspace
+# paths: relocate only the dispatcher's fixed workspace prefix in this fixture.
+mkdir -p "$scratch/discovery/workspace/repos" "$scratch/discovery/consumer"
+sed "s|/home/user/workspace|$scratch/discovery/workspace|g" "$root/.agents/pre-setup" > "$scratch/discovery/pre-setup"
+git -C "$scratch/discovery/consumer" init -q -b main
+git -C "$scratch/discovery/consumer" remote add origin https://example.invalid/consumer.git
+for destination in "$scratch/discovery/workspace/repos/agent-skills" "$scratch/discovery/agent-skills" "$scratch/discovery/workspace/agent-skills"; do
+	git clone -q "$AGENT_SKILLS_REPO" "$destination"
+done
+for choice in additional sibling fallback cloned-fallback; do
+	case "$choice" in
+		additional) selected="$scratch/discovery/workspace/repos/agent-skills" ;;
+		sibling)
+			mv "$scratch/discovery/workspace/repos/agent-skills" "$scratch/discovery/saved-additional"
+			selected="$scratch/discovery/agent-skills"
+			;;
+		fallback)
+			mv "$scratch/discovery/agent-skills" "$scratch/discovery/saved-sibling"
+			selected="$scratch/discovery/workspace/agent-skills"
+			;;
+		cloned-fallback)
+			mv "$scratch/discovery/workspace/agent-skills" "$scratch/discovery/saved-fallback"
+			;;
+	esac
+	: > "$GIT_OPERATIONS"
+	(cd "$scratch/discovery/consumer" && bash "$scratch/discovery/pre-setup") > "$scratch/discovery/output" 2>&1
+	grep -F "selected $selected" "$scratch/discovery/output" >/dev/null
+	cmp "$selected/tracked" "$HOME/projected"
+	test "$(grep -c ' pull --ff-only$' "$GIT_OPERATIONS")" -eq 1
+	echo "PASS: stored pre-setup selects $choice source"
+done
+test -d "$scratch/discovery/saved-additional/.git"
+test -d "$scratch/discovery/saved-sibling/.git"
+test -d "$scratch/discovery/saved-fallback/.git"
+
+# A malformed higher-priority candidate must fail instead of using a valid
+# fallback; the override safety matrix above covers explicit selection too.
+ln -s "$scratch/discovery/missing" "$scratch/discovery/workspace/repos/agent-skills"
+: > "$GIT_OPERATIONS"
+if (cd "$scratch/discovery/consumer" && bash "$scratch/discovery/pre-setup") > "$scratch/discovery/output" 2>&1; then
+	echo 'FAIL: stored pre-setup silently skipped invalid selected source' >&2
+	exit 1
+fi
+test -L "$scratch/discovery/workspace/repos/agent-skills"
+! grep -Eq '(^| )(clone|pull|reset)( |$)' "$GIT_OPERATIONS"
+echo 'PASS: stored pre-setup rejects invalid preferred candidate and preserves duplicates'

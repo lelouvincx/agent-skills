@@ -1,5 +1,6 @@
 # Bot repository maintenance conventions
 
+- For an authorized shipping workflow, load `shipping-personal-projects`. The skill owns orchestration; repository instructions retain their release gates.
 - Use `agent-bot-pr` for bot commits, pushes, pull request operations, changelog insertion, check polling and merges in repositories approved for `lelouvincx-bot`.
 - Treat `agent-skills/amp/agent-secrets/github-identities.json` as the source of truth for the approved repository set. Update that policy when bot repository scope changes.
 - Run `agent-bot-pr` from the repository being maintained. The helper operates on the current Git repository and loads the shared bot contract from the `agent-skills` checkout.
