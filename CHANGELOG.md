@@ -9,6 +9,7 @@ and this project does not currently use versioned releases.
 
 ### Changed
 
+- Limit the [AI] prefix rule to Slack messages, including DMs. [#296](https://github.com/lelouvincx/agent-skills/pull/296)
 - Require agents to start every message they send to another person on Chinh's behalf, such as Slack messages and emails, with [AI]. [#294](https://github.com/lelouvincx/agent-skills/pull/294)
 - Enable network sharing by default when creating local Amp runners. [#293](https://github.com/lelouvincx/agent-skills/pull/293)
 - Register Anfra core with its nested local checkout and GitHub-mapped Amp project, preserving the existing Anfra workspace. [#292](https://github.com/lelouvincx/agent-skills/pull/292)
