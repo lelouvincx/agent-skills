@@ -9,6 +9,7 @@ and this project does not currently use versioned releases.
 
 ### Changed
 
+- Create an agent-skills orb when asked to ship agent-skills changes from another project, transferring unpushed changes before shipping. [#298](https://github.com/lelouvincx/agent-skills/pull/298)
 - Separate Amp-managed orb browser workflows from Mac wrapper profiles and authorize already-injected runtime GitHub tokens while preserving approved publisher restrictions. [#297](https://github.com/lelouvincx/agent-skills/pull/297)
 - Limit the [AI] prefix rule to Slack messages, including DMs. [#296](https://github.com/lelouvincx/agent-skills/pull/296)
 - Require agents to start every message they send to another person on Chinh's behalf, such as Slack messages and emails, with [AI]. [#294](https://github.com/lelouvincx/agent-skills/pull/294)

@@ -1,6 +1,6 @@
 ---
 name: delegating-subagents
-description: "Routes delegated work and verifies its outcome. Use before delegation or expert consultation, and for /subagent, |subagent, btw or |btw requests."
+description: "Routes delegated work and verifies its outcome. Use before delegation or expert consultation, for /subagent, |subagent, btw or |btw requests, or when asked from another project to ship agent-skills changes."
 ---
 
 # Delegating subagents
@@ -13,6 +13,7 @@ Honor explicit triggers first:
 
 | Request | Route |
 | --- | --- |
+| Ship `agent-skills` changes from another project | Create an `agent-skills` orb |
 | “Spawn a subagent”, `/subagent` or `\|subagent` | `create_thread`; use the remaining request as the brief |
 | “Ask an agent”, “use a subagent” or “run this in parallel” | `Task` for bounded current-turn work |
 | `btw` or `\|btw` | Delegate the side question without displacing the parent task; `Task` unless cross-turn reporting or follow-up needs `create_thread` |
@@ -28,7 +29,7 @@ Otherwise route by the work:
 4. Use `Task` for independent concurrent work or a bounded unit whose intermediate detail would crowd the parent context.
 5. Use `create_thread` when work needs its own addressable thread, cross-turn reporting or later follow-up.
 
-Before creating or managing a native child thread, read the [native-thread contract](../../amp/docs/tools/delegating-subagents.md#use-create_thread-for-addressable-work). Create the child with the parent's exact live `runner_id` and exact `working_directory`; the directory preserves the parent project. The contract owns verification, reply-versus-wait selection, follow-up and archive rules.
+Before creating or managing a child thread, read the [native-thread contract](../../amp/docs/tools/delegating-subagents.md#use-create_thread-for-addressable-work). Follow its placement, change-transfer and completion rules.
 
 ## Brief and verify
 
