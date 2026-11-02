@@ -79,6 +79,7 @@ test('forwards a reply in a watched thread with the event ID as idempotency key 
 	expect(calls[0].body).toEqual({ event_id: 'Ev1', kind: 'reply', channel: 'C0123', thread_ts: ROOT, ts: '1793590123.000200', user: 'U0456' })
 	expect(calls[0].body).not.toHaveProperty('text')
 	expect(store.get('msg:C0123:1793590123.000200')?.value).toBe(`watch:C0123:${ROOT}`)
+	expect(store.get('msg:C0123:1793590123.000200')?.ttl).toBe(3600)
 })
 
 test('ignores roots, edits, bots, unwatched threads and the agent\'s own [AI] replies', async () => {
@@ -134,6 +135,14 @@ test('manages watches with bearer auth, validation and per-thread ownership', as
 	expect((await watches(env, 'PUT', valid)).status).toBe(200)
 	expect(store.get(`watch:C0123:${ROOT}`)?.ttl).toBe(2 * 86400)
 	expect((await watches(env, 'PUT', { ...valid, amp_thread: OTHER_THREAD })).status).toBe(409)
+	const { days: _, ...forever } = valid
+	expect((await watches(env, 'PUT', forever)).status).toBe(200)
+	expect(store.get(`watch:C0123:${ROOT}`)?.ttl).toBeUndefined()
+	expect(JSON.parse(store.get(`watch:C0123:${ROOT}`)!.value).expires_at).toBeNull()
+	expect((await watches(env, 'PUT', { ...forever, amp_thread: OTHER_THREAD })).status).toBe(409)
+	amp()
+	await slack(env, reply())
+	expect(store.get('msg:C0123:1793590123.000200')?.ttl).toBeUndefined()
 	expect((await watches(env, 'DELETE', { ...valid, amp_thread: OTHER_THREAD })).status).toBe(409)
 	expect((await watches(env, 'DELETE', valid)).status).toBe(200)
 	expect(store.has(`watch:C0123:${ROOT}`)).toBe(false)
