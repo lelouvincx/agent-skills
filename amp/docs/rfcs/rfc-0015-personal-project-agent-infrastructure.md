@@ -37,7 +37,7 @@ The shared infrastructure must support its own development Orb, consuming projec
 The shared runtime, shipping skill and hardened publisher have shipped. All 13 approved Amp projects now have GitHub-connected mappings, the canonical pre-setup script and the common custom Ship prompt.
 The SmartClass readiness repair has merged and deployed with passing release probes. Settings readback limitations and deferred work are recorded below; configuration does not prove bot write access.
 The dotfiles and personal-finance consumer migrations have also shipped. Chinh chose to leave the Logseq migration unpublished.
-Chinh subsequently requested a reusable public GitHub template at `lelouvincx/template` for future personal projects. That extension is not delivered by the completed 13-project rollout.
+The separately requested reusable public GitHub template at `lelouvincx/template` has shipped for future personal projects. Its verification and remaining limits are recorded below.
 
 ## Context
 
@@ -461,7 +461,7 @@ Chinh actions:
 - create the public template repository, enable its template flag, and grant the approved bot sufficient publishing access when no approved administrative publisher is available
 
 Expected outcome: reusable project bootstrap and reviewable settings operations, ready before publishing-workflow activation.
-The original shared bootstrap and settings rollout have shipped; the subsequently requested GitHub template remains a new implementation task.
+The original shared bootstrap and settings rollout have shipped. The subsequently requested GitHub template is also delivered; its configuration command remains an explicit, owner-invoked operation for each new repository.
 
 ### Phase 3: Design and implement the publishing skill
 
@@ -737,6 +737,26 @@ Matching fields were not rewritten during that comparison. Accepted updates clea
 Standard SSH aliases were requested for each target under Chinh's explicit deduplication assumption. HTTPS-only readback does not independently prove SSH alias matching.
 This is settings application and exposed-field verification, not a fresh runtime or publishing test for each of the 11 non-pilot projects.
 Owner-managed bot access grants remain separate from Amp's GitHub integration. Notes/password transport, cold-image installation and independent proof of VM suspension remain outside the verified result.
+
+### Reusable-template delivery, 2 November 2026
+
+The public template flag and effective bot Write access without admin access were checked before publishing.
+An initial bot commit established the empty repository's `main` branch with only `.gitignore`; the implementation then shipped through [template PR #1](https://github.com/lelouvincx/template/pull/1).
+The approved publisher merged the passing final head as `d0e9c5d67e67753907bf5855c97c517f51acc555`.
+The template contains thin lifecycle hooks, a project-owned customization/application hook, an explicit personal Amp configuration command, guidance, shell regressions and read-only CI. It contains no application stack or deployment workflow.
+Only the template repository was added to the shared bot allowlist. Generated repositories still need their own approved policy entry and effective GitHub access.
+
+Generated local copies passed lifecycle tests with real local Git and configuration tests with a mocked Amp CLI.
+The configuration tests cover immediate ID recording, partial-failure recovery, exact repository identity, ownership checks, unchanged unmanaged settings and repeat-run no writes.
+Supported live CLI readback confirmed that Ship settings and additional repositories are omitted and standard SSH aliases may be deduplicated to HTTPS.
+The command compares canonical repository identities and explicitly reports omitted fields as unverified. Its local receipt records a successful apply, not proof against hidden remote drift.
+No new live Amp mapping or GitHub access grant was created during these tests.
+
+A generated local copy ran the real shared setup, resume, two syncs and override-removal sync with isolated HOME and runtime paths.
+Baseline-first customization, exactly one override marker, no application stage during sync and unrelated-runtime preservation passed.
+Tracked shared-source contents and HEAD stayed unchanged. The existing shared remote-fetch code left two scratch files; moving only those newly created files out restored the original source status.
+This is a warm local runtime check, not a cold Orb installation or independent platform pause/wake test. The pre-existing remote-fetch scratch-file issue remains outside the template change.
+Shared policy/resolver tests passed 64 cases; bot publisher contracts passed 130 cases. Policy/RFC validation, full repository pre-push checks and isolated/live projection also passed.
 
 ## Open questions
 
