@@ -61,6 +61,7 @@ and this project does not currently use versioned releases.
 
 ### Added
 
+- Add the slack-events Worker and RFC-0016 so an Amp thread can watch a Slack thread and receive its replies and reactions while its orb sleeps. [#307](https://github.com/lelouvincx/agent-skills/pull/307)
 - Add a curated JSON Slack directory with Holistics people, DM IDs, and joined channels, emphasizing anfra- and data- channels. [#295](https://github.com/lelouvincx/agent-skills/pull/295)
 - Add the `elevenlabs` agent-secrets bundle and `elevenlabs-tts` command class so Python scripts can resolve `ELEVENLABS_API_KEY`. [#290](https://github.com/lelouvincx/agent-skills/pull/290)
 - Register the Anfra interaction patterns gallery with its local checkout, spoken aliases, and Amp-hosted orb launcher. [#289](https://github.com/lelouvincx/agent-skills/pull/289)
