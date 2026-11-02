@@ -45,12 +45,22 @@ The selector switches back when the preferred account recovers above the thresho
 
 ### Set up management access
 
-Create a dedicated random password in 1Password. Use its `op://` reference, never the password itself, in commands.
-The 1Password CLI must be able to resolve this reference when the hourly job runs. An interactive approval prompt may prevent unattended checks.
+Create a dedicated random password in the `Agent Secrets` vault in 1Password.
+Register its reference in `~/.credentials/agent-secrets/amp-claude-selector.env`:
+
+```text
+CLIPROXY_MANAGEMENT_KEY=op://Agent Secrets/YOUR_ITEM/password
+```
+
+Keep the bundle directory at mode `0700` and the file at mode `0600`.
+Run `./sync-skills.sh` to project the bundle policy.
+The selector automatically invokes `agent-secrets run --strict-service-account --bundle amp-claude-selector` for commands that need management access.
+The existing service account must have read access to this item. There is no interactive authentication fallback.
+Only the registered selector executable can receive this bundle; the service-account token never reaches the selector.
+Status, policy configuration, pause, resume and uninstall do not resolve the management key.
 
 ```bash
-amp-claude-selector setup-management \
-  --management-key-ref 'op://YOUR_VAULT/YOUR_ITEM/password'
+amp-claude-selector setup-management
 
 docker compose -f ~/.local/share/amp-cliproxy/docker-compose.yml up -d --force-recreate
 ```
@@ -59,8 +69,25 @@ docker compose -f ~/.local/share/amp-cliproxy/docker-compose.yml up -d --force-r
 Recreating the container is necessary because the config is bind-mounted and the helper replaces it atomically.
 Keep `remote-management.allow-remote: false`. Do not set `MANAGEMENT_PASSWORD`, which overrides that protection.
 The selector makes management calls from a short-lived `curlimages/curl:8.12.1` container sharing the proxy's network namespace.
-The management password travels on stdin, not in process arguments, environment variables or logs.
+Agent-secrets injects the management key into the selector's environment for that process only.
+The selector removes the key from subprocess environments and passes it to curl on stdin, not in process arguments or logs.
 Docker downloads the helper image on first use. No new host Python package is required.
+
+### Rotate the management key
+
+Pause automation before changing the password. Proxy recreation briefly interrupts inference traffic for all clients.
+
+1. Run `amp-claude-selector pause`.
+2. Change the password value in the existing 1Password item.
+3. Run `amp-claude-selector setup-management` to write the new bcrypt hash.
+4. Run `docker compose -f ~/.local/share/amp-cliproxy/docker-compose.yml up -d --force-recreate`.
+5. Run `amp-claude-selector accounts` to verify management authentication.
+6. Run `amp-claude-selector resume`, then inspect `amp-claude-selector status` after the initial check.
+
+If the item and field stay the same, no bundle, selector configuration or LaunchAgent change is needed.
+If the reference changes, update `amp-claude-selector.env` before step 3. Keep the item in the `Agent Secrets` vault.
+Changing only the 1Password value leaves the proxy accepting the old key, so selector authentication fails until steps 3 and 4 finish.
+This key is separate from the inference API key and Claude OAuth tokens; rotation does not require Claude login or Amp provider changes.
 
 ### Log into both accounts
 
@@ -73,8 +100,7 @@ Avoid inference traffic during initial setup. Account selection affects every cl
 List the saved credential names:
 
 ```bash
-amp-claude-selector accounts \
-  --management-key-ref 'op://YOUR_VAULT/YOUR_ITEM/password'
+amp-claude-selector accounts
 ```
 
 Install with the actual names from the list:
@@ -82,8 +108,7 @@ Install with the actual names from the list:
 ```bash
 amp-claude-selector install \
   --preferred 'COMPANY_AUTH_FILE.json' \
-  --fallback 'PERSONAL_AUTH_FILE.json' \
-  --management-key-ref 'op://YOUR_VAULT/YOUR_ITEM/password'
+  --fallback 'PERSONAL_AUTH_FILE.json'
 
 amp-claude-selector run
 amp-claude-selector status
@@ -125,10 +150,81 @@ CLIProxyAPI v7 can acknowledge status changes even when auth-file persistence fa
 Do not toggle credentials concurrently in another management client. The selector's lock coordinates only its own commands.
 
 State and logs are under `~/.local/state/amp-claude-subscription-selector/`, with user-only permissions.
-Configuration stores credential names, policy and a 1Password reference, never the resolved management password.
+Configuration stores credential names and policy, never the resolved management password.
+The 1Password reference belongs only in the private agent-secrets bundle file.
+Existing installed configuration and LaunchAgents continue working; a later `configure` drops the obsolete `management_key_ref` field.
 The LaunchAgent is `~/Library/LaunchAgents/com.ampcode.claude-subscription-selector.plist`.
 The state directory and LaunchAgent label retain their existing names so the command rename does not reset installed configuration.
 Changes apply to new requests. Existing requests are not migrated, and subsequent conversation context can be sent through the newly selected account.
+
+## Durable work-only token history
+
+CLIProxyAPI v7.3.15 exposes a destructive, in-memory `/v0/management/usage-queue`,
+not a durable usage export. Enabling `usage-statistics-enabled` alone is insufficient.
+The selector can drain this queue into a local SQLite history without making inference requests.
+
+After approval to restart the shared proxy, run:
+
+```bash
+amp-claude-selector usage-install
+amp-claude-selector usage-report
+amp-claude-selector usage-report --details
+```
+
+Installation verifies the preferred credential against the Management API's file-backed
+Claude account entry, including its `@holistics.io` email, filename and `auth_index`.
+It pins that identity in `work-usage-account.json`. Each collection revalidates the binding
+before draining the queue. A changed identity stops collection rather than guessing from
+the currently selected account. This verifies the proxy's credential attribution, not
+the business purpose of individual requests made with that credential.
+
+Installation enables statistics, sets queue retention to 3600 seconds, restarts only the
+existing container and installs `com.ampcode.claude-work-usage` as a macOS LaunchAgent.
+It runs `usage-collect` every 15 seconds while the user is logged in, independently of
+the account selector's pause state. Account routing and personal fallback remain unchanged.
+Collection shares the selector lock and existing registered agent-secrets boundary.
+It does not introduce another secret consumer or expose remote management.
+
+The state directory `~/.local/state/amp-claude-subscription-selector/` contains:
+
+- `work-usage.sqlite`: committed work records, with mode `0600` inside the mode `0700` state directory;
+- `work-usage-account.json`: the verified work credential binding;
+- `work-usage-last.json`: the latest collection timestamp and stored, excluded and rejected counts.
+
+Each work record retains the original timestamp, model, request ID, verified account,
+failure flag and non-overlapping v2 token counters: uncached input, output, cache read
+and cache write. Incomplete or malformed work counters are rejected, not estimated.
+Identical records deduplicate. Totals include recorded failed attempts when they have
+valid counters. They represent provider usage events, not necessarily one event per
+client request. Personal, unknown-account and non-Claude events are discarded before
+storage. API keys, OAuth tokens, response headers, prompts and raw queue payloads are
+never stored in the history. `usage-report` reads the database without resolving secrets.
+An old `last_collection` timestamp indicates missing or failed collection.
+
+For planned restarts, stop client traffic and let in-flight requests finish, then run:
+
+```bash
+amp-claude-selector usage-restart
+```
+
+This drains the queue before restarting and checks collection after startup. Stored
+history survives container restarts and recreation because it lives on the host.
+There is no historical backfill and no zero-loss guarantee: a crash, direct Docker
+restart, competing queue consumer, WebSocket usage subscriber, collector outage beyond
+retention, or failure between queue removal and SQLite commit can lose uncollected
+records. The upstream queue gives no acknowledgement or replay facility. Avoid other
+usage consumers. Keep this limitation when interpreting reported totals.
+
+To stop collection without changing account routing or deleting history:
+
+```bash
+launchctl bootout "gui/$(id -u)" "$HOME/Library/LaunchAgents/com.ampcode.claude-work-usage.plist"
+rm "$HOME/Library/LaunchAgents/com.ampcode.claude-work-usage.plist"
+```
+
+Statistics remain enabled after stopping collection; the queue expires in memory.
+Do not run inference examples or provider tests as part of tracking verification
+without separate approval, because those requests can be billed.
 
 ## Local verification
 

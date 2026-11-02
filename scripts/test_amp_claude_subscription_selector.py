@@ -6,8 +6,10 @@ import importlib.machinery
 import importlib.util
 import io
 import json
+import os
 import plistlib
 import shutil
+import subprocess
 import tempfile
 import threading
 import unittest
@@ -32,7 +34,6 @@ CONFIG = {
     "interval": 3600,
     "container": "amp-cliproxyapi",
     "docker": "docker",
-    "management_key_ref": "op://vault/item/password",
 }
 
 
@@ -80,8 +81,6 @@ class PolicyTests(unittest.TestCase):
                 "c",
                 "--fallback",
                 "p",
-                "--management-key-ref",
-                CONFIG["management_key_ref"],
             ]
         )
         self.assertEqual(
@@ -259,9 +258,41 @@ class TransportTests(unittest.TestCase):
                 api.quota(FakeAPI().entries[0], "weekly")
             self.assertEqual(call.call_count, 3)
 
-    def test_secret_reference_required(self):
-        with self.assertRaises(selector.SelectorError):
-            selector.secret("plaintext")
+    def test_injected_key_required_and_not_trimmed(self):
+        for value in ("", "fixture\n", "fixture\r"):
+            with (
+                self.subTest(value=value),
+                patch.dict(os.environ, {selector.KEY_VARIABLE: value}, clear=True),
+                self.assertRaises(selector.SelectorError),
+            ):
+                selector.secret()
+        with patch.dict(os.environ, {selector.KEY_VARIABLE: " fixture "}, clear=True):
+            self.assertEqual(selector.secret(), " fixture ")
+
+    def test_command_does_not_forward_key_or_authentication(self):
+        with (
+            patch.dict(
+                os.environ,
+                {
+                    selector.KEY_VARIABLE: "fixture",
+                    "OP_SERVICE_ACCOUNT_TOKEN": "fixture-token",
+                    "AGENT_SECRET_AUTH": "interactive",
+                },
+            ),
+            patch.object(
+                selector.subprocess,
+                "run",
+                return_value=subprocess.CompletedProcess([], 0, stdout="ok"),
+            ) as run,
+        ):
+            self.assertEqual(selector.command(["docker"], "fixture"), "ok")
+        environment = run.call_args.kwargs["env"]
+        for name in (
+            selector.KEY_VARIABLE,
+            "OP_SERVICE_ACCOUNT_TOKEN",
+            "AGENT_SECRET_AUTH",
+        ):
+            self.assertNotIn(name, environment)
 
 
 class LifecycleTests(unittest.TestCase):
@@ -274,6 +305,7 @@ class LifecycleTests(unittest.TestCase):
         self.patchers = [
             patch.object(selector, "STATE", self.state),
             patch.object(selector, "AGENT", self.agent),
+            patch.dict(os.environ, {selector.KEY_VARIABLE: "fixture"}),
         ]
         for p in self.patchers:
             p.start()
@@ -446,6 +478,61 @@ Reason: preferred subscription still has remaining quota
         self.assertNotIn("op://", self.agent.read_text())
         self.assertEqual(self.agent.stat().st_mode & 0o777, 0o600)
 
+    def test_missing_key_dispatches_to_strict_bundle_before_lock(self):
+        with (
+            patch.dict(os.environ, {}, clear=True),
+            patch.object(selector.shutil, "which", return_value="/bin/agent-secrets"),
+            patch.object(
+                selector.subprocess,
+                "run",
+                return_value=subprocess.CompletedProcess([], 0),
+            ) as run,
+            patch.object(selector.fcntl, "flock") as lock,
+            self.assertRaises(SystemExit) as exit_code,
+        ):
+            self.invoke("accounts")
+        self.assertEqual(exit_code.exception.code, 0)
+        self.assertEqual(
+            run.call_args.args[0],
+            [
+                "/bin/agent-secrets",
+                "run",
+                "--strict-service-account",
+                "--bundle",
+                "amp-claude-selector",
+                "--",
+                str(ROOT / "bin/amp-claude-selector"),
+                "accounts",
+            ],
+        )
+        lock.assert_not_called()
+
+    def test_secret_free_status_and_paused_run_do_not_resolve(self):
+        (self.state / "paused").touch()
+        with (
+            patch.dict(os.environ, {}, clear=True),
+            patch.object(selector.subprocess, "run") as run,
+        ):
+            self.status(loaded=False)
+            with self.assertRaises(selector.SelectorError):
+                self.invoke("run")
+        run.assert_not_called()
+
+    def test_resolution_failure_records_failed_check(self):
+        with (
+            patch.dict(os.environ, {}, clear=True),
+            patch.object(selector.shutil, "which", return_value="/bin/agent-secrets"),
+            patch.object(
+                selector.subprocess,
+                "run",
+                return_value=subprocess.CompletedProcess([], 1),
+            ),
+            self.assertRaises(SystemExit),
+        ):
+            self.invoke("run")
+        result = json.loads((self.state / "last-run.json").read_text())
+        self.assertEqual((result["result"], result["selected"]), ("failed", "unknown"))
+
     def test_install_run_and_uninstall(self):
         api = FakeAPI(company=60)
         with (
@@ -460,8 +547,6 @@ Reason: preferred subscription still has remaining quota
                 "company.json",
                 "--fallback",
                 "personal.json",
-                "--management-key-ref",
-                CONFIG["management_key_ref"],
             )
             self.assertTrue(self.agent.exists())
             self.invoke("run")
@@ -490,8 +575,6 @@ Reason: preferred subscription still has remaining quota
                 "company.json",
                 "--fallback",
                 "personal.json",
-                "--management-key-ref",
-                CONFIG["management_key_ref"],
             )
         self.assertTrue((self.state / "paused").exists())
 
@@ -508,7 +591,6 @@ Reason: preferred subscription still has remaining quota
             selector.setup_management(
                 argparse.Namespace(
                     runtime=str(runtime),
-                    management_key_ref=CONFIG["management_key_ref"],
                 )
             )
         text = path.read_text()

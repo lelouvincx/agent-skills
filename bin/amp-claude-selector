@@ -5,12 +5,14 @@ import argparse
 import datetime as dt
 import email.utils
 import fcntl
+import hashlib
 import json
 import math
 import os
 import plistlib
 import re
 import shutil
+import sqlite3
 import subprocess
 import sys
 import time
@@ -25,6 +27,7 @@ STATE = Path(
 )
 AGENT = Path.home() / "Library/LaunchAgents" / f"{LABEL}.plist"
 CURL_IMAGE = "curlimages/curl:8.12.1"
+KEY_VARIABLE = "CLIPROXY_MANAGEMENT_KEY"
 
 
 class SelectorError(Exception):
@@ -32,9 +35,18 @@ class SelectorError(Exception):
 
 
 def command(args, data=None):
+    environment = dict(os.environ)
+    for name in (KEY_VARIABLE, "OP_SERVICE_ACCOUNT_TOKEN", "AGENT_SECRET_AUTH"):
+        environment.pop(name, None)
     try:
         result = subprocess.run(
-            args, input=data, text=True, capture_output=True, timeout=90, check=False
+            args,
+            input=data,
+            text=True,
+            capture_output=True,
+            timeout=90,
+            check=False,
+            env=environment,
         )
     except (OSError, subprocess.TimeoutExpired) as exc:
         raise SelectorError(f"Could not execute {Path(args[0]).name}") from exc
@@ -64,11 +76,8 @@ def load():
         raise SelectorError("Not configured; run install first") from exc
 
 
-def secret(reference):
-    if not reference.startswith("op://"):
-        raise SelectorError("Management key must be a 1Password op:// reference")
-    # agent-secrets currently has no arbitrary read capability; use op directly.
-    value = command(["op", "read", "--account", "my.1password.com", reference]).strip()
+def secret():
+    value = os.environ.get(KEY_VARIABLE, "")
     if not value or any(char in value for char in "\r\n"):
         raise SelectorError("Management key is empty or contains a newline")
     return value
@@ -77,7 +86,7 @@ def secret(reference):
 class API:
     def __init__(self, config):
         self.config = config
-        self.key = secret(config["management_key_ref"])
+        self.key = secret()
 
     def call(self, method, endpoint, payload=None):
         # Share only the proxy's network namespace. The key travels on stdin,
@@ -114,6 +123,10 @@ class API:
             response = json.loads(output)
         except ValueError as exc:
             raise SelectorError("Management API returned invalid JSON") from exc
+        if endpoint.startswith("usage-queue?"):
+            if not isinstance(response, list):
+                raise SelectorError("Management API returned an invalid usage queue")
+            return response
         if not isinstance(response, dict):
             raise SelectorError("Management API response is not an object")
         return response
@@ -364,7 +377,7 @@ def setup_management(args):
         raise SelectorError(
             "Expected one local-only remote-management block; review config manually"
         )
-    value = secret(args.management_key_ref)
+    value = secret()
     hashed = (
         command(["/usr/sbin/htpasswd", "-niBC", "12", "selector"], value + "\n")
         .strip()
@@ -495,13 +508,248 @@ def status_report(config):
     print(f"Reason: {reason}")
 
 
+USAGE_LABEL = "com.ampcode.claude-work-usage"
+
+
+def usage_account(api, config):
+    account = resolve(api.accounts(), config["preferred"])
+    email = account.get("email", "")
+    if (
+        not isinstance(email, str)
+        or not email.endswith("@holistics.io")
+        or not account["name"].endswith("-" + email + ".json")
+    ):
+        raise SelectorError(
+            "Work credential email is not verified by the provider account list"
+        )
+    return {
+        "name": account["name"],
+        "email": email,
+        "auth_index": account["auth_index"],
+    }
+
+
+def usage_database():
+    database = sqlite3.connect(STATE / "work-usage.sqlite")
+    database.execute("pragma synchronous=full")
+    database.execute(
+        "create table if not exists requests (request_key text primary key, payload text not null)"
+    )
+    os.chmod(STATE / "work-usage.sqlite", 0o600)
+    return database
+
+
+def usage_row(record, account):
+    # Never save raw queue payloads: they include API keys and response headers.
+    if not isinstance(record, dict):
+        return None
+    if (
+        record.get("provider") != "claude"
+        or record.get("auth_index") != account["auth_index"]
+    ):
+        return None
+    breakdown = record.get("token_breakdown", {})
+    if breakdown.get("schema_version") != 2 or breakdown.get("quality") != "complete":
+        raise SelectorError("Work usage has no complete v2 token breakdown")
+    timestamp = record.get("timestamp")
+    parsed = dt.datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+    if parsed.tzinfo is None:
+        raise SelectorError("Work usage timestamp has no timezone")
+    model = record.get("model")
+    request_id = record.get("request_id")
+    if (
+        not isinstance(model, str)
+        or not model
+        or not isinstance(request_id, str)
+        or not request_id
+    ):
+        raise SelectorError("Work usage is missing model or request identity")
+    counts = {
+        "uncached_input": breakdown["input"]["uncached_tokens"],
+        "output": breakdown["output"]["total_tokens"],
+        "cache_read": breakdown["input"]["cache_read_tokens"],
+        "cache_write": breakdown["input"]["cache_write_tokens"],
+    }
+    if any(type(value) is not int or value < 0 for value in counts.values()):
+        raise SelectorError("Work usage token counts are invalid")
+    if sum(counts.values()) != breakdown.get("total_tokens"):
+        raise SelectorError("Work usage token breakdown is inconsistent")
+    if type(record.get("failed")) is not bool:
+        raise SelectorError("Work usage outcome is missing")
+    return {
+        "timestamp": timestamp,
+        "model": model,
+        "request_id": request_id,
+        "account": account,
+        "failed": record["failed"],
+        "tokens": counts,
+    }
+
+
+def collect_usage(api, config):
+    binding = json.loads((STATE / "work-usage-account.json").read_text())
+    account = usage_account(api, config)
+    if account != binding:
+        raise SelectorError(
+            "Work account identity changed; review before reinstalling tracking"
+        )
+    if (
+        api.call("GET", "usage-statistics-enabled").get("usage-statistics-enabled")
+        is not True
+    ):
+        raise SelectorError("Proxy usage statistics are disabled")
+    stored = excluded = rejected = 0
+    with usage_database() as database:
+        while True:
+            records = api.call("GET", "usage-queue?count=1000")
+            for item in records:
+                try:
+                    row = usage_row(item, account)
+                except (SelectorError, KeyError, TypeError, ValueError, AttributeError):
+                    rejected += 1
+                    continue
+                if row is None:
+                    excluded += 1
+                    continue
+                # A request can have multiple provider attempts; timestamp and
+                # model distinguish those while identical redeliveries deduplicate.
+                payload = json.dumps(row, sort_keys=True)
+                key = hashlib.sha256(payload.encode()).hexdigest()
+                stored += database.execute(
+                    "insert or ignore into requests values (?, ?)", (key, payload)
+                ).rowcount
+            database.commit()
+            if len(records) < 1000:
+                break
+    result = {
+        "collected_at": dt.datetime.now(dt.timezone.utc).isoformat(),
+        "stored": stored,
+        "excluded": excluded,
+        "rejected": rejected,
+    }
+    save(STATE / "work-usage-last.json", result)
+    if rejected:
+        raise SelectorError(
+            "Rejected malformed work usage; inspect work-usage-last.json for count"
+        )
+    return result
+
+
+def usage_report(details=False):
+    if not (STATE / "work-usage.sqlite").exists():
+        raise SelectorError("No durable work history; run usage-install first")
+    with usage_database() as database:
+        rows = [
+            json.loads(row[0])
+            for row in database.execute("select payload from requests")
+        ]
+    totals = dict.fromkeys(("uncached_input", "output", "cache_read", "cache_write"), 0)
+    for row in rows:
+        for name, value in row["tokens"].items():
+            totals[name] += value
+    result = {
+        "requests": len(rows),
+        "tokens": totals,
+        "scope": "verified work credentials only",
+    }
+    if details:
+        result["history"] = sorted(rows, key=lambda row: row["timestamp"])
+    last = STATE / "work-usage-last.json"
+    result["last_collection"] = json.loads(last.read_text()) if last.exists() else None
+    print(json.dumps(result, indent=2))
+
+
+def restart_usage(api, config):
+    collect_usage(api, config)
+    command([config["docker"], "restart", config["container"]])
+    for attempt in range(12):
+        try:
+            collect_usage(api, config)
+            return
+        except SelectorError:
+            if attempt == 11:
+                raise
+            time.sleep(2)
+
+
+def install_usage(api, config, runtime):
+    account = usage_account(api, config)
+    binding_path = STATE / "work-usage-account.json"
+    if binding_path.exists() and json.loads(binding_path.read_text()) != account:
+        raise SelectorError(
+            "Existing work binding differs; explicit history migration required"
+        )
+    save(binding_path, account)
+    # Keep the bind-mounted inode: atomic replacement would leave Docker reading
+    # the old config. Do not print, copy or export any existing secret values.
+    path = Path(runtime).expanduser() / "config.yaml"
+    original = path.read_text()
+    replacement = original
+    for name, value in (
+        ("usage-statistics-enabled", "true"),
+        ("redis-usage-queue-retention-seconds", "3600"),
+    ):
+        pattern = rf"(?m)^{name}:.*$"
+        if len(re.findall(pattern, replacement)) > 1:
+            raise SelectorError(
+                "Duplicate usage config setting; review config manually"
+            )
+        replacement = (
+            re.sub(pattern, f"{name}: {value}", replacement)
+            if re.search(pattern, replacement)
+            else replacement.rstrip() + f"\n{name}: {value}\n"
+        )
+    if (
+        api.call("GET", "usage-statistics-enabled").get("usage-statistics-enabled")
+        is True
+    ):
+        collect_usage(api, config)
+    with path.open("r+") as stream:
+        stream.write(replacement)
+        stream.truncate()
+        stream.flush()
+        os.fsync(stream.fileno())
+    # Restart only the existing container, never pull the moving latest tag.
+    command([config["docker"], "restart", config["container"]])
+    for attempt in range(12):
+        try:
+            collect_usage(api, config)
+            break
+        except SelectorError:
+            if attempt == 11:
+                raise
+            time.sleep(2)
+    agent = AGENT.with_name(USAGE_LABEL + ".plist")
+    plist = {
+        "Label": USAGE_LABEL,
+        "ProgramArguments": [str(Path(__file__).resolve()), "usage-collect"],
+        "StartInterval": 15,
+        "RunAtLoad": True,
+        "EnvironmentVariables": {
+            "HOME": str(Path.home()),
+            "PATH": os.environ.get("PATH", ""),
+            "AMP_CLAUDE_SELECTOR_STATE_DIR": str(STATE),
+        },
+        "StandardOutPath": "/dev/null",
+        "StandardErrorPath": "/dev/null",
+    }
+    domain = f"gui/{os.getuid()}"
+    if agent.exists():
+        command(["launchctl", "bootout", domain, str(agent)])
+    agent.parent.mkdir(parents=True, exist_ok=True)
+    with agent.open("wb") as stream:
+        os.chmod(agent, 0o600)
+        plistlib.dump(plist, stream)
+    command(["launchctl", "bootstrap", domain, str(agent)])
+    print("Work-only usage collector installed; routing unchanged")
+
+
 def parser():
     root = argparse.ArgumentParser(description=__doc__)
     commands = root.add_subparsers(dest="action", required=True)
     setup = commands.add_parser(
         "setup-management", help="Configure a local-only hashed management key"
     )
-    setup.add_argument("--management-key-ref", required=True)
     setup.add_argument(
         "--runtime", default=str(Path.home() / ".local/share/amp-cliproxy")
     )
@@ -512,7 +760,6 @@ def parser():
     install.add_argument(
         "--fallback", required=True, help="Personal Claude auth filename"
     )
-    install.add_argument("--management-key-ref", required=True)
     install.add_argument("--container", default="amp-cliproxyapi")
     for action in (install, commands.add_parser("configure")):
         action.add_argument(
@@ -529,8 +776,24 @@ def parser():
     accounts = commands.add_parser(
         "accounts", help="List credentials before or after install"
     )
-    accounts.add_argument("--management-key-ref")
     accounts.add_argument("--container", default="amp-cliproxyapi")
+    usage_install = commands.add_parser(
+        "usage-install", help="Enable work-only durable tracking and restart proxy"
+    )
+    usage_install.add_argument(
+        "--runtime", default=str(Path.home() / ".local/share/amp-cliproxy")
+    )
+    commands.add_parser(
+        "usage-collect", help="Drain usage queue into sanitized work history"
+    )
+    commands.add_parser(
+        "usage-restart",
+        help="Drain history, restart existing proxy and verify collection",
+    )
+    report = commands.add_parser(
+        "usage-report", help="Report only durable, verified work history"
+    )
+    report.add_argument("--details", action="store_true")
     for name in ("run", "status", "pause", "resume", "uninstall"):
         commands.add_parser(name)
     use = commands.add_parser(
@@ -545,6 +808,47 @@ def main():
     os.umask(0o077)
     STATE.mkdir(parents=True, exist_ok=True, mode=0o700)
     os.chmod(STATE, 0o700)
+    needs_key = args.action in {
+        "setup-management",
+        "install",
+        "accounts",
+        "use",
+        "run",
+        "usage-install",
+        "usage-collect",
+        "usage-restart",
+    }
+    if args.action == "run" and (STATE / "paused").exists():
+        needs_key = False
+    if needs_key and KEY_VARIABLE not in os.environ:
+        resolver = shutil.which("agent-secrets")
+        if not resolver:
+            raise SelectorError("agent-secrets is not installed; run sync-skills.sh")
+        # Resolve before taking the lock: the approved child takes the same lock.
+        result = subprocess.run(
+            [
+                resolver,
+                "run",
+                "--strict-service-account",
+                "--bundle",
+                "amp-claude-selector",
+                "--",
+                str(Path(__file__).resolve()),
+                *sys.argv[1:],
+            ],
+            check=False,
+        )
+        # Resolver failures use exit 1. The selector child uses exit 2 and has
+        # already recorded its specific failure while holding the selector lock.
+        if args.action == "run" and result.returncode == 1:
+            record(
+                {
+                    "result": "failed",
+                    "selected": "unknown",
+                    "reason": "Agent-secrets resolution failed",
+                }
+            )
+        raise SystemExit(result.returncode)
     with (STATE / "selector.lock").open("a") as lock:
         try:
             # RunAtLoad can start before install/resume releases its lock.
@@ -558,9 +862,8 @@ def main():
         if args.action == "setup-management":
             setup_management(args)
             return
-        if args.action == "accounts" and args.management_key_ref:
+        if args.action == "accounts" and not (STATE / "config.json").exists():
             config = {
-                "management_key_ref": args.management_key_ref,
                 "container": args.container,
                 "docker": shutil.which("docker") or "docker",
             }
@@ -578,7 +881,6 @@ def main():
             config = {
                 "preferred": args.preferred,
                 "fallback": args.fallback,
-                "management_key_ref": args.management_key_ref,
                 "container": args.container,
                 "docker": docker,
                 "window": args.window,
@@ -610,7 +912,17 @@ def main():
             print("Uninstalled scheduler; account selection unchanged")
             return
         config = load()
-        if args.action == "configure":
+        config.pop("management_key_ref", None)
+        if args.action == "usage-install":
+            install_usage(API(config), config, args.runtime)
+        elif args.action == "usage-collect":
+            print(json.dumps(collect_usage(API(config), config)))
+        elif args.action == "usage-restart":
+            restart_usage(API(config), config)
+            print("Proxy restarted; durable work history retained")
+        elif args.action == "usage-report":
+            usage_report(args.details)
+        elif args.action == "configure":
             if all(
                 getattr(args, field) is None
                 for field in ("window", "threshold", "interval")
@@ -670,7 +982,7 @@ def main():
 if __name__ == "__main__":
     try:
         main()
-    except (SelectorError, OSError, ValueError, KeyError, TypeError) as error:
+    except (SelectorError, OSError, ValueError, KeyError, TypeError, sqlite3.Error) as error:
         # Avoid emitting potentially sensitive malformed API/config contents.
         message = (
             str(error)
