@@ -9,6 +9,7 @@ and this project does not currently use versioned releases.
 
 ### Changed
 
+- Prepare the reusable personal-project template contract and authorize its bounded bot publisher. [#303](https://github.com/lelouvincx/agent-skills/pull/303)
 - Record the 13-project Amp settings rollout, verified live pilots and SmartClass readiness delivery, with explicit readback limitations and deferred work. [#302](https://github.com/lelouvincx/agent-skills/pull/302)
 - Complete the personal-project runtime contract with working-checkout sync, canonical shipping guidance, approved bot scope, and identity, transport and exact-head publishing checks. [#301](https://github.com/lelouvincx/agent-skills/pull/301)
 - Preserve selected Orb infrastructure checkouts: accept linked worktrees, refuse existing invalid paths without deletion, skip refresh for all local work, and perform one canonical pre-setup refresh with regression coverage. [#300](https://github.com/lelouvincx/agent-skills/pull/300)
