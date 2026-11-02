@@ -9,6 +9,8 @@ and this project does not currently use versioned releases.
 
 ### Changed
 
+- Handle Claude usage rate limits with bounded Retry-After-aware retries and safe HTTP diagnostics, preserving account selection when fresh quota is unavailable. [#305](https://github.com/lelouvincx/agent-skills/pull/305)
+- Default new personal projects to lelouvincx/template, following generated setup instructions and keeping existing-project migrations opt-in. [#304](https://github.com/lelouvincx/agent-skills/pull/304)
 - Prepare the reusable personal-project template contract and authorize its bounded bot publisher. [#303](https://github.com/lelouvincx/agent-skills/pull/303)
 - Record the 13-project Amp settings rollout, verified live pilots and SmartClass readiness delivery, with explicit readback limitations and deferred work. [#302](https://github.com/lelouvincx/agent-skills/pull/302)
 - Complete the personal-project runtime contract with working-checkout sync, canonical shipping guidance, approved bot scope, and identity, transport and exact-head publishing checks. [#301](https://github.com/lelouvincx/agent-skills/pull/301)
@@ -62,6 +64,7 @@ and this project does not currently use versioned releases.
 ### Added
 
 - Add the slack-events Worker and RFC-0016 so an Amp thread can watch a Slack thread and receive its replies and reactions while its orb sleeps. [#307](https://github.com/lelouvincx/agent-skills/pull/307)
+- Persist verified work-only Claude proxy token history with separate input, output and cache counters, sanitized host SQLite storage, restart-aware collection and strict service-account management-key resolution. [#306](https://github.com/lelouvincx/agent-skills/pull/306)
 - Add a curated JSON Slack directory with Holistics people, DM IDs, and joined channels, emphasizing anfra- and data- channels. [#295](https://github.com/lelouvincx/agent-skills/pull/295)
 - Add the `elevenlabs` agent-secrets bundle and `elevenlabs-tts` command class so Python scripts can resolve `ELEVENLABS_API_KEY`. [#290](https://github.com/lelouvincx/agent-skills/pull/290)
 - Register the Anfra interaction patterns gallery with its local checkout, spoken aliases, and Amp-hosted orb launcher. [#289](https://github.com/lelouvincx/agent-skills/pull/289)
