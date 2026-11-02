@@ -37,6 +37,7 @@ The shared infrastructure must support its own development Orb, consuming projec
 The shared runtime, shipping skill and hardened publisher have shipped. All 13 approved Amp projects now have GitHub-connected mappings, the canonical pre-setup script and the common custom Ship prompt.
 The SmartClass readiness repair has merged and deployed with passing release probes. Settings readback limitations and deferred work are recorded below; configuration does not prove bot write access.
 The dotfiles and personal-finance consumer migrations have also shipped. Chinh chose to leave the Logseq migration unpublished.
+The separately requested reusable public GitHub template at `lelouvincx/template` has shipped for future personal projects. Its verification and remaining limits are recorded below.
 
 ## Context
 
@@ -62,6 +63,8 @@ Local checkout cleanup is separate from GitHub repository ownership and Amp proj
 - proceed without backups of the old shipping configuration and additional-repository lists; Chinh accepts that their previous values cannot be restored from the captured exports
 - honor an explicit infrastructure checkout override, otherwise reuse Amp's existing additional checkout or a sibling checkout before cloning the fallback
 - stop SmartClass lifecycle execution when a required shared-runtime step fails; replace warning-and-continue behavior
+- prepare shared bootstrap and the reusable project template before the publishing workflow; keep Ship activation after its skill and publisher are verified
+- use the public GitHub template repository `lelouvincx/template` for future personal projects, keeping shared infrastructure in agent-skills
 
 ## Contract
 
@@ -211,6 +214,19 @@ SmartClass currently needs no runtime patches. Its repository-local skills stay 
 Customizations must be idempotent, preserve unrelated runtime files, and fail explicitly.
 Removing a baseline-file override restores baseline contents on the next projection. A removed customization must explicitly clean up files it alone created.
 No automatic project-overlay garbage collection or callback-discovery framework is introduced.
+
+#### Reusable personal-project template
+
+`lelouvincx/template` is the approved public GitHub template repository. Keep it stack-neutral: thin setup, resume and sync entry points, a project-owned customization/application hook, and project guidance.
+The template consumes the existing shared environment contract rather than copying installers, runtime files, skills or publishing logic into each generated repository.
+Generated projects obtain the shared baseline from agent-skills, then apply their own customizations. Explicit runtime sync must not install applications, migrate databases or seed data.
+Do not include credentials, private project content, application dependencies or production deployment workflows in the generic template.
+
+GitHub template generation supplies repository files; it does not copy server-side Amp project settings or grant the bot access to the new repository.
+New-project bootstrap must separately establish the correct GitHub-connected Amp mapping, apply the canonical pre-setup and Ship configuration, and verify readback without altering another project's settings.
+Shipping remains gated by the approved bot policy and effective GitHub permissions. Do not assume that generating a repository authorizes or enables its bot publisher.
+Verify a generated project with shared setup, resume, repeated sync and a project customization, preserving source and unrelated runtime files.
+Repository creation and the GitHub template flag require an approved administrative path; do not substitute owner credentials for the bounded bot publisher.
 
 #### Second-brain access
 
@@ -429,7 +445,25 @@ A fresh `amp projects list --json` confirmed both mappings are absent and the 7 
 The deletion action is complete. The missing-settings backup blocker was subsequently resolved through Chinh's explicit waiver.
 Their GitHub repositories remain outside the deletion request.
 
-### Phase 2: Design and implement the publishing skill
+### Phase 2: Prepare shared bootstrap, template and settings
+
+Agent actions:
+
+1. Implement the environment contract: source acquisition, runtime projection, explicit sync, and project customizations. Decide checkout layout and customization ownership first; test an agent-skills working checkout, a consuming checkout, dirty source, repeated sync, and customization removal. Keep entry points thin and preserve application setup.
+2. Prepare the stack-neutral `lelouvincx/template` repository against that shared contract. Verify generated-project behavior rather than only testing the source template.
+3. Prepare a reviewed, explicit settings command set for selected and future projects using supported Amp interfaces. Do not activate Ship until phase 3 verifies its skill and publisher.
+4. Compute differences before issuing updates. Use complete replacement lists for aliases and additional repositories, including explicit empty values where approved.
+5. Separate existing-project updates from approved project creation. Preserve existing IDs, and record any newly created project ID immediately for recovery.
+6. Record field-level results after each operation. If the connection fails, read current state before retrying a potentially completed write.
+
+Chinh actions:
+
+- create the public template repository, enable its template flag, and grant the approved bot sufficient publishing access when no approved administrative publisher is available
+
+Expected outcome: reusable project bootstrap and reviewable settings operations, ready before publishing-workflow activation.
+The original shared bootstrap and settings rollout have shipped. The subsequently requested GitHub template is also delivered; its configuration command remains an explicit, owner-invoked operation for each new repository.
+
+### Phase 3: Design and implement the publishing skill
 
 Agent actions:
 
@@ -439,6 +473,7 @@ Agent actions:
 4. Implement `shipping-personal-projects` and its short custom Ship prompt. Keep repository-specific release instructions authoritative.
 5. Update affected guidance and callers together: root `AGENTS.md`, `amp/AGENTS.md`, the bot-maintenance convention, and selected repositories' publishing instructions where required.
 6. Remove conflicting duplicated procedures once the skill and hardened helper pass validation. Do not introduce a second publishing executable or personal-identity fallback.
+7. Store the approved Ship prompt beside its owning skill rather than duplicating the procedure per project. Complete the settings payload only after the publishing gates pass.
 
 Chinh actions:
 
@@ -449,19 +484,6 @@ Expected outcome: one readable shipping workflow with verified publishing contro
 Validation must cover wrong repository, unavailable credentials, personal-identity fallback attempts, failed checks, explicit no-merge requests, and unrelated local work.
 Test the successful bot PR flow only against an explicitly approved test repository or PR. Do not merge or deploy production changes merely to test the skill.
 
-### Phase 3: Prepare repeatable settings application
-
-Agent actions:
-
-1. Implement the environment contract before publishing lifecycle scripts: source acquisition, runtime projection, explicit sync, and project customizations. Decide checkout layout and customization ownership first; test an agent-skills working checkout, a consuming checkout, dirty source, repeated sync, and customization removal. Keep entry points thin and preserve application setup.
-2. Store the approved Ship prompt beside its owning skill rather than duplicating the procedure per project.
-3. Prepare a reviewed, explicit command set for each selected project using supported Amp interfaces. Avoid adding a general-purpose configuration framework for this rollout.
-4. Compute differences before issuing updates. Use complete replacement lists for aliases and additional repositories, including explicit empty values where approved.
-5. Separate existing-project updates from approved project creation. Preserve existing IDs, and record any newly created project ID immediately for recovery.
-6. Record field-level results after each operation. If the connection fails, read current state before retrying a potentially completed write.
-
-Expected outcome: reviewable, repeatable operations that touch only approved fields and produce no writes when desired state already matches.
-
 ### Phase 4: Pilot agent-skills and smartclass
 
 Agent actions:
@@ -470,7 +492,7 @@ Agent actions:
 2. Apply approved settings to one baseline project at a time. Read back every managed field before proceeding.
 3. Start fresh and resumed Orbs for each baseline. Confirm the shared runtime is available and repository setup still works.
 4. Verify SmartClass application setup independently of the shared bootstrap. Do not modify production data or deploy during this smoke test.
-5. Verify the Ship prompt loads the canonical skill in both projects. Use the approved publishing test from phase 2 for actual write-path evidence.
+5. Verify the Ship prompt loads the canonical skill in both projects. Use the approved publishing test from phase 3 for actual write-path evidence.
 
 Expected outcome: both baselines pass settings readback and runtime checks. Stop broad rollout if either baseline fails.
 
@@ -715,6 +737,26 @@ Matching fields were not rewritten during that comparison. Accepted updates clea
 Standard SSH aliases were requested for each target under Chinh's explicit deduplication assumption. HTTPS-only readback does not independently prove SSH alias matching.
 This is settings application and exposed-field verification, not a fresh runtime or publishing test for each of the 11 non-pilot projects.
 Owner-managed bot access grants remain separate from Amp's GitHub integration. Notes/password transport, cold-image installation and independent proof of VM suspension remain outside the verified result.
+
+### Reusable-template delivery, 2 November 2026
+
+The public template flag and effective bot Write access without admin access were checked before publishing.
+An initial bot commit established the empty repository's `main` branch with only `.gitignore`; the implementation then shipped through [template PR #1](https://github.com/lelouvincx/template/pull/1).
+The approved publisher merged the passing final head as `d0e9c5d67e67753907bf5855c97c517f51acc555`.
+The template contains thin lifecycle hooks, a project-owned customization/application hook, an explicit personal Amp configuration command, guidance, shell regressions and read-only CI. It contains no application stack or deployment workflow.
+Only the template repository was added to the shared bot allowlist. Generated repositories still need their own approved policy entry and effective GitHub access.
+
+Generated local copies passed lifecycle tests with real local Git and configuration tests with a mocked Amp CLI.
+The configuration tests cover immediate ID recording, partial-failure recovery, exact repository identity, ownership checks, unchanged unmanaged settings and repeat-run no writes.
+Supported live CLI readback confirmed that Ship settings and additional repositories are omitted and standard SSH aliases may be deduplicated to HTTPS.
+The command compares canonical repository identities and explicitly reports omitted fields as unverified. Its local receipt records a successful apply, not proof against hidden remote drift.
+No new live Amp mapping or GitHub access grant was created during these tests.
+
+A generated local copy ran the real shared setup, resume, two syncs and override-removal sync with isolated HOME and runtime paths.
+Baseline-first customization, exactly one override marker, no application stage during sync and unrelated-runtime preservation passed.
+Tracked shared-source contents and HEAD stayed unchanged. The existing shared remote-fetch code left two scratch files; moving only those newly created files out restored the original source status.
+This is a warm local runtime check, not a cold Orb installation or independent platform pause/wake test. The pre-existing remote-fetch scratch-file issue remains outside the template change.
+Shared policy/resolver tests passed 64 cases; bot publisher contracts passed 130 cases. Policy/RFC validation, full repository pre-push checks and isolated/live projection also passed.
 
 ## Open questions
 

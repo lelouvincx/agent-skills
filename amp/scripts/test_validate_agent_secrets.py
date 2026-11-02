@@ -78,6 +78,7 @@ class AgentSecretPolicyValidationTests(unittest.TestCase):
                 "lelouvincx/self-taught-design",
                 "lelouvincx/self-taught-lsp",
                 "lelouvincx/smartclass",
+                "lelouvincx/template",
             ],
             policy["identities"]["lelouvincx-bot"]["repositoryAllowlist"],
         )
