@@ -183,6 +183,48 @@ class TransportTests(unittest.TestCase):
             with self.assertRaises(selector.SelectorError) as error:
                 api.quota(account, "weekly")
             self.assertNotIn("sensitive", str(error.exception))
+            self.assertIn("HTTP 403", str(error.exception))
+
+    def test_usage_rate_limit_retries_are_bounded_and_respect_retry_after(self):
+        success = {
+            "status_code": 200,
+            "body": json.dumps({"seven_day": {"utilization": 12}}),
+        }
+        for header, delays, recovered in (
+            ({}, [5, 10], True),
+            ({"Retry-After": ["20"]}, [20, 20], True),
+            ({"retry-after": "0"}, [5, 10], True),
+            ({"Retry-After": ["invalid"]}, [5, 10], True),
+            ({"Retry-After": ["Thu, 01 Jan 1970 00:00:20 GMT"]}, [20, 20], True),
+            ({"Retry-After": ["3600"]}, [], False),
+            ({}, [5, 10], False),
+        ):
+            with self.subTest(header=header, recovered=recovered):
+                api = self.api()
+                limited = {"status_code": 429, "header": header, "body": "sensitive"}
+                responses = [limited] * len(delays) + [
+                    success if recovered else limited
+                ]
+                with (
+                    patch.object(api, "call", side_effect=responses) as call,
+                    patch.object(selector.time, "sleep") as sleep,
+                    patch.object(selector.time, "time", return_value=0),
+                ):
+                    if recovered:
+                        self.assertEqual(
+                            api.quota(FakeAPI().entries[0], "weekly")["seven_day"][
+                                "remaining"
+                            ],
+                            88,
+                        )
+                    else:
+                        with self.assertRaisesRegex(
+                            selector.SelectorError, "HTTP 429"
+                        ) as error:
+                            api.quota(FakeAPI().entries[0], "weekly")
+                        self.assertNotIn("sensitive", str(error.exception))
+                    self.assertEqual(call.call_count, len(delays) + 1)
+                    self.assertEqual([c.args[0] for c in sleep.call_args_list], delays)
 
     def test_expired_token_refreshed_once(self):
         api = self.api()
