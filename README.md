@@ -245,6 +245,7 @@ Run the relevant repository command directly:
 | Validate runtime projection | `scripts/check-projection` |
 | Build Amp plugins | `scripts/check-plugin-builds` |
 | Validate SDK dependencies | `npm ci --prefix sdk` |
+| Test the Slack events Worker | `npm ci --prefix workers/slack-events && (cd workers/slack-events && bun test && npx cf build)` |
 
 ## Amp capabilities
 
