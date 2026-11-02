@@ -14,7 +14,8 @@ type KVNamespace = {
 	delete(key: string): Promise<void>
 }
 
-type Watch = { amp_thread: string; webhook_url: string; expires_at: number }
+// expires_at is null for a watch that lasts until slack_unwatch or until the Amp thread is archived.
+type Watch = { amp_thread: string; webhook_url: string; expires_at: number | null }
 
 const CHANNEL = /^[CG][A-Z0-9]{2,20}$/
 const TS = /^\d{10}\.\d{6}$/
@@ -51,8 +52,8 @@ async function verifiedSlack(request: Request, body: string, env: WorkerEnv, now
 	return equal(signature, await slackSignature(env.SLACK_SIGNING_SECRET, timestamp, body))
 }
 
-function ttl(expiresAt: number, now: number) {
-	return Math.max(MIN_KV_TTL, Math.floor(expiresAt - now))
+function ttlOptions(expiresAt: number | null, now: number) {
+	return expiresAt === null ? undefined : { expirationTtl: Math.max(MIN_KV_TTL, Math.floor(expiresAt - now)) }
 }
 
 async function readWatch(env: WorkerEnv, key: string): Promise<Watch | null> {
@@ -96,7 +97,7 @@ async function handleEvent(payload: any, env: WorkerEnv, now: number): Promise<R
 		const key = watchKey(channel, threadTs)
 		const watch = await readWatch(env, key)
 		if (!watch) return text('ignored')
-		await env.WATCHES.put(msgKey(channel, ts), key, { expirationTtl: ttl(watch.expires_at, now) })
+		await env.WATCHES.put(msgKey(channel, ts), key, ttlOptions(watch.expires_at, now))
 		return forward(env, key, watch, { event_id: eventId, kind: 'reply', channel, thread_ts: threadTs, ts, user })
 	}
 
@@ -132,12 +133,12 @@ async function handleWatches(request: Request, env: WorkerEnv, now: number): Pro
 		return text('deleted')
 	}
 
-	const days = body.days ?? 7
-	if (!Number.isInteger(days) || days < 1 || days > 30) return text('days must be 1 to 30', 400)
+	const days = body.days ?? null
+	if (days !== null && (!Number.isInteger(days) || days < 1 || days > 30)) return text('days must be 1 to 30, or omitted for no expiry', 400)
 	if (typeof body.webhook_url !== 'string' || !body.webhook_url.startsWith(WEBHOOK_PREFIX)) return text('invalid webhook_url', 400)
-	if (existing && existing.amp_thread !== ampThread && existing.expires_at > now) return text('watched by another thread', 409)
-	const watch: Watch = { amp_thread: ampThread, webhook_url: body.webhook_url, expires_at: now + days * 86400 }
-	await env.WATCHES.put(key, JSON.stringify(watch), { expirationTtl: days * 86400 })
+	if (existing && existing.amp_thread !== ampThread) return text('watched by another thread', 409)
+	const watch: Watch = { amp_thread: ampThread, webhook_url: body.webhook_url, expires_at: days === null ? null : now + days * 86400 }
+	await env.WATCHES.put(key, JSON.stringify(watch), ttlOptions(watch.expires_at, now))
 	return Response.json({ channel, thread_ts: threadTs, expires_at: watch.expires_at })
 }
 

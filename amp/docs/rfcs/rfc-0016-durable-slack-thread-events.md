@@ -86,6 +86,12 @@ Rejected alternatives:
 - direct Slack to Amp webhook: fails Slack's `url_verification` and the 10 events per minute limit
 - one central inbox thread: adds a long-lived thread to protect from archiving; kept as the fallback if gate G1 fails
 
+Limitations:
+
+- `slack_watch` works only in Amp-managed orb threads. `amp.createWebhook` exists only in the orb plugin runtime, so local CLI threads and local runners cannot receive watch events, and `slack_watch` fails there.
+- A watch without `days` ends only through `slack_unwatch`, or when the Worker gets HTTP 404 from an archived Amp thread's webhook. Its `msg:` keys have no TTL either; a key whose watch is gone is ignored and stays in KV.
+- Local threads can still use the read, send and react tools when `SLACK_MCP_XOXC_TOKEN` and `SLACK_MCP_XOXD_TOKEN` are in the local Amp process environment. Personal Amp secrets reach orbs, boxes and runners started with `amp --no-tui --amp-env`, but not an ordinary local `amp` session.
+
 ## Contract
 
 ### Plugin tools
@@ -96,7 +102,7 @@ The `amp-slack` user plugin adds 4 tools:
 | --- | --- | --- |
 | `slack_send` | `channel`, `text`, optional `thread_ts` | Shows a confirmation dialog, then calls `chat.postMessage` as Chinh with `[AI] ` prepended |
 | `slack_react` | `channel`, `ts`, `name` | Shows a confirmation dialog, then calls `reactions.add` as Chinh |
-| `slack_watch` | Slack thread URL, optional `days` (1 to 30, default 7) | Registers this thread's webhook and stores the watch in the Worker |
+| `slack_watch` | Slack thread URL, optional `days` (1 to 30); without `days` the watch has no expiry | Registers this thread's webhook and stores the watch in the Worker |
 | `slack_unwatch` | Slack thread URL | Deletes the watch from the Worker |
 
 The read-only method allowlist becomes an explicit allowlist that also contains `chat.postMessage` and `reactions.add`.
@@ -119,8 +125,8 @@ The read-only method allowlist becomes an explicit allowlist that also contains 
 
 | Key | Value | Expiry |
 | --- | --- | --- |
-| `watch:<channel>:<thread_ts>` | Amp thread ID, Amp webhook URL, expiry | watch expiry |
-| `msg:<channel>:<ts>` | `<channel>:<thread_ts>` for each forwarded reply | watch expiry |
+| `watch:<channel>:<thread_ts>` | Amp thread ID, Amp webhook URL, expiry or `null` | watch expiry; none for a watch without `days` |
+| `msg:<channel>:<ts>` | `<channel>:<thread_ts>` for each forwarded reply | watch expiry; none for a watch without `days` |
 
 The webhook URL is a credential. It lives only in KV and the Amp plugin runtime.
 
@@ -183,7 +189,7 @@ Known gaps:
 
 ```text
 Chinh: watch https://holistics.slack.com/archives/C0123/p1793590000000100 and reply when Minh answers
-Agent: slack_watch -> "Watching C0123 thread 1793590000.000100 for 7 days"
+Agent: slack_watch -> "Watching C0123 thread 1793590000.000100 until slack_unwatch or until this Amp thread is archived"
 (orb sleeps)
 Minh replies in Slack
 Thread receives: "Slack: new reply in C0123 thread 1793590000.000100 from U0456 ..."
@@ -211,7 +217,8 @@ Gate results on 2 November 2026:
 - G2 passed. A tool-registered webhook with key `spike-thread-<thread ID>` received a POST at 04:25:43Z, and its handler appended a message that started a new agent turn in the owning thread. A duplicate POST with the same `Idempotency-Key` produced no second event.
 - G1 passed. With the Desktop stopped, the orb paused from about 05:27Z. Uptime advanced about 1,450 seconds over 2 hours 7 minutes of wall time, and the plugin heartbeat had a 6,208-second gap. A POST at 07:10:38Z woke the orb; the same plugin process handled it at 07:11:46Z and appended the message at 07:11:48Z. Wake latency was about 68 seconds.
 - An earlier run showed the webhook also survives a plugin process restart: the plugin re-registered on load and `session.start`, and the next event reached the new process.
-- G3 passed for the Request URL. After the Worker was deployed to `https://slack-events.dinhminhchinh3357.workers.dev`, Slack marked `/slack/events` as Verified. Socket Mode is off and Delayed Events is on. A signed message or reaction event still needs an end-to-end run.
+- G3 passed for the Request URL. After the Worker was deployed to `https://slack-events.dinhminhchinh3357.workers.dev`, Slack marked `/slack/events` as Verified. Socket Mode is off and Delayed Events is on.
+- End-to-end reply passed. In #test-workflow, a watch with no expiry on thread `1793606031.553109` forwarded Chinh's manual reply `1793606182.971879` through the redeployed Worker; the watching Amp thread received the pointer message and read the reply with `slack_messages`. Reactions and a reply sent while the orb sleeps have not been tested end to end.
 
 Validation:
 
