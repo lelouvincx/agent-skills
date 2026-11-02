@@ -9,6 +9,7 @@ and this project does not currently use versioned releases.
 
 ### Changed
 
+- Default new personal projects to lelouvincx/template, following generated setup instructions and keeping existing-project migrations opt-in. [#304](https://github.com/lelouvincx/agent-skills/pull/304)
 - Prepare the reusable personal-project template contract and authorize its bounded bot publisher. [#303](https://github.com/lelouvincx/agent-skills/pull/303)
 - Record the 13-project Amp settings rollout, verified live pilots and SmartClass readiness delivery, with explicit readback limitations and deferred work. [#302](https://github.com/lelouvincx/agent-skills/pull/302)
 - Complete the personal-project runtime contract with working-checkout sync, canonical shipping guidance, approved bot scope, and identity, transport and exact-head publishing checks. [#301](https://github.com/lelouvincx/agent-skills/pull/301)
