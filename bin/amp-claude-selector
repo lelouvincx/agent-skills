@@ -3,6 +3,7 @@
 
 import argparse
 import datetime as dt
+import email.utils
 import fcntl
 import json
 import math
@@ -12,6 +13,7 @@ import re
 import shutil
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 LABEL = "com.ampcode.claude-subscription-selector"
@@ -147,8 +149,22 @@ class API:
             )
             # One retry only, including for disabled credentials with expired tokens.
             response = self.call("POST", "api-call", request)
+        for attempt in range(2):
+            if response.get("status_code") != 429:
+                break
+            delay = rate_limit_delay(response, attempt)
+            if delay > 60:
+                break
+            time.sleep(delay)
+            response = self.call("POST", "api-call", request)
         if response.get("status_code") != 200:
-            raise SelectorError("Claude usage request failed")
+            status = response.get("status_code")
+            detail = f" (HTTP {status})" if type(status) is int else ""
+            if status == 429:
+                detail += (
+                    f"; retry after {math.ceil(rate_limit_delay(response, 0))} seconds"
+                )
+            raise SelectorError("Claude usage request failed" + detail)
         try:
             return parse_quota(json.loads(response["body"]), window)
         except (KeyError, TypeError, ValueError) as exc:
@@ -166,6 +182,29 @@ class API:
         )
         if response.get("status") != "ok" or response.get("disabled") is not disabled:
             raise SelectorError("Credential status update was not confirmed")
+
+
+def rate_limit_delay(response, attempt):
+    delay = 5 * 2**attempt
+    headers = response.get("header")
+    if not isinstance(headers, dict):
+        return delay
+    value = next((v for k, v in headers.items() if k.lower() == "retry-after"), None)
+    if isinstance(value, list):
+        value = value[0] if value else None
+    if not isinstance(value, str):
+        return delay
+    try:
+        seconds = int(value)
+    except ValueError:
+        try:
+            reset = email.utils.parsedate_to_datetime(value)
+            if reset.tzinfo is None:
+                return delay
+            seconds = reset.timestamp() - time.time()
+        except (TypeError, ValueError, OverflowError):
+            return delay
+    return max(delay, seconds)
 
 
 def parse_quota(payload, window):
