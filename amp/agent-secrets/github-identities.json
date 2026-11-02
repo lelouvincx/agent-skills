@@ -17,7 +17,8 @@
         "lelouvincx/self-taught-amql",
         "lelouvincx/self-taught-design",
         "lelouvincx/self-taught-lsp",
-        "lelouvincx/smartclass"
+        "lelouvincx/smartclass",
+        "lelouvincx/template"
       ]
     }
   }
