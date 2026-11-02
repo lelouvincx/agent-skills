@@ -9,6 +9,7 @@ and this project does not currently use versioned releases.
 
 ### Changed
 
+- Let Slack thread watches last until unwatched or until their Amp thread is archived, and record RFC-0016's orb-only limitation and end-to-end result. [#308](https://github.com/lelouvincx/agent-skills/pull/308)
 - Handle Claude usage rate limits with bounded Retry-After-aware retries and safe HTTP diagnostics, preserving account selection when fresh quota is unavailable. [#305](https://github.com/lelouvincx/agent-skills/pull/305)
 - Default new personal projects to lelouvincx/template, following generated setup instructions and keeping existing-project migrations opt-in. [#304](https://github.com/lelouvincx/agent-skills/pull/304)
 - Prepare the reusable personal-project template contract and authorize its bounded bot publisher. [#303](https://github.com/lelouvincx/agent-skills/pull/303)
