@@ -20,6 +20,7 @@ Use these sources in order when adding or refreshing a document:
 4. `plugins/*.ts` for registered names, schemas, side effects, dependencies, and behavior.
 5. `skills/*/SKILL.md` for skill names, descriptions, declared tools, instructions, and behavior.
 6. `bin/*` for local CLI arguments, side effects, dependencies, and behavior.
+7. `mcp-servers/*` and `amp mcp doctor <name>` for local MCP implementations, launch settings, discovered tools, and authentication boundaries.
 
 ## Capability documents
 
@@ -35,6 +36,12 @@ All active documents use `amp-artifact/v2`, which supports skills, local CLIs, a
 - [Amp ChatGPT selector](./amp-chatgpt-selector.md)
 - [Amp Runner](./amp-runner.md)
 - [Amp runner log maintenance](./amp-runner-logs.md)
+
+### MCP launchers and servers
+
+- [Anfra Discourse MCP](./anfra-discourse-mcp.md)
+
+MCP launchers use the existing `local_cli` artifact contract. Their documents also describe the MCP surface, tool catalog, transport and credential boundary. The [MCP source index](../../mcp-servers/README.md) maps supporting modules to their owning capabilities.
 
 ### Agent-callable tools
 

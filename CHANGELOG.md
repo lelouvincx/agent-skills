@@ -10,6 +10,8 @@ and this project does not currently use versioned releases.
 ### Changed
 
 - Synchronize quota-based CLIProxyAPI Claude account selection with native Amp work/personal subscriptions, verify both states, and refresh the rotated bot token reference. [#310](https://github.com/lelouvincx/agent-skills/pull/310)
+- Add the official Anfra Discourse MCP with a TypeScript launcher, 1Password-backed account-scoped read/write access, capability documentation and regression checks; correct the bot credential item reference. [#309](https://github.com/lelouvincx/agent-skills/pull/309)
+- Let Slack thread watches last until unwatched or until their Amp thread is archived, and record RFC-0016's orb-only limitation and end-to-end result. [#308](https://github.com/lelouvincx/agent-skills/pull/308)
 - Handle Claude usage rate limits with bounded Retry-After-aware retries and safe HTTP diagnostics, preserving account selection when fresh quota is unavailable. [#305](https://github.com/lelouvincx/agent-skills/pull/305)
 - Default new personal projects to lelouvincx/template, following generated setup instructions and keeping existing-project migrations opt-in. [#304](https://github.com/lelouvincx/agent-skills/pull/304)
 - Prepare the reusable personal-project template contract and authorize its bounded bot publisher. [#303](https://github.com/lelouvincx/agent-skills/pull/303)
@@ -64,6 +66,7 @@ and this project does not currently use versioned releases.
 
 ### Added
 
+- Add the slack-events Worker and RFC-0016 so an Amp thread can watch a Slack thread and receive its replies and reactions while its orb sleeps. [#307](https://github.com/lelouvincx/agent-skills/pull/307)
 - Persist verified work-only Claude proxy token history with separate input, output and cache counters, sanitized host SQLite storage, restart-aware collection and strict service-account management-key resolution. [#306](https://github.com/lelouvincx/agent-skills/pull/306)
 - Add a curated JSON Slack directory with Holistics people, DM IDs, and joined channels, emphasizing anfra- and data- channels. [#295](https://github.com/lelouvincx/agent-skills/pull/295)
 - Add the `elevenlabs` agent-secrets bundle and `elevenlabs-tts` command class so Python scripts can resolve `ELEVENLABS_API_KEY`. [#290](https://github.com/lelouvincx/agent-skills/pull/290)
