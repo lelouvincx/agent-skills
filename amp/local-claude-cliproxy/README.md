@@ -137,7 +137,37 @@ Unknown quota leaves the selection unchanged. If both accounts are at or below t
 Manual selection requires paused automation so the next hourly check cannot undo it.
 Pause and uninstall do not change credential eligibility. Resume reevaluates the policy.
 
+### Keep native Amp Claude accounts in sync
+
+Bind the native work and personal Claude Subscription connections to the same policy:
+
+```bash
+amp config model-providers list
+amp-claude-selector configure \
+  --amp-preferred 'WORK_CLAUDE_CONNECTION_UUID' \
+  --amp-fallback 'PERSONAL_CLAUDE_CONNECTION_UUID'
+amp-claude-selector run
+```
+
+Use stable connection UUIDs, not list indexes. Both options are also available on
+`install`. Existing proxy-only installations stay proxy-only until configured.
+The selector validates both connections as native Claude subscriptions before
+changing proxy eligibility. Each successful automatic or paused manual selection
+then verifies that the same account is selected in both systems. An unchanged
+proxy selection still repairs native account drift on the next successful check.
+Unknown quota or both accounts below threshold leaves both systems unchanged.
+
+The switch is not atomic across systems: proxy selection happens first. If native
+activation or verification fails, `run` reports failure, not synchronized success.
+Retry `run`, or `use company` / `use personal` while paused, to reconcile them.
+No rollback silently selects a different account. Avoid concurrent changes from
+other clients; the selector lock protects only this selector.
+
+This does not change the custom URL connection's activation, model mappings or
+priority. Amp can still route through that higher-priority proxy connection.
+
 `status` uses the ChatGPT selector's 12-field plain-text report and field order.
+With native sync configured, it appends an `Amp connections` line with both UUIDs.
 It formats intervals as hours, minutes or seconds and shows last/next check times in UTC+7.
 Account labels are `company (<credential-name>)` and `personal (<credential-name>)`.
 Quota and selection values come from the last check; status does not resolve secrets or query Claude.

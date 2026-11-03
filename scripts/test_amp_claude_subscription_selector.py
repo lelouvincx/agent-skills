@@ -159,6 +159,111 @@ class PolicyTests(unittest.TestCase):
             selector.check(api, CONFIG)
 
 
+class NativeSyncTests(unittest.TestCase):
+    def setUp(self):
+        self.config = {
+            **CONFIG,
+            "amp_preferred": "work-id",
+            "amp_fallback": "personal-id",
+        }
+        self.active = {"work-id": False, "personal-id": True}
+        self.writes = []
+        self.kind = "model_provider_claude_sub"
+        self.fail_activation = False
+        self.ignore_activation = False
+        self.api = FakeAPI()
+        for patcher in (
+            patch.object(selector.shutil, "which", return_value="/bin/amp"),
+            patch.object(selector, "command", side_effect=self.command),
+        ):
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+    def command(self, args):
+        action, connection = args[3:5]
+        if action == "show":
+            return json.dumps(
+                {"id": connection, "type": self.kind, "active": self.active[connection]}
+            )
+        self.writes.append((action, connection))
+        if self.fail_activation:
+            raise selector.SelectorError("amp failed")
+        if action == "activate" and not self.ignore_activation:
+            self.active = {key: key == connection for key in self.active}
+        elif action == "deactivate":
+            self.active[connection] = False
+        return ""
+
+    def test_policy_synchronizes_drift_fallback_and_recovery(self):
+        for company_used, selected, connection in (
+            (10, "preferred", "work-id"),
+            (60, "fallback", "personal-id"),
+            (10, "preferred", "work-id"),
+        ):
+            self.api.used["company.json"] = company_used
+            self.assertEqual(
+                selector.check(self.api, self.config)["selected"], selected
+            )
+            self.assertEqual(
+                self.active, {key: key == connection for key in self.active}
+            )
+            proxy = self.api.accounts()
+            self.assertEqual(
+                [a["name"] for a in proxy if not a["disabled"]], [self.config[selected]]
+            )
+        self.assertEqual(
+            self.writes,
+            [
+                ("activate", "work-id"),
+                ("activate", "personal-id"),
+                ("activate", "work-id"),
+            ],
+        )
+        selector.check(self.api, self.config)
+        self.assertEqual(len(self.writes), 3)
+
+    def test_invalid_binding_stops_before_proxy_changes(self):
+        for config in (
+            {**self.config, "amp_fallback": None},
+            {**self.config, "amp_fallback": "work-id"},
+        ):
+            with self.assertRaises(selector.SelectorError):
+                selector.switch(self.api, config, "fallback")
+        self.kind = "custom-url"
+        with self.assertRaises(selector.SelectorError):
+            selector.switch(self.api, self.config, "fallback")
+        self.assertEqual(self.api.calls, [])
+        self.assertEqual(self.writes, [])
+
+    def test_partial_failure_is_explicit_and_next_run_repairs_it(self):
+        self.fail_activation = True
+        with self.assertRaisesRegex(selector.SelectorError, "out of sync"):
+            selector.check(self.api, self.config)
+        self.assertTrue(self.active["personal-id"])
+        self.fail_activation = False
+        selector.check(self.api, self.config)
+        self.assertTrue(self.active["work-id"])
+        self.assertFalse(self.active["personal-id"])
+
+    def test_successful_command_without_activation_is_not_success(self):
+        self.ignore_activation = True
+        with self.assertRaisesRegex(selector.SelectorError, "out of sync"):
+            selector.check(self.api, self.config)
+
+    def test_unknown_or_exhausted_quota_changes_neither_path(self):
+        for used in (None, 99):
+            self.api.used = {"company.json": used, "personal.json": 99}
+            if used is None:
+                with self.assertRaises(selector.SelectorError):
+                    selector.check(self.api, self.config)
+            else:
+                self.assertEqual(
+                    selector.check(self.api, self.config)["selected"], "unchanged"
+                )
+        self.assertEqual(self.api.calls, [])
+        self.assertEqual(self.writes, [])
+
+
 class TransportTests(unittest.TestCase):
     def api(self):
         with patch.object(selector, "secret", return_value="fixture-not-a-secret"):
@@ -453,6 +558,27 @@ Reason: preferred subscription still has remaining quota
             with self.assertRaises(selector.SelectorError):
                 self.invoke("use", "company")
             api.assert_not_called()
+
+    def test_configure_binding_and_paused_manual_selection(self):
+        (self.state / "paused").touch()
+        with (
+            patch.object(selector, "agent_loaded", return_value=False),
+            patch.object(selector, "bootout"),
+            patch.object(selector, "NativeClaude") as native,
+            patch.object(selector, "API", return_value=FakeAPI()),
+        ):
+            self.invoke(
+                "configure",
+                "--amp-preferred",
+                "work-id",
+                "--amp-fallback",
+                "personal-id",
+            )
+            self.assertEqual(selector.load()["amp_preferred"], "work-id")
+            self.assertEqual(selector.load()["amp_fallback"], "personal-id")
+            self.invoke("use", "personal")
+            native.return_value.select.assert_called_once_with("fallback")
+        self.assertTrue((self.state / "paused").exists())
 
     def test_configure_preserves_pause_and_partial_fields(self):
         (self.state / "paused").touch()

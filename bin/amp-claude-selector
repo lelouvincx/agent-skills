@@ -259,7 +259,77 @@ def resolve(accounts, name):
     return matches[0]
 
 
+class NativeClaude:
+    def __init__(self, config):
+        self.ids = {
+            role: config.get("amp_" + role) for role in ("preferred", "fallback")
+        }
+        self.amp = shutil.which("amp")
+        if (
+            not self.amp
+            or not all(isinstance(value, str) and value for value in self.ids.values())
+            or len(set(self.ids.values())) != 2
+        ):
+            raise SelectorError(
+                "Amp sync requires amp and two distinct Claude connection IDs"
+            )
+        self.states()
+
+    def states(self):
+        states = {}
+        for role, connection in self.ids.items():
+            try:
+                entry = json.loads(
+                    command([self.amp, "config", "model-providers", "show", connection])
+                )
+            except ValueError as exc:
+                raise SelectorError("Amp returned invalid connection JSON") from exc
+            if (
+                not isinstance(entry, dict)
+                or entry.get("id") != connection
+                or entry.get("type") != "model_provider_claude_sub"
+                or type(entry.get("active")) is not bool
+            ):
+                raise SelectorError(
+                    "Amp sync requires Claude subscription connection IDs, not list indexes"
+                )
+            states[role] = entry["active"]
+        return states
+
+    def select(self, selected):
+        other = "fallback" if selected == "preferred" else "preferred"
+        states = self.states()
+        # Claude activation replaces the active subscription of the same type.
+        if not states[selected]:
+            command(
+                [self.amp, "config", "model-providers", "activate", self.ids[selected]]
+            )
+        states = self.states()
+        if not states[selected]:
+            raise SelectorError("Amp Claude activation verification failed")
+        if states[other]:
+            command(
+                [
+                    self.amp,
+                    "config",
+                    "model-providers",
+                    "deactivate",
+                    self.ids[other],
+                    "--yes",
+                ]
+            )
+        states = self.states()
+        if not states[selected] or states[other]:
+            raise SelectorError("Amp Claude account selection verification failed")
+
+
 def switch(api, config, selected):
+    # Preflight native connections before changing either proxy credential.
+    native = (
+        NativeClaude(config)
+        if any(config.get("amp_" + role) for role in ("preferred", "fallback"))
+        else None
+    )
     accounts = api.accounts()
     preferred = resolve(accounts, config["preferred"])
     fallback = resolve(accounts, config["fallback"])
@@ -282,6 +352,13 @@ def switch(api, config, selected):
         or not resolve(after, other["name"])["disabled"]
     ):
         raise SelectorError("Account selection verification failed")
+    if native:
+        try:
+            native.select(selected)
+        except (SelectorError, ValueError, TypeError) as exc:
+            raise SelectorError(
+                "Proxy selected account, but Amp sync failed; accounts may be out of sync. Retry run or paused use."
+            ) from exc
 
 
 def check(api, config):
@@ -506,6 +583,10 @@ def status_report(config):
     print(f"Preferred remaining: {remaining('preferred')}")
     print(f"Fallback remaining: {remaining('fallback')}")
     print(f"Reason: {reason}")
+    if config.get("amp_preferred"):
+        print(
+            f"Amp connections: company {config['amp_preferred']}; personal {config['amp_fallback']}"
+        )
 
 
 USAGE_LABEL = "com.ampcode.claude-work-usage"
@@ -763,6 +844,12 @@ def parser():
     install.add_argument("--container", default="amp-cliproxyapi")
     for action in (install, commands.add_parser("configure")):
         action.add_argument(
+            "--amp-preferred", help="Native Amp work Claude connection UUID"
+        )
+        action.add_argument(
+            "--amp-fallback", help="Native Amp personal Claude connection UUID"
+        )
+        action.add_argument(
             "--window",
             choices=["weekly", "five-hour", "either"],
             default="weekly" if action is install else None,
@@ -887,6 +974,11 @@ def main():
                 "threshold": args.threshold,
                 "interval": args.interval,
             }
+            if args.amp_preferred is not None or args.amp_fallback is not None:
+                config.update(
+                    amp_preferred=args.amp_preferred, amp_fallback=args.amp_fallback
+                )
+                NativeClaude(config)
             api = API(config)
             # Validate both quota payloads before installing an active scheduler.
             accounts = api.accounts()
@@ -923,14 +1015,20 @@ def main():
         elif args.action == "usage-report":
             usage_report(args.details)
         elif args.action == "configure":
-            if all(
-                getattr(args, field) is None
-                for field in ("window", "threshold", "interval")
-            ):
-                raise SelectorError("Provide --window, --threshold or --interval")
-            for field in ("window", "threshold", "interval"):
+            fields = (
+                "window",
+                "threshold",
+                "interval",
+                "amp_preferred",
+                "amp_fallback",
+            )
+            if all(getattr(args, field) is None for field in fields):
+                raise SelectorError("Provide a policy option or Amp connection IDs")
+            for field in fields:
                 if getattr(args, field) is not None:
                     config[field] = getattr(args, field)
+            if config.get("amp_preferred") or config.get("amp_fallback"):
+                NativeClaude(config)
             loaded = agent_loaded()
             bootout()
             (STATE / "paused").touch(mode=0o600)
@@ -982,7 +1080,14 @@ def main():
 if __name__ == "__main__":
     try:
         main()
-    except (SelectorError, OSError, ValueError, KeyError, TypeError, sqlite3.Error) as error:
+    except (
+        SelectorError,
+        OSError,
+        ValueError,
+        KeyError,
+        TypeError,
+        sqlite3.Error,
+    ) as error:
         # Avoid emitting potentially sensitive malformed API/config contents.
         message = (
             str(error)
