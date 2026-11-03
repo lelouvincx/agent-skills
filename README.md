@@ -174,6 +174,10 @@ For archive-based remote skills, a Git-tracked `mcp.json` is a local override
 and survives remote refreshes, like `PERSONAL.md`. Untracked upstream MCP files
 remain generated payloads.
 
+### Anfra community MCP
+
+The [Anfra Discourse MCP capability](amp/docs/tools/anfra-discourse-mcp.md) documents the TypeScript launcher, workspace registration, 1Password-backed account access, tool catalog and verification. The [MCP source index](amp/mcp-servers/README.md) maps each local implementation to its owning capability contract.
+
 ### Amp and plugin skills
 
 These skills are active in Amp but are not maintained by this repository.
@@ -232,6 +236,7 @@ Run the relevant repository command directly:
 | Test bot publishing controls | `bash amp/scripts/test-agent-bot-pr.sh` |
 | Test shared Orb lifecycle and development sync | `bash scripts/test-orb-setup.sh` |
 | Validate agent secret policy | `uvx --with jsonschema==4.25.1 python amp/scripts/validate-agent-secrets.py` |
+| Test the Anfra Discourse MCP launcher | `bun test scripts/anfra-discourse-mcp.test.ts` |
 | Test the agent-browser wrapper without Chrome | `python3 -m unittest scripts/test_agent_browser_wrapper.py` |
 | Test legacy agent-browser config migration | `python3 -m unittest amp/scripts/test_migrate_agent_browser_config.py` |
 | Test the GitHub thread event validator | `python3 -m unittest amp/scripts/test_validate_github_thread_events.py` |
@@ -254,6 +259,7 @@ Run the relevant repository command directly:
 | [Amp ChatGPT selector](amp/docs/tools/amp-chatgpt-selector.md) | Local CLI | Shell | switch Amp ChatGPT subscriptions based on Codex quota |
 | [Amp runner](amp/docs/tools/amp-runner.md) | Local CLI | Shell | run named Amp background runners as user LaunchAgents |
 | [Amp runner log maintenance](amp/docs/tools/amp-runner-logs.md) | Local CLI | Shell | rotate, back up, and restore private runner logs |
+| [Anfra Discourse MCP](amp/docs/tools/anfra-discourse-mcp.md) | MCP launcher | Agent via workspace MCP | read, post and reply on community.anfra.ai as Chinh |
 | [Claude Code subagent](amp/docs/tools/claude-code-subagent.md) | Agent tool | Agent | ask Claude Code for read-only advice |
 | [Label skill and plugin usage](amp/docs/tools/label-skill-plugin-usage.md) | Agent tool | Agent | add or correct usage-event labels |
 | [Pi Code subagent](amp/docs/tools/pi-code-subagent.md) | Agent tool | Agent | ask Pi Coding Agent for read-only advice |
