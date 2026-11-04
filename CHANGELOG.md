@@ -9,6 +9,7 @@ and this project does not currently use versioned releases.
 
 ### Changed
 
+- Add the writing-essays skill, which finds an essay's idea, builds its argument and keeps the writer's voice, and leaves short replies to clear-writing. [#311](https://github.com/lelouvincx/agent-skills/pull/311) [#311](https://github.com/lelouvincx/agent-skills/pull/311)
 - Synchronize quota-based CLIProxyAPI Claude account selection with native Amp work/personal subscriptions, verify both states, and refresh the rotated bot token reference. [#310](https://github.com/lelouvincx/agent-skills/pull/310)
 - Add the official Anfra Discourse MCP with a TypeScript launcher, 1Password-backed account-scoped read/write access, capability documentation and regression checks; correct the bot credential item reference. [#309](https://github.com/lelouvincx/agent-skills/pull/309)
 - Let Slack thread watches last until unwatched or until their Amp thread is archived, and record RFC-0016's orb-only limitation and end-to-end result. [#308](https://github.com/lelouvincx/agent-skills/pull/308)
