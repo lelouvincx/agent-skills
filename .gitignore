@@ -5,6 +5,9 @@
 # skills/example-remote-skill/SKILL.md
 # skills/example-remote-skill/.remote-source
 
+skills/anatomy/*
+!skills/anatomy/PERSONAL.md
+
 skills/motion/SKILL.md
 skills/motion/.remote-source
 skills/motion/best-practices/

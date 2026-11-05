@@ -353,8 +353,9 @@ sync_remote_archive_skill() {
 	local archive_hash personal_hash=""
 
 	if [ -z "$archive_path" ] || [[ "$archive_path" = /* ]] \
-		|| [[ "/$archive_path/" = *"/../"* ]] || [[ "/$archive_path/" = *"/./"* ]]; then
-		echo "→ $name: ✗ archive_path must be a relative path without dot segments" >&2
+		|| [[ "/$archive_path/" = *"/../"* ]] \
+		|| { [ "$archive_path" != "." ] && [[ "/$archive_path/" = *"/./"* ]]; }; then
+		echo "→ $name: ✗ archive_path must be . or a relative path without dot segments" >&2
 		return 1
 	fi
 

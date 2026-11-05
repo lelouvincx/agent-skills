@@ -3,7 +3,7 @@
 #   name: skill-directory-name (must match directory under skills/)
 #   url: raw URL to remote SKILL.md file, or
 #   archive: URL to a tar.gz containing the complete skill directory
-#   archive_path: skill directory path below the archive's top-level directory
+#   archive_path: skill directory below the archive's top-level directory, or . for its root
 #   enabled: true/false (set to false to temporarily disable syncing)
 #   files: (optional) list of companion files relative to SKILL.md URL
 #
@@ -16,6 +16,11 @@
 #   6. Fetch listed companion files, or stage and replace the skill from an archive
 
 skills:
+  - name: anatomy
+    archive: https://codeload.github.com/wheresryan22/anatomy/tar.gz/1482e8469b0a9e0d8cc18ea2740a01423d29ae80
+    archive_path: .
+    enabled: true
+
   - name: motion
     archive: https://codeload.github.com/motiondivision/ai-kit/tar.gz/78a83b1485fa70dab9037c480de0c7cf53930df7
     archive_path: plugins/motion/skills/motion
