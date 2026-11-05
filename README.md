@@ -105,6 +105,7 @@ Local skills are maintained in this repository. Remote skills are fetched and pr
 | Skill | Type | Use it to |
 | --- | --- | --- |
 | [agent-browser](skills/agent-browser/SKILL.md) | Remote | automate browser and UI tasks with `agent-browser` |
+| [anatomy](skills/anatomy/SKILL.md) | Remote | explain technical ideas as detailed interactive isometric objects in SVG, WebGL, or 3D |
 | [bigquery-query](skills/bigquery-query/SKILL.md) | Local | query Google BigQuery with the `bq` CLI |
 | [build-custom-chart](skills/build-custom-chart/SKILL.md) | Remote | create reusable Holistics custom chart definitions |
 | [build-dashboard](skills/build-dashboard/SKILL.md) | Remote | build and edit Holistics canvas dashboards |

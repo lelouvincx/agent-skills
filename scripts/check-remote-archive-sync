@@ -137,4 +137,23 @@ find "$test_repo/skills/demo" -type f -exec shasum -a 256 {} \; | sort > "$tmp/a
 diff -u "$tmp/before-failure" "$tmp/after-failure"
 cmp "$tmp/expected-personal.md" "$test_repo/skills/demo/PERSONAL.md"
 
+# Repository-root skills use . while embedded dot segments remain invalid.
+cp -R "$source_root/plugin/skills/demo/." "$source_root/"
+tar -czf "$archive" -C "$tmp/source" fixture-main
+sed 's#archive_path: plugin/skills/demo#archive_path: .#' "$test_repo/remote-skills.yaml" > "$tmp/root-config.yaml"
+HOME="$home" SKILLS_DIR="$test_repo/skills" REMOTE_SKILLS_CONFIG="$tmp/root-config.yaml" \
+	AMP_CONFIG_DIR="$home/.config/amp" "$test_repo/sync-skills.sh" --remote >/dev/null
+cmp "$tmp/expected-personal.md" "$test_repo/skills/demo/PERSONAL.md"
+cmp "$tmp/expected-mcp.json" "$test_repo/skills/demo/mcp.json"
+node "$test_repo/skills/demo/scripts/live.mjs" --help | grep -q '^live v2$'
+grep -q '^ARCHIVE_PATH=\.$' "$test_repo/skills/demo/.remote-source"
+for invalid_path in /plugin/skills/demo ../fixture-main ./plugin/skills/demo plugin/../plugin/skills/demo; do
+	sed "s#archive_path: plugin/skills/demo#archive_path: $invalid_path#" "$test_repo/remote-skills.yaml" > "$tmp/invalid-config.yaml"
+	if HOME="$home" SKILLS_DIR="$test_repo/skills" REMOTE_SKILLS_CONFIG="$tmp/invalid-config.yaml" \
+		AMP_CONFIG_DIR="$home/.config/amp" "$test_repo/sync-skills.sh" --remote >/dev/null 2>&1; then
+		echo "error: archive sync accepted invalid path $invalid_path" >&2
+		exit 1
+	fi
+done
+
 echo "Remote archive sync check passed"
