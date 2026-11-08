@@ -13,6 +13,7 @@ Usage:
 Manage a user LaunchAgent for an Amp background runner. The runner starts at
 login, restarts after failure, and uses caffeinate -s so AC power prevents
 system sleep while battery power keeps normal macOS sleep behaviour.
+Managed runners enable portals for dev servers started by their threads.
 
 Install and run options:
   --debug            Set Amp's log level to debug.
@@ -193,9 +194,9 @@ run_runner() {
 	export AMP_LOG_FILE="$log_dir/$runner_id.log"
 
 	if [ "$amp_arg_count" -gt 0 ]; then
-		exec "${AMP_RUNNER_CAFFEINATE:-/usr/bin/caffeinate}" -s "$amp_bin" --no-tui "--runner-id=$runner_id" "${amp_args[@]}"
+		exec "${AMP_RUNNER_CAFFEINATE:-/usr/bin/caffeinate}" -s "$amp_bin" --no-tui --remote-control-portals "--runner-id=$runner_id" "${amp_args[@]}"
 	else
-		exec "${AMP_RUNNER_CAFFEINATE:-/usr/bin/caffeinate}" -s "$amp_bin" --no-tui "--runner-id=$runner_id"
+		exec "${AMP_RUNNER_CAFFEINATE:-/usr/bin/caffeinate}" -s "$amp_bin" --no-tui --remote-control-portals "--runner-id=$runner_id"
 	fi
 }
 

@@ -42,7 +42,7 @@ runtime:
   uses:
     - "launchctl"
     - "caffeinate -s"
-    - "Amp --no-tui --runner-id"
+    - "Amp --no-tui --remote-control-portals --runner-id"
   dependencies:
     - "macOS user LaunchAgents"
     - "Amp CLI"
@@ -93,6 +93,8 @@ tags:
 
 Managed runners enable Amp remote terminal control. This lets you use the web Terminal for a CLI thread after Amp workspace and user security checks pass.
 
+Managed runners enable `--remote-control-portals` so dev servers started by runner threads can be opened through Amp portals.
+
 The launcher wraps Amp with `caffeinate -s`. AC power keeps the Mac awake while the runner is active. Battery power keeps normal macOS sleep behaviour.
 
 ## Invocation
@@ -130,7 +132,9 @@ Use `--debug` or `--log-level debug` during an incident. Reinstall without that 
 
 `install` creates `com.ampcode.runner.<runner-id>.plist` under `~/Library/LaunchAgents/`. It records the working directory, current `PATH`, current `HOME`, Amp executable, log settings, and approved extra Amp arguments.
 
-The LaunchAgent runs Amp with `--no-tui` and the supplied runner ID. `KeepAlive` restarts the process after failure. A 10-second throttle limits restart loops.
+The LaunchAgent runs Amp with `--no-tui`, `--remote-control-portals`, and the supplied runner ID. `KeepAlive` restarts the process after failure. A 10-second throttle limits restart loops.
+
+Existing managed runners pick up the portal default on their next restart. Reinstallation is not required.
 
 Before it starts Amp, `amp-runner run` sets `AMP_REMOTE_CONTROL_TERMINAL=1`. Amp uses this to enable terminal access from ampcode.com. The launcher owns this setting, so extra Amp arguments cannot disable remote terminal control for a managed runner.
 

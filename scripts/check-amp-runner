@@ -95,10 +95,13 @@ grep -Fxq 'AMP_LOG_LEVEL=debug' "$tmp_dir/capture"
 grep -Fxq "AMP_LOG_FILE=$logs/macbook.agent-skills.log" "$tmp_dir/capture"
 grep -Fxq 'AGENT_SECRET_AUTH=service-account' "$tmp_dir/capture"
 grep -Fxq 'OP_SERVICE_ACCOUNT_TOKEN=missing' "$tmp_dir/capture"
-grep -Fxq "args=<-s><$mock_amp><--no-tui><--runner-id=macbook.agent-skills><--no-ide>" "$tmp_dir/capture"
+grep -Fxq "args=<-s><$mock_amp><--no-tui><--remote-control-portals><--runner-id=macbook.agent-skills><--no-ide>" "$tmp_dir/capture"
 [ "$(file_mode "$logs")" = 700 ]
 [ "$(file_mode "$logs/macbook.agent-skills.log")" = 600 ]
 [ "$(file_mode "$logs/macbook.agent-skills.supervisor.log")" = 600 ]
+
+run_launcher run --log-dir "$logs" macbook.agent-skills
+grep -Fxq "args=<-s><$mock_amp><--no-tui><--remote-control-portals><--runner-id=macbook.agent-skills>" "$tmp_dir/capture"
 
 run_launcher install --no-start --log-dir "$logs" --workdir "$repo_root" macbook.agent-skills -- --no-ide
 plist="$tmp_dir/launch-agents/com.ampcode.runner.macbook.agent-skills.plist"
