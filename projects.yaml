@@ -433,7 +433,7 @@ projects:
     description: Smartclass repository.
 
   lookup-vocab:
-    github: null
+    github: lelouvincx/lookup-vocab
     owner: lelouvincx
     dir: lookup-vocab
     aliases:
