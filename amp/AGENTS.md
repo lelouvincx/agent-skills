@@ -11,6 +11,7 @@
 - Store screenshots, recordings, and other visual artifacts under `.amp/in/artifacts/`.
 - When creating a subdirectory under `.amp/in/artifacts/`, add a `.thread-metadata` file in that subdirectory containing the current Amp thread ID.
 - Enable `--share-network` by default when creating local Amp runners, unless Chinh asks otherwise. For a directory path, run `amp-runner install --workdir <path> macbook.<directory-basename> -- --share-network` and verify it is running with `amp-runner status macbook.<directory-basename>`.
+- Before using the web in an orb, run `amp net route macbook-network`, verify `amp net status` and `amp net ping`, then run `amp orb desktop ensure`. `macbook-network` is the persistent standalone exit node on the Mac; `macbook` runs coding threads. See `conventions/agent-browser.md` for service controls and verification. Use the browser tooling's profile-attachment workflow for browser profiles; `amp sync` mirrors working-tree files, not browsers.
 
 ## Decisions
 
