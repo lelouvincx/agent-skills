@@ -71,6 +71,7 @@ class AgentSecretPolicyValidationTests(unittest.TestCase):
                 "lelouvincx/holistics-performance-review",
                 "lelouvincx/lelouvincx.github.io",
                 "lelouvincx/lms-leitner-material",
+                "lelouvincx/lookup-vocab",
                 "lelouvincx/nvim",
                 "lelouvincx/personal-finance",
                 "lelouvincx/second-brain-logseq",
