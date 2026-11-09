@@ -9,6 +9,7 @@ and this project does not currently use versioned releases.
 
 ### Changed
 
+- Apply the Claude selector's remaining-quota threshold only to the company account, selecting personal regardless of its quota when company is at or below threshold. [#316](https://github.com/lelouvincx/agent-skills/pull/316)
 - Document the persistent macbook-network exit node, separate it from the macbook coding runner, and require orb-side network verification. [#315](https://github.com/lelouvincx/agent-skills/pull/315)
 - Register the public Lookup vocabulary repository and authorize its approved bot publisher. [#314](https://github.com/lelouvincx/agent-skills/pull/314)
 - Enable Amp portals by default for managed local runners, document restart behavior, and cover launches with and without extra arguments. [#313](https://github.com/lelouvincx/agent-skills/pull/313)

@@ -106,10 +106,19 @@ class PolicyTests(unittest.TestCase):
             api.calls[-2:], [("personal.json", True), ("company.json", False)]
         )
 
-    def test_both_low_unchanged(self):
-        api = FakeAPI(company=60, personal=90)
-        self.assertEqual(selector.check(api, CONFIG)["selected"], "unchanged")
-        self.assertEqual(api.calls, [])
+    def test_only_company_quota_controls_selection(self):
+        for company in (59.9, 60, 61):
+            for personal in (0, 60, 90, 100):
+                with self.subTest(company=company, personal=personal):
+                    api = FakeAPI(company=company, personal=personal)
+                    expected = "preferred" if company < 60 else "fallback"
+                    self.assertEqual(selector.check(api, CONFIG)["selected"], expected)
+                    self.assertEqual(
+                        api.calls,
+                        []
+                        if expected == "preferred"
+                        else [("company.json", True), ("personal.json", False)],
+                    )
 
     def test_unknown_quota_unchanged(self):
         for used in (None, True, "60", -1, 101, float("nan"), float("inf")):
@@ -250,18 +259,20 @@ class NativeSyncTests(unittest.TestCase):
         with self.assertRaisesRegex(selector.SelectorError, "out of sync"):
             selector.check(self.api, self.config)
 
-    def test_unknown_or_exhausted_quota_changes_neither_path(self):
-        for used in (None, 99):
-            self.api.used = {"company.json": used, "personal.json": 99}
-            if used is None:
-                with self.assertRaises(selector.SelectorError):
-                    selector.check(self.api, self.config)
-            else:
-                self.assertEqual(
-                    selector.check(self.api, self.config)["selected"], "unchanged"
-                )
+    def test_unknown_quota_changes_neither_path(self):
+        self.api.used = {"company.json": None, "personal.json": 99}
+        with self.assertRaises(selector.SelectorError):
+            selector.check(self.api, self.config)
         self.assertEqual(self.api.calls, [])
         self.assertEqual(self.writes, [])
+
+    def test_both_low_selects_personal_in_both_paths(self):
+        self.api.used = {"company.json": 99, "personal.json": 99}
+        self.assertEqual(selector.check(self.api, self.config)["selected"], "fallback")
+        self.assertTrue(self.api.entries[0]["disabled"])
+        self.assertFalse(self.api.entries[1]["disabled"])
+        self.assertTrue(self.active["personal-id"])
+        self.assertFalse(self.active["work-id"])
 
 
 class TransportTests(unittest.TestCase):
