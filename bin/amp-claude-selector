@@ -367,25 +367,17 @@ def check(api, config):
         role: api.quota(resolve(accounts, config[role]), config["window"])
         for role in ("preferred", "fallback")
     }
-    available = {
-        role: all(q["remaining"] > config["threshold"] for q in quota.values())
-        for role, quota in quotas.items()
-    }
-    selected = (
-        "preferred"
-        if available["preferred"]
-        else "fallback"
-        if available["fallback"]
-        else None
+    preferred_available = all(
+        q["remaining"] > config["threshold"] for q in quotas["preferred"].values()
     )
-    if selected:
-        switch(api, config, selected)
+    selected = "preferred" if preferred_available else "fallback"
+    switch(api, config, selected)
     return {
-        "selected": selected or "unchanged",
+        "selected": selected,
         "quotas": quotas,
-        "reason": "Selected account has capacity"
-        if selected
-        else "Both accounts are at or below threshold; unchanged",
+        "reason": "preferred subscription still has remaining quota"
+        if preferred_available
+        else "preferred subscription is at or below the remaining quota threshold",
     }
 
 

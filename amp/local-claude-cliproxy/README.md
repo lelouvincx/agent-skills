@@ -40,7 +40,8 @@ Open the printed Claude OAuth URL in a local browser. If the browser reaches `lo
 It targets the CLIProxyAPI v7 Management API, verified against v7.3.15. Review compatibility before upgrading to v8.
 
 Defaults: company preferred, personal fallback, weekly quota at 40% remaining, checked every hour.
-At exactly 40% remaining, the preferred account is below the policy boundary. The fallback must have more than 40% remaining.
+At or below 40% remaining on the company account, the selector chooses personal regardless of personal's remaining quota.
+The threshold applies only to the company account.
 The selector switches back when the preferred account recovers above the threshold.
 
 ### Set up management access
@@ -131,9 +132,9 @@ amp-claude-selector resume
 amp-claude-selector uninstall
 ```
 
-Window choices are `weekly`, `five-hour`, and `either`. `either` requires both windows to be above the threshold.
+Window choices are `weekly`, `five-hour`, and `either`. `either` requires both company windows to be above the threshold to select company.
 A weekly-only policy deliberately ignores five-hour exhaustion and model-specific limits.
-Unknown quota leaves the selection unchanged. If both accounts are at or below threshold, selection also stays unchanged.
+Unknown quota leaves the selection unchanged.
 Manual selection requires paused automation so the next hourly check cannot undo it.
 Pause and uninstall do not change credential eligibility. Resume reevaluates the policy.
 
@@ -155,7 +156,7 @@ The selector validates both connections as native Claude subscriptions before
 changing proxy eligibility. Each successful automatic or paused manual selection
 then verifies that the same account is selected in both systems. An unchanged
 proxy selection still repairs native account drift on the next successful check.
-Unknown quota or both accounts below threshold leaves both systems unchanged.
+Unknown quota leaves both systems unchanged.
 
 The switch is not atomic across systems: proxy selection happens first. If native
 activation or verification fails, `run` reports failure, not synchronized success.
