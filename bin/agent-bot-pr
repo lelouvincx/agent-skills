@@ -102,9 +102,14 @@ load_contract() {
 }
 
 validate_local_config() {
-	local unsafe
-	unsafe=$(git config --local --name-only --get-regexp \
-		'^(include.*\.|url\.|http\.|https\.|credential\.|protocol\.|filter\.|ssh\.|core\.(sshcommand|gitproxy|worktree|attributesfile)$|extensions\.|remote\..*\.(pushurl|proxy|proxyauthmethod|uploadpack|receivepack|vcs|mirror)$)' || true)
+	local unsafe pattern
+	pattern='^(include.*\.|url\.|http\.|https\.|credential\.|protocol\.|filter\.|ssh\.|core\.(sshcommand|gitproxy|worktree|attributesfile)$|extensions\.|remote\..*\.(pushurl|proxy|proxyauthmethod|uploadpack|receivepack|vcs|mirror)$)'
+	# extensions.worktreeConfig is allowed because Git sets it for sparse worktrees;
+	# the per-worktree config it enables gets the same unsafe-key check.
+	unsafe=$(git config --local --name-only --get-regexp "$pattern" | grep -vx 'extensions\.worktreeconfig' || true)
+	if [[ "$(git config --local --type=bool --get extensions.worktreeconfig 2>/dev/null)" == true ]]; then
+		unsafe+=$(git config --worktree --name-only --get-regexp "$pattern" || true)
+	fi
 	[[ -z "$unsafe" ]] || fail "unsafe local Git overrides: $unsafe"
 }
 

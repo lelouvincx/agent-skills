@@ -161,6 +161,17 @@ for url in https://github.com/fixture/project https://github.com/fixture/project
     done
 done
 git remote set-url origin https://github.com/fixture/project.git
+git config extensions.worktreeConfig true
+expect_success "$BOT_PR" checks
+git config --worktree core.sparseCheckout true
+expect_success "$BOT_PR" checks
+git config --worktree credential.helper unsafe
+: >"$TEST_LOG"
+expect_failure "$BOT_PR" push
+expect_success test ! -s "$TEST_LOG"
+git config --worktree --unset credential.helper
+git config --worktree --unset core.sparseCheckout
+git config --unset extensions.worktreeConfig
 git config --add remote.origin.url https://github.com/fixture/another.git
 expect_failure "$BOT_PR" checks
 git config --unset-all remote.origin.url
