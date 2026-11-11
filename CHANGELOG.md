@@ -9,6 +9,7 @@ and this project does not currently use versioned releases.
 
 ### Changed
 
+- Let agent-bot-pr run in repositories with extensions.worktreeConfig, such as sparse linked worktrees, while checking the per-worktree config against the same unsafe-key list. [#317](https://github.com/lelouvincx/agent-skills/pull/317)
 - Apply the Claude selector's remaining-quota threshold only to the company account, selecting personal regardless of its quota when company is at or below threshold. [#316](https://github.com/lelouvincx/agent-skills/pull/316)
 - Document the persistent macbook-network exit node, separate it from the macbook coding runner, and require orb-side network verification. [#315](https://github.com/lelouvincx/agent-skills/pull/315)
 - Register the public Lookup vocabulary repository and authorize its approved bot publisher. [#314](https://github.com/lelouvincx/agent-skills/pull/314)
