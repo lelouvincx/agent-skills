@@ -4,7 +4,7 @@ code: "RFC-0015"
 title: "Personal project agent infrastructure"
 slug: "personal-project-agent-infrastructure"
 file: "rfc-0015-personal-project-agent-infrastructure.md"
-status: "Accepted"
+status: "Implemented"
 summary: "Centralize Orb agent infrastructure, project customizations, and personal Amp project configuration."
 created: "2026-11-01"
 updated: "2026-11-02"
@@ -38,6 +38,8 @@ The shared runtime, shipping skill and hardened publisher have shipped. All 13 a
 The SmartClass readiness repair has merged and deployed with passing release probes. Settings readback limitations and deferred work are recorded below; configuration does not prove bot write access.
 The dotfiles and personal-finance consumer migrations have also shipped. Chinh chose to leave the Logseq migration unpublished.
 The separately requested reusable public GitHub template at `lelouvincx/template` has shipped for future personal projects. Its verification and remaining limits are recorded below.
+
+Chinh closed this RFC on 2 November 2026, accepting the delivered scope and dropping the remaining work in phases 3–6. Those phase plans and the rollout checklist are historical, not pending actions. Unverified limits below remain unverified; they do not block closure.
 
 ## Context
 
@@ -463,7 +465,7 @@ Chinh actions:
 Expected outcome: reusable project bootstrap and reviewable settings operations, ready before publishing-workflow activation.
 The original shared bootstrap and settings rollout have shipped. The subsequently requested GitHub template is also delivered; its configuration command remains an explicit, owner-invoked operation for each new repository.
 
-### Phase 3: Design and implement the publishing skill
+### Phase 3: Design and implement the publishing skill (closed; no further work required)
 
 Agent actions:
 
@@ -484,7 +486,7 @@ Expected outcome: one readable shipping workflow with verified publishing contro
 Validation must cover wrong repository, unavailable credentials, personal-identity fallback attempts, failed checks, explicit no-merge requests, and unrelated local work.
 Test the successful bot PR flow only against an explicitly approved test repository or PR. Do not merge or deploy production changes merely to test the skill.
 
-### Phase 4: Pilot agent-skills and smartclass
+### Phase 4: Pilot agent-skills and smartclass (closed; no further work required)
 
 Agent actions:
 
@@ -496,7 +498,7 @@ Agent actions:
 
 Expected outcome: both baselines pass settings readback and runtime checks. Stop broad rollout if either baseline fails.
 
-### Phase 5: Apply the remaining approved projects
+### Phase 5: Apply the remaining approved projects (closed; no further work required)
 
 Agent actions:
 
@@ -507,7 +509,7 @@ Agent actions:
 
 Expected outcome: an outcome table listing unchanged, updated, created, blocked, and failed projects, with evidence and remaining actions.
 
-### Phase 6: Validate, recover if needed, and hand off
+### Phase 6: Validate, recover if needed, and hand off (closed; no further work required)
 
 Agent actions:
 
@@ -760,5 +762,4 @@ Shared policy/resolver tests passed 64 cases; bot publisher contracts passed 130
 
 ## Open questions
 
-- Have the 7 owner-managed GitHub access grants completed, and does the bot's effective access match the approved policy?
-- Can supported readback independently confirm additional-repository lists and SSH alias matching for every target?
+None required for closure. Chinh explicitly dropped the remaining phase 3–6 work on 2 November 2026. Effective bot access for the 7 owner-managed grants and independent confirmation of every additional-repository list and SSH alias remain unverified, not follow-up tasks under this RFC.
