@@ -45,6 +45,9 @@
     },
     "elevenlabs-tts": {
       "executableNames": ["python", "python3"]
+    },
+    "holistics-data-auth": {
+      "executableNames": ["holistics-data-auth"]
     }
   },
   "bundles": {
@@ -158,6 +161,25 @@
       "variables": ["ELEVENLABS_API_KEY"],
       "compatibleBundles": [],
       "allowedCommandClasses": ["elevenlabs-tts"]
+    },
+    "holistics-data-cli": {
+      "audience": "agent",
+      "owner": "lelouvincx/data",
+      "variables": [
+        "HOLISTICS_API_KEY_INTERNAL",
+        "HOLISTICS_API_KEY_US",
+        "HOLISTICS_API_KEY_EU",
+        "HOLISTICS_API_KEY_SG"
+      ],
+      "compatibleBundles": [],
+      "allowedCommandClasses": ["holistics-data-auth"]
+    },
+    "holistics-data-dbt": {
+      "audience": "agent",
+      "owner": "lelouvincx/data",
+      "variables": ["DBT_BIGQUERY_DEV_KEYFILE_JSON"],
+      "compatibleBundles": [],
+      "allowedCommandClasses": ["holistics-data-auth"]
     }
   }
 }
