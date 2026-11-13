@@ -193,6 +193,7 @@ run_runner() {
 	export AMP_REMOTE_CONTROL_TERMINAL=1
 	export AMP_LOG_LEVEL="$log_level"
 	export AMP_LOG_FILE="$log_dir/$runner_id.log"
+	unset OP_SERVICE_ACCOUNT_TOKEN
 
 	if [ "$amp_arg_count" -gt 0 ]; then
 		exec "${AMP_RUNNER_CAFFEINATE:-/usr/bin/caffeinate}" -s "$amp_bin" --no-tui --remote-control-portals --share-network "--runner-id=$runner_id" "${amp_args[@]}"
