@@ -9,6 +9,7 @@ and this project does not currently use versioned releases.
 
 ### Changed
 
+- Register the Holistics internal-anfra-aml project and its Amp-hosted orb mirror. [#320](https://github.com/lelouvincx/agent-skills/pull/320)
 - Bump @ampcode/cli in the SDK lockfile to 0.0.1791360091-gfb32ce. [#319](https://github.com/lelouvincx/agent-skills/pull/319)
 - Let agent-bot-pr run in repositories with extensions.worktreeConfig, such as sparse linked worktrees, while checking the per-worktree config against the same unsafe-key list. [#317](https://github.com/lelouvincx/agent-skills/pull/317)
 - Apply the Claude selector's remaining-quota threshold only to the company account, selecting personal regardless of its quota when company is at or below threshold. [#316](https://github.com/lelouvincx/agent-skills/pull/316)
