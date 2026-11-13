@@ -143,7 +143,6 @@ Local skills are maintained in this repository. Remote skills are fetched and pr
 | [security-audit](skills/security-audit/SKILL.md) | Remote | review security boundaries and run coverage-led audits with independently verified findings |
 | [shipping-personal-projects](skills/shipping-personal-projects/SKILL.md) | Local | ship approved personal projects through the bot publisher and repository release gates |
 | [show-me](skills/show-me/SKILL.md) | Remote | explain technical topics with concise diagrams, code-shape sketches, and focused HTML artifacts |
-| [slackcli](skills/slackcli/SKILL.md) | Local | read, send, and manage Slack messages from the CLI |
 | [syncing-holistics-external-git](skills/syncing-holistics-external-git/SKILL.md) | Local | bootstrap local sync for a new, empty external Git repository connected to Holistics |
 | syncing-obsidian-notes (global User Skills: `syncing-obsidian-notes/`) | Global | read and write the second-brain notes through Obsidian Sync from local threads and orbs |
 | [tdd](skills/tdd/SKILL.md) | Remote | work test-first |
