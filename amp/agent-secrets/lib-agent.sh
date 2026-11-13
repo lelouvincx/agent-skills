@@ -552,12 +552,13 @@ agent_validate_bot_token() {
 	fi
 
 	scopes=$(agent_github_token_scopes "$token") || return 1
-	if [[ "${scopes// /}" != "repo" ]]; then
-		echo "ERROR: GH_TOKEN_BOT must be a classic PAT with only the repo scope" >&2
+	if [[ ",${scopes// /}," != *,repo,* ]]; then
+		echo "ERROR: GH_TOKEN_BOT must be a classic PAT with the repo scope" >&2
 		return 1
 	fi
 	expiration=$(agent_github_token_expiration "$token") || return 1
-	if [[ -z "$expiration" ]] || ! python3 - "$expiration" <<'PY'
+	# A token without an expiration date is accepted; an expired one is not.
+	if [[ -n "$expiration" ]] && ! python3 - "$expiration" <<'PY'
 from datetime import datetime, timezone
 import sys
 
