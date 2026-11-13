@@ -42,7 +42,7 @@ runtime:
   uses:
     - "launchctl"
     - "caffeinate -s"
-    - "Amp --no-tui --remote-control-portals --runner-id"
+    - "Amp --no-tui --remote-control-portals --share-network --runner-id"
   dependencies:
     - "macOS user LaunchAgents"
     - "Amp CLI"
@@ -60,7 +60,8 @@ runtime:
     - "~/Library/LaunchAgents/com.ampcode.runner.<runner-id>.plist"
     - "~/.cache/amp/logs/runners/<runner-id>.log"
     - "~/.cache/amp/logs/runners/<runner-id>.supervisor.log"
-  network: []
+  network:
+    - "Amp Net relays outbound orb traffic through this Mac when an orb selects the runner as its exit node."
   logs:
     - "Amp structured log"
     - "LaunchAgent supervisor log"
@@ -76,6 +77,7 @@ safety:
   risks:
     - "Structured and supervisor logs can contain sensitive local execution details."
     - "Remote terminal control allows web Terminal access to the local runner after Amp workspace and user security checks pass."
+    - "Orbs routed through this runner can reach destinations accessible from this Mac's network."
     - "KeepAlive restarts a runner after failure until the LaunchAgent is stopped or uninstalled."
 related: []
 tags:
@@ -94,6 +96,8 @@ tags:
 Managed runners enable Amp remote terminal control. This lets you use the web Terminal for a CLI thread after Amp workspace and user security checks pass.
 
 Managed runners enable `--remote-control-portals` so dev servers started by runner threads can be opened through Amp portals.
+
+Managed runners also enable `--share-network` by default. With Amp Net enabled in Experimental Features, your orbs can use this Mac's network connection through `amp net route <runner-id>`.
 
 The launcher wraps Amp with `caffeinate -s`. AC power keeps the Mac awake while the runner is active. Battery power keeps normal macOS sleep behaviour.
 
@@ -132,9 +136,9 @@ Use `--debug` or `--log-level debug` during an incident. Reinstall without that 
 
 `install` creates `com.ampcode.runner.<runner-id>.plist` under `~/Library/LaunchAgents/`. It records the working directory, current `PATH`, current `HOME`, Amp executable, log settings, and approved extra Amp arguments.
 
-The LaunchAgent runs Amp with `--no-tui`, `--remote-control-portals`, and the supplied runner ID. `KeepAlive` restarts the process after failure. A 10-second throttle limits restart loops.
+The LaunchAgent runs Amp with `--no-tui`, `--remote-control-portals`, `--share-network`, and the supplied runner ID. `KeepAlive` restarts the process after failure. A 10-second throttle limits restart loops.
 
-Existing managed runners pick up the portal default on their next restart. Reinstallation is not required.
+Existing managed runners pick up the portal and network-sharing defaults on their next restart. Reinstallation is not required.
 
 Before it starts Amp, `amp-runner run` sets `AMP_REMOTE_CONTROL_TERMINAL=1`. Amp uses this to enable terminal access from ampcode.com. The launcher owns this setting, so extra Amp arguments cannot disable remote terminal control for a managed runner.
 
