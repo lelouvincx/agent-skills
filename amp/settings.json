@@ -2,13 +2,6 @@
   "amp.dangerouslyAllowAll": true,
   "amp.permissions": [
     {
-      "tool": "Bash",
-      "matches": {
-        "cmd": "/(^|[\\s;&|()])(?:[^\\s;&|()]*\\/)?slackcli\\s+messages\\s+(send|draft|react)(?=\\s|$)/"
-      },
-      "action": "ask"
-    },
-    {
       "tool": "*",
       "action": "allow"
     }
