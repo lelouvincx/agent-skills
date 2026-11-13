@@ -9,6 +9,7 @@ and this project does not currently use versioned releases.
 
 ### Changed
 
+- Project the shared agent instructions into an always-applied Cursor rule during sync, and document using the shared skills from Cursor. [#323](https://github.com/lelouvincx/agent-skills/pull/323)
 - Share the Mac network with orbs from managed runners by default, and keep the 1Password service-account token out of the runner's Amp process. [#322](https://github.com/lelouvincx/agent-skills/pull/322)
 - Close RFC-0015 as implemented, recording that the remaining phase 3–6 work was dropped. [#321](https://github.com/lelouvincx/agent-skills/pull/321)
 - Register the Holistics internal-anfra-aml project and its Amp-hosted orb mirror. [#320](https://github.com/lelouvincx/agent-skills/pull/320)
