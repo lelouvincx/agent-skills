@@ -25,6 +25,12 @@ In an agent-skills development Orb, run `.agents/sync` to project the current wo
 Setup and resume use their own working checkout without pulling when no source override is supplied. Consuming projects explicitly select infrastructure source; their clean checkouts refresh with `pull --ff-only`, while dirty source is projected without a pull.
 Keep consuming-project customizations after the shared baseline, as SmartClass does in `.agents/project`. Do not put application installation or database work in an explicit runtime sync.
 
+### Cursor on the same machine
+
+Cursor discovers the shared skills in `~/.agents/skills` directly; no separate skill copies are needed. Sync also generates an always-applied rule at `~/.cursor/rules/agent-skills.mdc` from `amp/AGENTS.md`, with a short Cursor compatibility note. Edit `amp/AGENTS.md` and run `./sync-skills.sh` to update it. Other Cursor rules are left untouched.
+
+The existing CLIs remain available through the shell. Check `command -v <tool>` for PATH conflicts; use `~/.local/bin/<tool>` to select the repository helper explicitly. Amp plugins and session-bound helpers are not automatically portable to Cursor, and sync does not register MCP servers in Cursor. These local paths do not configure Cursor Cloud Agents.
+
 ## Use the project registry
 
 `projects.yaml` maps short project names to local paths and GitHub repositories.

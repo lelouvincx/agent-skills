@@ -32,6 +32,8 @@ for file in README.md annotation.schema.json toolkit-core.js toolkit.js; do
 done
 mkdir -p "$tmp_home/.config/amp/conventions"
 touch "$tmp_home/.config/amp/conventions/stale.md"
+mkdir -p "$tmp_home/.cursor/rules"
+printf '%s\n' 'user-owned rule' > "$tmp_home/.cursor/rules/personal.mdc"
 mkdir -p "$tmp_home/.config/amp/state"
 printf '%s\n' 'pre-existing runtime state' > "$tmp_home/.config/amp/state/github-thread-events.sqlite"
 mkdir -p "$tmp_home/.local/share/amp-cliproxy/auth"
@@ -238,6 +240,20 @@ fi
 
 if ! diff -qr "$REPO_DIR/amp/conventions" "$conventions"; then
 	echo "error: Amp convention projection differs from its source" >&2
+	exit 1
+fi
+
+cursor_rule="$tmp_home/.cursor/rules/agent-skills.mdc"
+if [ ! -f "$cursor_rule" ] || ! grep -q '^alwaysApply: true$' "$cursor_rule"; then
+	echo "error: projection did not create an always-applied Cursor rule" >&2
+	exit 1
+fi
+if ! tail -n "$(wc -l < "$REPO_DIR/amp/AGENTS.md" | tr -d ' ')" "$cursor_rule" | cmp -s "$REPO_DIR/amp/AGENTS.md" -; then
+	echo "error: Cursor rule does not contain the complete shared instructions" >&2
+	exit 1
+fi
+if [ "$(cat "$tmp_home/.cursor/rules/personal.mdc")" != 'user-owned rule' ]; then
+	echo "error: projection changed an unrelated Cursor rule" >&2
 	exit 1
 fi
 
