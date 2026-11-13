@@ -143,6 +143,8 @@ class AgentSecretPolicyValidationTests(unittest.TestCase):
                 "slb-snowflake",
                 "braintrust-export",
                 "anfra-discourse",
+                "holistics-data-cli",
+                "holistics-data-dbt",
             },
             set(manifest["bundles"]),
         )
