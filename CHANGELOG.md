@@ -284,6 +284,7 @@ and this project does not currently use versioned releases.
 
 ### Removed
 
+- Remove the slackcli skill and its write-permission rule; the official Amp Slack integration and the amp-slack plugin replace it. [#318](https://github.com/lelouvincx/agent-skills/pull/318)
 - Remove the RTK rewrite Amp plugin, its documentation and tests, and its automatic git diff to sem diff overlay. [#271](https://github.com/lelouvincx/agent-skills/pull/271)
 - Remove the unused DeepSeek V4 Flash, Gemini 3.5 Flash, GPT-5.5 Medium, and GPT-5.5 XHigh agent modes and their capability documentation. [#216](https://github.com/lelouvincx/agent-skills/pull/216)
 - Remove the redundant ChatGPT usage command now that Amp provides usage checking. [#192](https://github.com/lelouvincx/agent-skills/pull/192)
