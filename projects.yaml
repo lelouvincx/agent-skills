@@ -248,6 +248,18 @@ projects:
       - internal aml project
     description: Default Holistics internal data AML project.
 
+  internal-anfra-aml:
+    github: holistics/internal-anfra-aml
+    owner: holistics
+    dir: holistics/data/internal-anfra-aml
+    aliases:
+      - internal anfra aml
+      - internal anfra
+    description: >-
+      Holistics internal Anfra AML project. For orbs, use the Amp-hosted
+      mirror lelouvincx/internal-anfra-aml
+      (https://ampcode.com/@lelouvincx/internal-anfra-aml).
+
   data-eu:
     github: holistics/data-eu
     owner: holistics
