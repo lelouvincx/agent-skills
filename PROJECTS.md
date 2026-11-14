@@ -49,6 +49,7 @@ AGENTS_REGISTRY_ENV=vps project-resolve prefect --path
 | `agent-skills` | `lelouvincx` | `~/Developer/agent-skills` | `lelouvincx/agent-skills` |
 | `dotfiles` | `lelouvincx` | `~/Developer/dotfiles` | `lelouvincx/dotfiles` |
 | `nvim` | `lelouvincx` | `~/Developer/dotfiles/nvim` | `lelouvincx/dotfiles` |
+| `z-no-project` | `lelouvincx` | `~/Developer/z-no-project` | `null` |
 | `contribute` | `open-source` | `~/Developer/contribute` | `null` |
 | `anfra` | `holistics` | `~/Developer/anfra` | `null` |
 | `anfra-core` | `holistics` | `~/Developer/anfra/anfra` | `holistics/anfra` |
