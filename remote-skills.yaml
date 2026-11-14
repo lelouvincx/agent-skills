@@ -34,15 +34,6 @@ skills:
     url: https://raw.githubusercontent.com/lox/notion-cli/refs/heads/main/skills/notion/SKILL.md
     enabled: true
 
-  - name: linear-cli
-    url: https://raw.githubusercontent.com/schpet/linear-cli/refs/heads/main/skills/linear-cli/SKILL.md
-    enabled: true
-    files:
-      - references/issue.md
-      - references/project.md
-      - references/team.md
-      - references/commands.md
-
   - name: agent-browser
     url: https://raw.githubusercontent.com/vercel-labs/agent-browser/main/skills/agent-browser/SKILL.md
     enabled: true
