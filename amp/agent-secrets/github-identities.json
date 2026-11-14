@@ -19,7 +19,8 @@
         "lelouvincx/self-taught-design",
         "lelouvincx/self-taught-lsp",
         "lelouvincx/smartclass",
-        "lelouvincx/template"
+        "lelouvincx/template",
+        "lelouvincx/zero-dollar-data-stack"
       ]
     }
   }
