@@ -136,7 +136,6 @@ Local skills are maintained in this repository. Remote skills are fetched and pr
 | [handoff](skills/handoff/SKILL.md) | Remote | compact a conversation for another agent to continue |
 | [holistics-migrate-power-bi](skills/holistics-migrate-power-bi/SKILL.md) | Remote | migrate Power BI models and reports to Holistics |
 | [impeccable](skills/impeccable/SKILL.md) | Remote | design, review, and improve frontend interfaces |
-| [linear-cli](skills/linear-cli/SKILL.md) | Remote | manage Linear issues from the command line |
 | [modern-web-guidance](skills/modern-web-guidance/SKILL.md) | Remote | check current web platform guidance before frontend work |
 | [motion](skills/motion/SKILL.md) | Remote | use official Motion animation best practices and search free documentation and examples |
 | [notion](skills/notion/SKILL.md) | Remote | manage Notion pages, databases, and comments |
