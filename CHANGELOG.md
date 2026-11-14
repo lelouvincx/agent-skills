@@ -9,6 +9,7 @@ and this project does not currently use versioned releases.
 
 ### Changed
 
+- Register z-no-project and its Amp-hosted project URL in the project registry. [#326](https://github.com/lelouvincx/agent-skills/pull/326)
 - Remove the linear-cli skill in favor of Amp's Linear MCP, keeping the Linear project-search conventions. [#325](https://github.com/lelouvincx/agent-skills/pull/325)
 - Add the holistics-data CLI and dbt agent bundles, and accept bot tokens with extra scopes or no expiry date (expired tokens are still rejected). [#324](https://github.com/lelouvincx/agent-skills/pull/324)
 - Project the shared agent instructions into an always-applied Cursor rule during sync, and document using the shared skills from Cursor. [#323](https://github.com/lelouvincx/agent-skills/pull/323)
