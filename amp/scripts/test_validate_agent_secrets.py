@@ -80,6 +80,7 @@ class AgentSecretPolicyValidationTests(unittest.TestCase):
                 "lelouvincx/self-taught-lsp",
                 "lelouvincx/smartclass",
                 "lelouvincx/template",
+                "lelouvincx/zero-dollar-data-stack",
             ],
             policy["identities"]["lelouvincx-bot"]["repositoryAllowlist"],
         )
