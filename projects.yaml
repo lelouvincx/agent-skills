@@ -77,6 +77,16 @@ projects:
       - neovim config
     description: Neovim configuration stored inside dotfiles.
 
+  z-no-project:
+    github: null
+    owner: lelouvincx
+    dir: z-no-project
+    aliases:
+      - z no project
+    description: >-
+      Amp-hosted project lelouvincx/z-no-project
+      (https://ampcode.com/@lelouvincx/z-no-project).
+
   contribute:
     github: null
     owner: open-source
