@@ -366,6 +366,12 @@ run_selector() {
 	log "selected $selected; preferred weekly remaining: ${weekly_remaining}%"
 }
 
+# LaunchAgent PATH: the caller's PATH without mise shims. A shim runs mise itself, and
+# macOS prompts to let mise access other apps' data each time a background job runs it.
+launch_agent_path() {
+	printf '%s' "${PATH-}" | awk -v RS=: -v ORS=: '$0 !~ /\/mise\/shims\/?$/' | sed 's/:$//'
+}
+
 xml_escape() { printf '%s' "$1" | sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g' -e 's/"/\&quot;/g'; }
 xml_string() { printf '\t\t<string>%s</string>\n' "$(xml_escape "$1")"; }
 
@@ -435,7 +441,7 @@ publish_agent() {
 		printf '\t<key>ProgramArguments</key>\n\t<array>\n'; xml_string "$script_path"; xml_string run; printf '\t</array>\n'
 		printf '\t<key>EnvironmentVariables</key>\n\t<dict>\n'
 		printf '\t\t<key>HOME</key>\n'; xml_string "$HOME"
-		printf '\t\t<key>PATH</key>\n'; xml_string "$PATH"
+		printf '\t\t<key>PATH</key>\n'; xml_string "$(launch_agent_path)"
 		printf '\t</dict>\n'
 		printf '\t<key>RunAtLoad</key>\n\t<true/>\n'
 		printf '\t<key>StartInterval</key>\n\t<integer>%s</integer>\n' "$interval"

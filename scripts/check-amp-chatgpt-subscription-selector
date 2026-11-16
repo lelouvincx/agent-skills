@@ -102,8 +102,11 @@ printf '%s\n' "$primary" > "$tmp/active"
 if run_tool install --preferred "$primary" --fallback "$fallback" >/dev/null 2>&1; then exit 1; fi
 if run_tool install --preferred "$primary" --fallback "$fallback" --interval 0 >/dev/null 2>&1; then exit 1; fi
 if run_tool install --preferred "$primary" --fallback "$fallback" --interval nope >/dev/null 2>&1; then exit 1; fi
-run_tool install --preferred "$primary" --fallback "$fallback" --interval 3600
+PATH="$tmp/mise/shims:$PATH:$tmp/mise/shims/" run_tool install --preferred "$primary" --fallback "$fallback" --interval 3600
 plist="$tmp/agents/com.ampcode.chatgpt-subscription-selector.plist"
+plist_path="$(sed -n '/<key>PATH<\/key>/{n;s|.*<string>\(.*\)</string>|\1|p;}' "$plist")"
+case "$plist_path" in */mise/shims*) exit 1 ;; esac
+case ":$plist_path:" in *:/usr/bin:*) ;; *) exit 1 ;; esac
 grep -Fq '<key>RunAtLoad</key>' "$plist"
 grep -Fq '<true/>' "$plist"
 grep -Fq '<integer>3600</integer>' "$plist"
