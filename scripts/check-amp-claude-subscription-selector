@@ -1,5 +1,715 @@
 #!/usr/bin/env bash
+# Credential-free contract checks for bin/amp-claude-selector.
+# Fakes stand in for Docker (the CLIProxyAPI Management API), Amp, launchctl,
+# lockf, htpasswd, sleep and agent-secrets; the selector itself runs unchanged.
 set -euo pipefail
-repo_root="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
-python3 -m unittest discover -s "$repo_root/scripts" -p test_amp_claude_subscription_selector.py
-python3 -m unittest discover -s "$repo_root/scripts" -p test_amp_claude_work_usage.py
+
+repo_root="$(CDPATH= cd -P -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+tool="$repo_root/bin/amp-claude-selector"
+tmp="$(mktemp -d "${TMPDIR:-/tmp}/check-amp-claude-selector.XXXXXX")"
+tmp="$(cd -P "$tmp" && pwd)"
+trap 'rm -rf "$tmp"' EXIT
+bin="$tmp/bin"
+mkdir -p "$bin" "$tmp/home"
+agents="$tmp/home/Library/LaunchAgents"
+plist="$agents/com.ampcode.claude-subscription-selector.plist"
+usage_plist="$agents/com.ampcode.claude-work-usage.plist"
+loaded="$tmp/loaded.com.ampcode.claude-subscription-selector"
+state="$tmp/state"
+
+leak_check='for name in CLIPROXY_MANAGEMENT_KEY OP_SERVICE_ACCOUNT_TOKEN AGENT_SECRET_AUTH; do
+	if env | grep -q "^$name="; then printf "%s %s\n" "${0##*/}" "$name" >> "$TEST_DIR/leaks"; fi
+done'
+
+cat > "$bin/docker" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+$leak_check
+EOF
+cat >> "$bin/docker" <<'EOF'
+state="$TEST_DIR/proxy.json"
+update() { jq "$@" "$state" > "$state.tmp" && mv "$state.tmp" "$state"; }
+if [ "$1" = restart ]; then
+	printf 'restart %s\n' "$2" >> "$TEST_DIR/calls"
+	jq -e '.queue == []' "$state" >/dev/null || printf 'restart before drain\n' >> "$TEST_DIR/leaks"
+	[ -z "${TEST_STATS_ON_RESTART:-}" ] || update '.stats = true'
+	if [ -f "$TEST_DIR/after-restart.json" ]; then
+		update --slurpfile queue "$TEST_DIR/after-restart.json" '.queue = $queue[0]'
+		rm "$TEST_DIR/after-restart.json"
+	fi
+	exit 0
+fi
+printf '%s\n' "$*" >> "$TEST_DIR/docker-args"
+config="$(cat)"
+printf '%s\n' "$config" > "$TEST_DIR/last-config"
+value() { printf '%s\n' "$config" | sed -n "s/^$1 = //p" | head -n 1; }
+url="$(value url | jq -r .)"
+method="$(value request | jq -r .)"
+data="$(value data)"
+[ -z "$data" ] || data="$(printf '%s' "$data" | jq -r .)"
+endpoint="${url#http://127.0.0.1:8317/v0/management/}"
+printf '%s %s\n' "$method" "$endpoint" >> "$TEST_DIR/calls"
+case "$method $endpoint" in
+	'GET auth-files') jq '{files}' "$state" ;;
+	'POST api-call')
+		if [ -s "$TEST_DIR/responses" ]; then
+			head -n 1 "$TEST_DIR/responses"
+			tail -n +2 "$TEST_DIR/responses" > "$TEST_DIR/responses.tmp"
+			mv "$TEST_DIR/responses.tmp" "$TEST_DIR/responses"
+		else
+			jq --argjson request "$data" '(.files[] | select(.auth_index == $request.auth_index) | .name) as $name
+				| {status_code: 200, body: ({seven_day: {utilization: .used[$name]},
+					five_hour: {utilization: (.used5[$name] // 0)}} | tojson)}' "$state"
+		fi
+		;;
+	'POST auth-files/refresh') printf '{"status":"ok"}\n' ;;
+	'PATCH auth-files/status')
+		printf '%s\n' "$(printf '%s' "$data" | jq -r '"\(.name) \(.disabled)"')" >> "$TEST_DIR/patches"
+		if [ "$(printf '%s' "$data" | jq .disabled)" = false ] && [ -n "${TEST_FAIL_ENABLE:-}" ]; then
+			printf '{"error":"enable failed"}\n'
+			exit 22
+		fi
+		if [ -n "${TEST_REAL_CURL_PORT:-}" ]; then
+			printf '%s\n' "$config" | sed "s/127\.0\.0\.1:8317/127.0.0.1:$TEST_REAL_CURL_PORT/" | curl --config -
+		else
+			printf '%s' "$data" | jq -c '{status: "ok", disabled}'
+		fi
+		update --argjson request "$data" '.files |= map(if .name == $request.name then .disabled = $request.disabled else . end)'
+		;;
+	'GET usage-statistics-enabled') jq '{"usage-statistics-enabled": .stats}' "$state" ;;
+	'GET usage-queue?count=1000')
+		jq '.queue[:1000]' "$state"
+		update '.queue |= .[1000:]'
+		;;
+	*) exit 9 ;;
+esac
+EOF
+
+cat > "$bin/amp" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+$leak_check
+EOF
+cat >> "$bin/amp" <<'EOF'
+[ "$1 $2" = 'config model-providers' ] || exit 8
+active="$TEST_DIR/amp-active"
+touch "$active"
+case "$3" in
+	show)
+		is_active=false
+		! grep -Fxq "$4" "$active" || is_active=true
+		printf '{\n  "id": "%s",\n  "type": "%s",\n  "active": %s\n}\n' "$4" "${TEST_AMP_KIND:-model_provider_claude_sub}" "$is_active"
+		;;
+	activate)
+		printf 'activate %s\n' "$4" >> "$TEST_DIR/amp-writes"
+		[ -z "${TEST_AMP_FAIL:-}" ] || exit 8
+		[ -n "${TEST_AMP_IGNORE:-}" ] || printf '%s\n' "$4" > "$active"
+		;;
+	deactivate)
+		printf 'deactivate %s\n' "$4" >> "$TEST_DIR/amp-writes"
+		[ "${5:-}" = --yes ] || exit 8
+		grep -Fxv "$4" "$active" > "$active.tmp" || true
+		mv "$active.tmp" "$active"
+		;;
+	*) exit 8 ;;
+esac
+EOF
+
+cat > "$bin/launchctl" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+$leak_check
+EOF
+cat >> "$bin/launchctl" <<'EOF'
+printf '%s\n' "$*" >> "$TEST_DIR/launchctl.log"
+case "$1" in
+	print)
+		[ -f "$TEST_DIR/loaded.${2##*/}" ] || { printf 'Could not find service "%s"\n' "${2##*/}" >&2; exit 113; }
+		;;
+	bootout)
+		if [ "$#" -eq 3 ]; then name="$(basename "$3" .plist)"; else name="${2##*/}"; fi
+		[ -f "$TEST_DIR/loaded.$name" ] || exit 3
+		rm "$TEST_DIR/loaded.$name"
+		;;
+	bootstrap)
+		[ -z "${TEST_BOOTSTRAP_FAIL:-}" ] || exit 5
+		touch "$TEST_DIR/loaded.$(basename "$3" .plist)"
+		;;
+esac
+EOF
+
+cat > "$bin/plutil" <<'EOF'
+#!/usr/bin/env bash
+if [ -x /usr/bin/plutil ]; then exec /usr/bin/plutil "$@"; fi
+EOF
+
+# macOS lockf locks an inherited descriptor; Linux CI uses flock(1) the same way.
+cat > "$bin/lockf" <<'EOF'
+#!/usr/bin/env bash
+if [ -x /usr/bin/lockf ]; then exec /usr/bin/lockf "$@"; fi
+fd="${!#}"
+case " $* " in
+	*' -t 0 '*) exec flock -n "$fd" ;;
+	*) exec flock "$fd" ;;
+esac
+EOF
+
+cat > "$bin/htpasswd" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "$*" > "$TEST_DIR/htpasswd-args"
+cat > "$TEST_DIR/htpasswd-stdin"
+printf '%s\n' 'selector:$2y$12$fixture'
+EOF
+
+cat > "$bin/sleep" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "$1" >> "$TEST_DIR/sleeps"
+EOF
+
+cat > "$bin/agent-secrets" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >> "$TEST_DIR/resolver.log"
+[ -z "${TEST_RESOLVER_FAIL:-}" ] || exit 1
+while [ "$#" -gt 0 ] && [ "$1" != -- ]; do shift; done
+shift
+export CLIPROXY_MANAGEMENT_KEY="${TEST_KEY-fixture-not-a-secret}" OP_SERVICE_ACCOUNT_TOKEN=fixture-token AGENT_SECRET_AUTH=interactive
+exec "$@"
+EOF
+chmod +x "$bin/"*
+
+run_tool() {
+	env -u CLIPROXY_MANAGEMENT_KEY -u OP_SERVICE_ACCOUNT_TOKEN -u AGENT_SECRET_AUTH \
+		HOME="$tmp/home" PATH="$bin:$PATH" TEST_DIR="$tmp" AMP_CLAUDE_SELECTOR_STATE_DIR="$state" \
+		AMP_CLAUDE_SELECTOR_LAUNCHCTL="$bin/launchctl" AMP_CLAUDE_SELECTOR_PLUTIL="$bin/plutil" \
+		AMP_CLAUDE_SELECTOR_LOCKF="$bin/lockf" AMP_CLAUDE_SELECTOR_HTPASSWD="$bin/htpasswd" \
+		AMP_CLAUDE_SELECTOR_SLEEP="$bin/sleep" "$tool" "$@"
+}
+
+check_failed() { printf 'FAIL: %s\n' "$*" >&2; exit 1; }
+ok() { "$@" > "$tmp/out" 2> "$tmp/err" || check_failed "$* exited $?: $(cat "$tmp/err")"; }
+fails() { if "$@" > "$tmp/out" 2> "$tmp/err"; then check_failed "expected failure: $*"; fi; }
+err_has() { grep -Fq -- "$1" "$tmp/err" || check_failed "error lacks '$1': $(cat "$tmp/err")"; }
+out_is() { [ "$(cat "$tmp/out")" = "$1" ] || check_failed "output '$(cat "$tmp/out")' is not '$1'"; }
+file_is() { [ "$(cat "$1" 2>/dev/null || true)" = "$2" ] || check_failed "$1 is '$(cat "$1" 2>/dev/null || true)', expected '$2'"; }
+json_ok() { jq -e "$2" "$1" >/dev/null || check_failed "$1 does not satisfy $2: $(cat "$1")"; }
+mode_of() { stat -f %Lp "$1" 2>/dev/null || stat -c %a "$1"; }
+count() { grep -c -- "$1" "$2" 2>/dev/null || true; }
+
+reset_proxy() {
+	jq -n --argjson company "$1" --argjson personal "$2" '{
+		files: [
+			{name: "company.json", auth_index: "0", disabled: false, provider: "claude", source: "file", runtime_only: false},
+			{name: "personal.json", auth_index: "1", disabled: true, provider: "claude", source: "file", runtime_only: false},
+			{name: "codex.json", auth_index: "2", disabled: false, provider: "codex", source: "file", runtime_only: false}
+		],
+		used: {"company.json": $company, "personal.json": $personal}, used5: {}, stats: true, queue: []}' > "$tmp/proxy.json"
+	: > "$tmp/calls"
+	: > "$tmp/patches"
+	: > "$tmp/responses"
+	rm -f "$tmp/sleeps"
+}
+
+set_proxy() { jq "$@" "$tmp/proxy.json" > "$tmp/proxy.tmp" && mv "$tmp/proxy.tmp" "$tmp/proxy.json"; }
+
+write_config() {
+	mkdir -p "$state"
+	jq -n --argjson extra "$1" '{preferred: "company.json", fallback: "personal.json", container: "amp-cliproxyapi",
+		docker: "docker", window: "weekly", threshold: 40, interval: 3600} + $extra' > "$state/config.json"
+}
+
+enabled_accounts() { jq -r '[.files[] | select(.provider == "claude" and (.disabled | not)) | .name] | join(",")' "$tmp/proxy.json"; }
+
+# --- Installation, defaults and the LaunchAgent ---
+reset_proxy 10 20
+ok run_tool install --preferred company.json --fallback personal.json
+out_is 'Installed Claude subscription selector'
+json_ok "$state/config.json" '.window == "weekly" and .threshold == 40 and .interval == 3600
+	and .container == "amp-cliproxyapi" and (.docker | endswith("/bin/docker")) and (has("amp_preferred") | not)'
+[ "$(count 'POST api-call' "$tmp/calls")" = 2 ] || check_failed 'install must validate both quotas'
+[ ! -s "$tmp/patches" ] || check_failed 'install must not switch accounts'
+[ "$(sed -n '/<array>/,/<\/array>/p' "$plist" | sed -n 's|.*<string>\(.*\)</string>|\1|p')" = "$tool
+run" ] || check_failed 'LaunchAgent must run the Bash selector directly'
+grep -Fq '<integer>3600</integer>' "$plist"
+grep -Fq "<string>$state</string>" "$plist"
+if grep -Fq fixture-not-a-secret "$plist" || grep -Fq 'op://' "$plist"; then check_failed 'LaunchAgent leaks a key'; fi
+[ "$(mode_of "$plist")" = 600 ] && [ "$(mode_of "$state")" = 700 ] && [ "$(mode_of "$state/config.json")" = 600 ]
+[ -f "$loaded" ] && [ ! -e "$state/paused" ]
+fails run_tool install --preferred same.json --fallback same.json
+err_has 'Preferred and fallback must differ'
+for option in '--threshold 101' '--threshold nope' '--interval 0' '--interval -5' '--window monthly'; do
+	# Intentional splitting passes separate CLI arguments.
+	fails run_tool install --preferred company.json --fallback personal.json $option
+done
+
+# --- Policy: only the company account's quota decides ---
+ok run_tool run
+out_is 'preferred subscription still has remaining quota'
+[ ! -s "$tmp/patches" ]
+json_ok "$state/last-run.json" '.result == "ok" and .selected == "preferred" and .quotas.preferred.seven_day.remaining == 90
+	and .quotas.fallback.seven_day.remaining == 80 and (.timestamp | test("^[0-9-]+T[0-9:]+[+]00:00$"))'
+set_proxy '.used["company.json"] = 60'
+ok run_tool run
+out_is 'preferred subscription is at or below the remaining quota threshold'
+file_is "$tmp/patches" $'company.json true\npersonal.json false'
+set_proxy '.used["company.json"] = 59.9'
+ok run_tool run
+file_is "$tmp/patches" $'company.json true\npersonal.json false\npersonal.json true\ncompany.json false'
+[ "$(enabled_accounts)" = company.json ]
+tail -n 1 "$state/selector.log" | grep -Eq '^[0-9-]+T[0-9:]+[+]00:00 ok: preferred subscription still has remaining quota$'
+
+for company in 59.9 60 61; do
+	for personal in 0 60 90 100; do
+		reset_proxy "$company" "$personal"
+		ok run_tool run
+		if [ "$company" = 59.9 ]; then
+			[ ! -s "$tmp/patches" ] || check_failed "company $company personal $personal must keep company"
+		else
+			file_is "$tmp/patches" $'company.json true\npersonal.json false'
+		fi
+	done
+done
+
+for used in null true '"60"' -1 101; do
+	reset_proxy 10 "$used"
+	fails run_tool run
+	err_has 'No usable seven_day quota'
+	[ ! -s "$tmp/patches" ] || check_failed "unknown quota $used must not switch"
+	json_ok "$state/last-run.json" '.result == "failed" and .selected == "unknown" and .reason == "No usable seven_day quota"'
+done
+
+reset_proxy 10 20
+printf '%s\n' '{"status_code":200,"body":"{\"seven_day\":null}"}' > "$tmp/responses"
+fails run_tool run
+err_has 'No usable seven_day quota'
+
+reset_proxy 10 20
+ok run_tool configure --window five-hour
+set_proxy '.used5["company.json"] = 99'
+ok run_tool run
+[ "$(enabled_accounts)" = personal.json ] || check_failed 'five-hour window must select personal'
+json_ok "$state/last-run.json" '.quotas.preferred == {five_hour: {remaining: 1, resets_at: null}}'
+ok run_tool configure --window either
+set_proxy '.used5["company.json"] = 0'
+ok run_tool run
+[ "$(enabled_accounts)" = company.json ]
+json_ok "$state/last-run.json" '(.quotas.preferred | keys) == ["five_hour", "seven_day"]'
+ok run_tool configure --window weekly
+
+reset_proxy 10 20
+set_proxy '.files += [{name: "third.json", auth_index: "3", disabled: false, provider: "claude", source: "file"}]'
+ok run_tool pause
+fails run_tool use personal
+err_has 'Unexpected Claude credentials; selection would not be exclusive'
+[ ! -s "$tmp/patches" ]
+ok run_tool resume
+
+reset_proxy 60 20
+TEST_FAIL_ENABLE=1 fails run_tool run
+err_has 'docker failed (exit 22)'
+[ "$(enabled_accounts)" = '' ] || check_failed 'a failed enable must leave both accounts disabled'
+
+reset_proxy 10 20
+set_proxy '.files[0].runtime_only = true'
+fails run_tool run
+err_has 'Account not uniquely available: company.json'
+
+# --- Native Amp subscription synchronization ---
+write_config '{"amp_preferred": "work-id", "amp_fallback": "personal-id"}'
+printf 'personal-id\n' > "$tmp/amp-active"
+: > "$tmp/amp-writes"
+reset_proxy 10 20
+ok run_tool run
+file_is "$tmp/amp-active" work-id
+set_proxy '.used["company.json"] = 60'
+ok run_tool run
+file_is "$tmp/amp-active" personal-id
+[ "$(enabled_accounts)" = personal.json ]
+set_proxy '.used["company.json"] = 10'
+ok run_tool run
+file_is "$tmp/amp-active" work-id
+ok run_tool run
+file_is "$tmp/amp-writes" $'activate work-id\nactivate personal-id\nactivate work-id'
+
+touch "$state/paused"
+rm -f "$loaded"
+for extra in '{"amp_preferred": "work-id", "amp_fallback": null}' '{"amp_preferred": "work-id", "amp_fallback": "work-id"}'; do
+	write_config "$extra"
+	reset_proxy 10 20
+	fails run_tool use personal
+	err_has 'Amp sync requires amp and two distinct Claude connection IDs'
+	[ ! -s "$tmp/patches" ]
+done
+write_config '{"amp_preferred": "work-id", "amp_fallback": "personal-id"}'
+TEST_AMP_KIND=custom-url fails run_tool use personal
+err_has 'not list indexes'
+[ ! -s "$tmp/patches" ]
+file_is "$tmp/amp-writes" $'activate work-id\nactivate personal-id\nactivate work-id'
+rm "$state/paused"
+
+: > "$tmp/amp-writes"
+printf 'personal-id\n' > "$tmp/amp-active"
+reset_proxy 10 20
+TEST_AMP_FAIL=1 fails run_tool run
+err_has 'Proxy selected account, but Amp sync failed; accounts may be out of sync. Retry run or paused use.'
+[ "$(grep -c 'amp-claude-selector:' "$tmp/err")" = 1 ] || check_failed 'only the wrapped error may be reported'
+file_is "$tmp/amp-active" personal-id
+json_ok "$state/last-run.json" '.result == "failed" and (.reason | contains("out of sync"))'
+ok run_tool run
+file_is "$tmp/amp-active" work-id
+printf 'personal-id\n' > "$tmp/amp-active"
+TEST_AMP_IGNORE=1 fails run_tool run
+err_has 'out of sync'
+
+: > "$tmp/amp-writes"
+reset_proxy null 99
+fails run_tool run
+[ ! -s "$tmp/patches" ] && [ ! -s "$tmp/amp-writes" ] || check_failed 'unknown quota must change neither path'
+reset_proxy 99 99
+printf 'work-id\n' > "$tmp/amp-active"
+ok run_tool run
+[ "$(enabled_accounts)" = personal.json ]
+file_is "$tmp/amp-active" personal-id
+write_config '{}'
+
+# --- Transport: the key travels only on stdin through the proxy namespace ---
+reset_proxy 10 20
+ok run_tool run
+if grep -Fq fixture-not-a-secret "$tmp/docker-args"; then check_failed 'the key reached Docker arguments'; fi
+grep -Fq -- '--network container:amp-cliproxyapi curlimages/curl:8.12.1 --config -' "$tmp/docker-args"
+grep -Fxq 'header = "Authorization: Bearer fixture-not-a-secret"' "$tmp/last-config"
+grep -Fq 'url = "http://127.0.0.1:8317/v0/management/' "$tmp/last-config"
+
+reset_proxy 10 20
+printf '%s\n' '{"status_code":403,"body":"sensitive"}' > "$tmp/responses"
+fails run_tool run
+err_has 'Claude usage request failed (HTTP 403)'
+if grep -Fq sensitive "$tmp/err" "$state/last-run.json" "$state/selector.log"; then check_failed 'a response body leaked'; fi
+
+success='{"status_code":200,"body":"{\"seven_day\":{\"utilization\":12}}"}'
+rate_limit_case() { # header, expected sleeps, recovered
+	local limited
+	limited="$(jq -nc --argjson header "$1" '{status_code: 429, header: $header, body: "sensitive"}')"
+	reset_proxy 10 20
+	for _ in $2; do printf '%s\n' "$limited" >> "$tmp/responses"; done
+	if [ "$3" = yes ]; then printf '%s\n' "$success" >> "$tmp/responses"; else printf '%s\n' "$limited" >> "$tmp/responses"; fi
+	if [ "$3" = yes ]; then
+		ok run_tool run
+		json_ok "$state/last-run.json" '.quotas.preferred.seven_day.remaining == 88'
+		[ "$(count 'POST api-call' "$tmp/calls")" = "$(( $(echo $2 | wc -w) + 2 ))" ]
+	else
+		fails run_tool run
+		err_has 'HTTP 429'
+		if grep -Fq sensitive "$tmp/err"; then check_failed 'a rate-limit body leaked'; fi
+		[ "$(count 'POST api-call' "$tmp/calls")" = "$(( $(echo $2 | wc -w) + 1 ))" ]
+	fi
+	[ "$(cat "$tmp/sleeps" 2>/dev/null | cut -d. -f1 | tr '\n' ' ')" = "${4:-$2}" ] || check_failed "sleeps $(cat "$tmp/sleeps" 2>/dev/null) for $1"
+}
+rate_limit_case '{}' '5 10 ' yes
+rate_limit_case '{"Retry-After": ["20"]}' '20 20 ' yes
+rate_limit_case '{"retry-after": "0"}' '5 10 ' yes
+rate_limit_case '{"Retry-After": ["invalid"]}' '5 10 ' yes
+reset_proxy 10 20
+http_date="$(jq -nr 'now + 20 | floor | strftime("%a, %d %b %Y %H:%M:%S GMT")')"
+for _ in 1 2; do jq -nc --arg date "$http_date" '{status_code: 429, header: {"Retry-After": [$date]}}' >> "$tmp/responses"; done
+printf '%s\n' "$success" >> "$tmp/responses"
+ok run_tool run
+# The date is 20 seconds ahead when written; both waits must honour it rather than the 5 and 10 second defaults.
+awk 'NR <= 2 && $1 >= 15 && $1 <= 20 { good++ } END { exit !(NR == 2 && good == 2) }' "$tmp/sleeps" \
+	|| check_failed "HTTP-date Retry-After slept $(cat "$tmp/sleeps")"
+rate_limit_case '{"Retry-After": ["3600"]}' '' no
+err_has 'Claude usage request failed (HTTP 429); retry after 3600 seconds'
+rate_limit_case '{}' '5 10 ' no
+err_has 'retry after 5 seconds'
+
+reset_proxy 10 20
+printf '%s\n' '{"status_code":401}' "$success" > "$tmp/responses"
+ok run_tool run
+[ "$(sed -n '2,4p' "$tmp/calls")" = $'POST api-call\nPOST auth-files/refresh\nPOST api-call' ]
+reset_proxy 10 20
+printf '%s\n' '{"status_code":401}' '{"status_code":401}' > "$tmp/responses"
+fails run_tool run
+err_has 'Claude usage request failed (HTTP 401)'
+[ "$(count 'POST' "$tmp/calls")" = 3 ]
+
+for key in '' $'fixture\n' $'fixture\r'; do
+	reset_proxy 10 20
+	TEST_KEY="$key" fails run_tool run
+	err_has 'Management key is empty or contains a newline'
+	[ ! -s "$tmp/calls" ]
+done
+reset_proxy 10 20
+TEST_KEY=' fixture ' ok run_tool run
+grep -Fxq 'header = "Authorization: Bearer  fixture "' "$tmp/last-config"
+
+# --- Status matches the ChatGPT selector's report ---
+printf '%s\n' '{"timestamp": "2026-10-03T15:55:28.453128+00:00", "result": "ok", "selected": "preferred",
+	"quotas": {"preferred": {"seven_day": {"remaining": 85}}, "fallback": {"seven_day": {"remaining": 100}}},
+	"reason": "Selected account has capacity"}' > "$state/last-run.json"
+: > "$tmp/calls"
+touch "$loaded"
+ok run_tool status
+out_is 'Preferred: company (company.json)
+Fallback: personal (personal.json)
+Threshold: 40% remaining
+Interval: 1 hour
+Background check: scheduled
+Last check: 2026-10-03 22:55:28 UTC+7
+Next check: 2026-10-03 23:55:28 UTC+7
+Result: ok
+Selected: company (company.json)
+Preferred remaining: weekly 85%
+Fallback remaining: weekly 100%
+Reason: preferred subscription still has remaining quota'
+[ ! -s "$tmp/calls" ] || check_failed 'status must not call the Management API'
+
+rm "$state/last-run.json" "$loaded"
+ok run_tool status
+for line in 'Last check: never' 'Next check: not scheduled' 'Result: never run' 'Selected: none' \
+	'Preferred remaining: weekly unknown' 'Reason: selector has not run yet'; do
+	grep -Fxq "$line" "$tmp/out" || check_failed "status lacks '$line'"
+done
+touch "$loaded"
+ok run_tool status
+grep -Fxq 'Next check: awaiting first check' "$tmp/out"
+
+touch "$state/paused"
+printf '%s\n' '{"timestamp": "invalid", "result": "failed", "selected": "unknown", "reason": "Claude usage request failed"}' > "$state/last-run.json"
+ok run_tool status
+for line in 'Background check: paused' 'Last check: unknown' 'Next check: paused' 'Result: failed' 'Selected: unknown' \
+	'Fallback remaining: weekly unknown' 'Reason: Claude usage request failed'; do
+	grep -Fxq "$line" "$tmp/out" || check_failed "status lacks '$line'"
+done
+rm "$state/paused"
+
+write_config '{"window": "either", "threshold": 40.5, "amp_preferred": "work-id", "amp_fallback": "personal-id"}'
+printf '%s\n' '{"timestamp": "2026-10-03T22:55:28+07:00", "selected": "fallback", "reason": "Selected account has capacity",
+	"quotas": {"preferred": {"five_hour": {"remaining": 4}, "seven_day": {"remaining": 40.099999999999994}},
+		"fallback": {"five_hour": {"remaining": 99}, "seven_day": {"remaining": true}}}}' > "$state/last-run.json"
+ok run_tool status
+for line in 'Threshold: 40.5% remaining' 'Last check: 2026-10-03 22:55:28 UTC+7' 'Selected: personal (personal.json)' \
+	'Preferred remaining: five-hour 4%; weekly 40.1%' 'Fallback remaining: five-hour 99%; weekly unknown' \
+	'Reason: preferred subscription is at or below the remaining quota threshold' \
+	'Amp connections: company work-id; personal personal-id'; do
+	grep -Fxq "$line" "$tmp/out" || check_failed "status lacks '$line'"
+done
+write_config '{}'
+
+for pair in '1:1 second' '59:59 seconds' '60:1 minute' '120:2 minutes' '3600:1 hour' '7200:2 hours' '3601:3601 seconds'; do
+	ok run_tool configure --interval "${pair%%:*}"
+	ok run_tool status
+	grep -Fxq "Interval: ${pair#*:}" "$tmp/out" || check_failed "interval ${pair%%:*} is not ${pair#*:}"
+done
+grep -Fq '<integer>3601</integer>' "$plist"
+ok run_tool configure --interval 3600
+
+# --- Lifecycle, pause and explicit selection ---
+: > "$tmp/resolver.log"
+ok run_tool pause
+out_is 'Paused; account selection unchanged'
+[ -e "$state/paused" ] && [ ! -e "$loaded" ]
+fails run_tool run
+err_has 'Selector is paused; run resume first'
+ok run_tool status
+[ ! -s "$tmp/resolver.log" ] || check_failed 'status and a paused run must not resolve the key'
+ok run_tool resume
+out_is 'Resumed'
+[ ! -e "$state/paused" ] && [ -f "$loaded" ]
+
+reset_proxy 10 20
+fails run_tool use company
+err_has 'Run pause before explicit account selection'
+[ ! -s "$tmp/calls" ]
+
+ok run_tool pause
+printf 'work-id\n' > "$tmp/amp-active"
+ok run_tool configure --amp-preferred work-id --amp-fallback personal-id
+json_ok "$state/config.json" '.amp_preferred == "work-id" and .amp_fallback == "personal-id"'
+ok run_tool use personal
+out_is 'Selected personal'
+[ "$(enabled_accounts)" = personal.json ]
+file_is "$tmp/amp-active" personal-id
+[ -e "$state/paused" ] && [ ! -e "$loaded" ]
+: > "$tmp/launchctl.log"
+ok run_tool configure --threshold 20
+json_ok "$state/config.json" '.threshold == 20 and .interval == 3600 and .window == "weekly" and .amp_fallback == "personal-id"'
+if grep -q bootstrap "$tmp/launchctl.log"; then check_failed 'configure must keep a paused selector stopped'; fi
+[ -e "$state/paused" ]
+fails run_tool configure
+err_has 'Provide a policy option or Amp connection IDs'
+write_config '{}'
+
+: > "$tmp/resolver.log"
+reset_proxy 10 20
+ok run_tool accounts
+out_is $'company.json: enabled\npersonal.json: disabled'
+file_is "$tmp/resolver.log" "run --strict-service-account --bundle amp-claude-selector -- $tool accounts"
+rm "$state/config.json"
+ok run_tool accounts --container other-proxy
+grep -Fq -- '--network container:other-proxy ' "$tmp/docker-args"
+
+rm -f "$state/paused" "$loaded" "$state/last-run.json"
+TEST_RESOLVER_FAIL=1 fails run_tool run
+json_ok "$state/last-run.json" '.result == "failed" and .selected == "unknown" and .reason == "Agent-secrets resolution failed"'
+
+# The selector lock serializes operations and dies with its owner.
+touch "$tmp/hold"
+( exec 9>>"$state/selector.lock"; "$bin/lockf" -s -t 0 9; touch "$tmp/locked"; while [ -e "$tmp/hold" ]; do /bin/sleep 0.05; done ) &
+holder=$!
+while [ ! -e "$tmp/locked" ]; do /bin/sleep 0.05; done
+fails run_tool pause
+err_has 'Another selector operation is running'
+rm "$tmp/hold"
+wait "$holder"
+
+reset_proxy 60 20
+ok run_tool install --preferred company.json --fallback personal.json
+ok run_tool run
+json_ok "$state/last-run.json" '.selected == "fallback"'
+ok run_tool uninstall
+out_is 'Uninstalled scheduler; account selection unchanged'
+[ ! -e "$plist" ] && [ ! -e "$loaded" ] && [ -e "$state/paused" ]
+[ "$(enabled_accounts)" = personal.json ]
+fails run_tool resume
+err_has 'Scheduler is not installed'
+
+reset_proxy 10 20
+TEST_BOOTSTRAP_FAIL=1 fails run_tool install --preferred company.json --fallback personal.json
+err_has 'launchctl failed (exit 5)'
+[ -e "$state/paused" ] || check_failed 'a failed bootstrap must leave the selector paused'
+
+# --- Management key setup ---
+runtime="$tmp/runtime"
+mkdir -p "$runtime"
+cp "$repo_root/amp/local-claude-cliproxy/config.example.yaml" "$runtime/config.yaml"
+original="$(cat "$repo_root/amp/local-claude-cliproxy/config.example.yaml"; printf .)"
+ok run_tool setup-management --runtime "$runtime"
+out_is 'Management key hash configured; restart the proxy to enable it. Remote management remains disabled.'
+expected="${original%.}"
+expected="${expected/secret-key: \"\"/secret-key: \"\$2y\$12\$fixture\"}"
+[ "$(cat "$runtime/config.yaml"; printf .)" = "$expected." ] || check_failed 'setup-management changed more than the secret key'
+[ "$(mode_of "$runtime/config.yaml")" = 600 ]
+file_is "$tmp/htpasswd-args" '-niBC 12 selector'
+file_is "$tmp/htpasswd-stdin" fixture-not-a-secret
+sed 's/allow-remote: false/allow-remote: true/' "$repo_root/amp/local-claude-cliproxy/config.example.yaml" > "$runtime/config.yaml"
+cp "$runtime/config.yaml" "$tmp/remote.yaml"
+fails run_tool setup-management --runtime "$runtime"
+err_has 'Expected one local-only remote-management block; review config manually'
+cmp -s "$runtime/config.yaml" "$tmp/remote.yaml"
+
+# --- A real curl parses the generated config, including escaped values ---
+if command -v curl >/dev/null && command -v nc >/dev/null; then
+	write_config '{"fallback": "personal\"account.json"}'
+	reset_proxy 10 20
+	set_proxy '.files[1].name = "personal\"account.json" | .files[1].disabled = false'
+	touch "$state/paused"
+	rm -f "$loaded"
+	body='{"status":"ok","disabled":true}'
+	port=$((20000 + RANDOM % 20000))
+	printf 'HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: %s\r\nConnection: close\r\n\r\n%s' "${#body}" "$body" \
+		| nc -l 127.0.0.1 "$port" > "$tmp/request.txt" &
+	listener=$!
+	/bin/sleep 0.5
+	TEST_REAL_CURL_PORT="$port" TEST_KEY='fixture"with\escapes' ok run_tool use company
+	wait "$listener" || true
+	head -n 1 "$tmp/request.txt" | grep -Fq 'PATCH /v0/management/auth-files/status HTTP/1.1'
+	grep -Fq 'Authorization: Bearer fixture"with\escapes' "$tmp/request.txt"
+	tail -n 1 "$tmp/request.txt" | jq -e '. == {name: "personal\"account.json", auth_index: "1", disabled: true}' >/dev/null
+	rm "$state/paused"
+	write_config '{}'
+else
+	printf '%s\n' 'Skipped the real curl transport check: curl or nc is unavailable.'
+fi
+
+# --- Durable work-only usage history ---
+work=claude-fixture-worker@holistics.io.json
+account='{"name": "claude-fixture-worker@holistics.io.json", "email": "worker@holistics.io", "auth_index": "work-index"}'
+fixture() {
+	jq -nc --arg index "${1:-work-index}" '{timestamp: "2026-11-02T12:00:00.123456789+07:00", model: "claude-fixture",
+		provider: "claude", auth_index: $index, request_id: "fixture-request", failed: false,
+		api_key: "NEVER-PERSIST-API-KEY", response_headers: {secret: "NEVER-PERSIST-HEADER"},
+		token_breakdown: {schema_version: 2, quality: "complete", total_tokens: 170,
+			input: {uncached_tokens: 100, cache_read_tokens: 40, cache_write_tokens: 10}, output: {total_tokens: 20}}}'
+}
+usage_state() {
+	state="$tmp/usage-$1"
+	write_config "$(jq -nc --arg work "$work" '{preferred: $work}')"
+	printf '%s\n' "$account" > "$state/work-usage-account.json"
+	reset_proxy 10 20
+	set_proxy --argjson account "$account" '.files[0] += $account'
+}
+queue() { set_proxy --argjson queue "$1" '.queue = $queue'; }
+
+usage_state durable
+queue "$(jq -nc --argjson w "$(fixture)" --argjson p "$(fixture personal-index)" --argjson u "$(fixture unknown-index)" \
+	'[$w, $w, $p, $u, ($w | .provider = "codex"), "not-a-record"]')"
+ok run_tool usage-collect
+grep -Eqx '\{"collected_at": "[^"]+", "stored": 1, "excluded": 4, "rejected": 0\}' "$tmp/out" || check_failed "usage-collect printed $(cat "$tmp/out")"
+: > "$tmp/resolver.log"
+ok run_tool usage-report --details
+[ ! -s "$tmp/resolver.log" ] || check_failed 'usage-report must not resolve the key'
+jq -e --argjson account "$account" '.requests == 1 and .tokens == {uncached_input: 100, output: 20, cache_read: 40, cache_write: 10}
+	and .scope == "verified work credentials only" and .history[0].timestamp == "2026-11-02T12:00:00.123456789+07:00"
+	and .history[0].account == $account and .last_collection.stored == 1' "$tmp/out" >/dev/null
+ok run_tool usage-report
+jq -e 'has("history") | not' "$tmp/out" >/dev/null
+# Rows stay byte-compatible with history written by the earlier Python selector.
+payload='{"account": {"auth_index": "work-index", "email": "worker@holistics.io", "name": "claude-fixture-worker@holistics.io.json"}, "failed": false, "model": "claude-fixture", "request_id": "fixture-request", "timestamp": "2026-11-02T12:00:00.123456789+07:00", "tokens": {"cache_read": 40, "cache_write": 10, "output": 20, "uncached_input": 100}}'
+[ "$(sqlite3 "$state/work-usage.sqlite" 'select request_key || " " || payload from requests')" = "$(printf '%s' "$payload" | shasum -a 256 | cut -d' ' -f1) $payload" ] \
+	|| check_failed 'stored row differs from the Python format'
+for excluded in NEVER-PERSIST personal-index unknown-index response_headers api_key; do
+	if grep -aFq "$excluded" "$state/work-usage.sqlite"; then check_failed "work history stored $excluded"; fi
+done
+[ "$(mode_of "$state/work-usage.sqlite")" = 600 ]
+queue "[$(fixture)]"
+ok run_tool usage-collect
+grep -Fq '"stored": 0, "excluded": 0' "$tmp/out" || check_failed 'a redelivered request must deduplicate'
+
+usage_state drift
+queue "[$(fixture)]"
+set_proxy '.files[0].auth_index = "changed-index"'
+fails run_tool usage-collect
+err_has 'Work account identity changed; review before reinstalling tracking'
+set_proxy '.files[0].auth_index = "work-index" | .files[0].email = "personal@gmail.com"'
+fails run_tool usage-collect
+err_has 'Work credential email is not verified by the provider account list'
+json_ok "$tmp/proxy.json" '.queue | length == 1'
+
+usage_state malformed
+queue "$(jq -nc --argjson w "$(fixture)" '[($w | .token_breakdown.input.uncached_tokens = -1), ($w | .token_breakdown.total_tokens = 1),
+	($w | del(.failed)), ($w | .token_breakdown = null), $w]')"
+fails run_tool usage-collect
+err_has 'Rejected malformed work usage; inspect work-usage-last.json for count'
+ok run_tool usage-report
+jq -e '.requests == 1 and .last_collection.rejected == 4' "$tmp/out" >/dev/null
+
+usage_state restart
+queue "[$(fixture)]"
+printf '[%s]\n' "$(fixture personal-index)" > "$tmp/after-restart.json"
+ok run_tool usage-restart
+out_is 'Proxy restarted; durable work history retained'
+[ "$(grep -n '' "$tmp/calls" | grep -E 'usage-queue|restart' | cut -d' ' -f2- | tr '\n' ',')" = 'usage-queue?count=1000,amp-cliproxyapi,usage-queue?count=1000,' ] \
+	|| check_failed "usage-restart order: $(cat "$tmp/calls")"
+ok run_tool usage-report
+jq -e '.requests == 1 and .last_collection.excluded == 1' "$tmp/out" >/dev/null
+
+usage_state install
+rm "$state/work-usage-account.json"
+set_proxy '.stats = false'
+printf 'port: 8317\nusage-statistics-enabled: false\n\n  \n' > "$runtime/config.yaml"
+inode="$(ls -i "$runtime/config.yaml" | awk '{print $1}')"
+# The proxy enables statistics when it restarts with the new config.
+TEST_STATS_ON_RESTART=1 ok run_tool usage-install --runtime "$runtime"
+out_is 'Work-only usage collector installed; routing unchanged'
+file_is "$runtime/config.yaml" $'port: 8317\nusage-statistics-enabled: true\nredis-usage-queue-retention-seconds: 3600'
+[ "$(ls -i "$runtime/config.yaml" | awk '{print $1}')" = "$inode" ] || check_failed 'usage-install must keep the bind-mounted inode'
+jq -e --argjson account "$account" '. == $account' "$state/work-usage-account.json" >/dev/null
+[ "$(sed -n '/<array>/,/<\/array>/p' "$usage_plist" | sed -n 's|.*<string>\(.*\)</string>|\1|p')" = "$tool
+usage-collect" ]
+grep -Fq '<integer>15</integer>' "$usage_plist"
+[ -f "$tmp/loaded.com.ampcode.claude-work-usage" ]
+printf 'usage-statistics-enabled: true\nusage-statistics-enabled: false\n' > "$runtime/config.yaml"
+fails run_tool usage-install --runtime "$runtime"
+err_has 'Duplicate usage config setting; review config manually'
+
+if [ -s "$tmp/leaks" ]; then check_failed "credentials or ordering leaked: $(cat "$tmp/leaks")"; fi
+printf '%s\n' 'Amp Claude subscription selector contracts passed.'

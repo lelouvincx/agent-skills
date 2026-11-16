@@ -72,7 +72,8 @@ Keep `remote-management.allow-remote: false`. Do not set `MANAGEMENT_PASSWORD`, 
 The selector makes management calls from a short-lived `curlimages/curl:8.12.1` container sharing the proxy's network namespace.
 Agent-secrets injects the management key into the selector's environment for that process only.
 The selector removes the key from subprocess environments and passes it to curl on stdin, not in process arguments or logs.
-Docker downloads the helper image on first use. No new host Python package is required.
+Docker downloads the helper image on first use.
+The selector is a Bash script that runs on the macOS system Bash 3.2 and needs only tools macOS ships: `jq`, `sqlite3`, `shasum`, `lockf` and `plutil`.
 
 ### Rotate the management key
 

@@ -1,1090 +1,1177 @@
-#!/usr/bin/env python3
-"""Select Claude OAuth credentials through a local CLIProxyAPI v7 Management API."""
-
-import argparse
-import datetime as dt
-import email.utils
-import fcntl
-import hashlib
-import json
-import math
-import os
-import plistlib
-import re
-import shutil
-import sqlite3
-import subprocess
-import sys
-import time
-from pathlib import Path
-
-LABEL = "com.ampcode.claude-subscription-selector"
-STATE = Path(
-    os.environ.get(
-        "AMP_CLAUDE_SELECTOR_STATE_DIR",
-        Path.home() / ".local/state/amp-claude-subscription-selector",
-    )
-)
-AGENT = Path.home() / "Library/LaunchAgents" / f"{LABEL}.plist"
-CURL_IMAGE = "curlimages/curl:8.12.1"
-KEY_VARIABLE = "CLIPROXY_MANAGEMENT_KEY"
-
-
-class SelectorError(Exception):
-    pass
-
-
-def command(args, data=None):
-    environment = dict(os.environ)
-    for name in (KEY_VARIABLE, "OP_SERVICE_ACCOUNT_TOKEN", "AGENT_SECRET_AUTH"):
-        environment.pop(name, None)
-    try:
-        result = subprocess.run(
-            args,
-            input=data,
-            text=True,
-            capture_output=True,
-            timeout=90,
-            check=False,
-            env=environment,
-        )
-    except (OSError, subprocess.TimeoutExpired) as exc:
-        raise SelectorError(f"Could not execute {Path(args[0]).name}") from exc
-    if result.returncode:
-        # Tool output can contain credentials, OAuth URLs or response bodies.
-        raise SelectorError(f"{Path(args[0]).name} failed (exit {result.returncode})")
-    return result.stdout
-
-
-def save(path, value):
-    path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-    temp = path.with_name(path.name + f".tmp.{os.getpid()}")
-    try:
-        with temp.open("w") as stream:
-            os.chmod(temp, 0o600)
-            json.dump(value, stream, indent=2, allow_nan=False)
-            stream.write("\n")
-        temp.replace(path)
-    finally:
-        temp.unlink(missing_ok=True)
-
-
-def load():
-    try:
-        return json.loads((STATE / "config.json").read_text())
-    except (OSError, ValueError) as exc:
-        raise SelectorError("Not configured; run install first") from exc
-
-
-def secret():
-    value = os.environ.get(KEY_VARIABLE, "")
-    if not value or any(char in value for char in "\r\n"):
-        raise SelectorError("Management key is empty or contains a newline")
-    return value
-
-
-class API:
-    def __init__(self, config):
-        self.config = config
-        self.key = secret()
-
-    def call(self, method, endpoint, payload=None):
-        # Share only the proxy's network namespace. The key travels on stdin,
-        # never in Docker arguments, environment, config files or logs.
-        options = [
-            "silent",
-            "show-error",
-            "fail-with-body",
-            "max-time = 45",
-            "url = " + json.dumps("http://127.0.0.1:8317/v0/management/" + endpoint),
-            "request = " + json.dumps(method),
-            "header = " + json.dumps("Authorization: Bearer " + self.key),
-        ]
-        if payload is not None:
-            options += [
-                'header = "Content-Type: application/json"',
-                "data = " + json.dumps(json.dumps(payload)),
-            ]
-        output = command(
-            [
-                self.config["docker"],
-                "run",
-                "--rm",
-                "-i",
-                "--network",
-                "container:" + self.config["container"],
-                CURL_IMAGE,
-                "--config",
-                "-",
-            ],
-            "\n".join(options) + "\n",
-        )
-        try:
-            response = json.loads(output)
-        except ValueError as exc:
-            raise SelectorError("Management API returned invalid JSON") from exc
-        if endpoint.startswith("usage-queue?"):
-            if not isinstance(response, list):
-                raise SelectorError("Management API returned an invalid usage queue")
-            return response
-        if not isinstance(response, dict):
-            raise SelectorError("Management API response is not an object")
-        return response
-
-    def accounts(self):
-        response = self.call("GET", "auth-files")
-        if not isinstance(response, dict) or not isinstance(
-            response.get("files"), list
-        ):
-            raise SelectorError("Management API returned an invalid account list")
-        if any(not isinstance(a, dict) for a in response["files"]):
-            raise SelectorError("Management API returned an invalid account entry")
-        return [a for a in response["files"] if a.get("provider") == "claude"]
-
-    def quota(self, account, window):
-        request = {
-            "auth_index": account["auth_index"],
-            "method": "GET",
-            "url": "https://api.anthropic.com/api/oauth/usage",
-            "header": {
-                "Authorization": "Bearer $TOKEN$",
-                "anthropic-beta": "oauth-2025-04-20",
-                "Content-Type": "application/json",
-                "User-Agent": "claude-cli/2.1.280 (external, cli)",
-            },
-        }
-        response = self.call("POST", "api-call", request)
-        if response.get("status_code") == 401:
-            self.call(
-                "POST",
-                "auth-files/refresh",
-                {"name": account["name"], "auth_index": account["auth_index"]},
-            )
-            # One retry only, including for disabled credentials with expired tokens.
-            response = self.call("POST", "api-call", request)
-        for attempt in range(2):
-            if response.get("status_code") != 429:
-                break
-            delay = rate_limit_delay(response, attempt)
-            if delay > 60:
-                break
-            time.sleep(delay)
-            response = self.call("POST", "api-call", request)
-        if response.get("status_code") != 200:
-            status = response.get("status_code")
-            detail = f" (HTTP {status})" if type(status) is int else ""
-            if status == 429:
-                detail += (
-                    f"; retry after {math.ceil(rate_limit_delay(response, 0))} seconds"
-                )
-            raise SelectorError("Claude usage request failed" + detail)
-        try:
-            return parse_quota(json.loads(response["body"]), window)
-        except (KeyError, TypeError, ValueError) as exc:
-            raise SelectorError("Claude usage response is invalid") from exc
-
-    def disable(self, account, disabled):
-        response = self.call(
-            "PATCH",
-            "auth-files/status",
-            {
-                "name": account["name"],
-                "auth_index": account["auth_index"],
-                "disabled": disabled,
-            },
-        )
-        if response.get("status") != "ok" or response.get("disabled") is not disabled:
-            raise SelectorError("Credential status update was not confirmed")
-
-
-def rate_limit_delay(response, attempt):
-    delay = 5 * 2**attempt
-    headers = response.get("header")
-    if not isinstance(headers, dict):
-        return delay
-    value = next((v for k, v in headers.items() if k.lower() == "retry-after"), None)
-    if isinstance(value, list):
-        value = value[0] if value else None
-    if not isinstance(value, str):
-        return delay
-    try:
-        seconds = int(value)
-    except ValueError:
-        try:
-            reset = email.utils.parsedate_to_datetime(value)
-            if reset.tzinfo is None:
-                return delay
-            seconds = reset.timestamp() - time.time()
-        except (TypeError, ValueError, OverflowError):
-            return delay
-    return max(delay, seconds)
-
-
-def parse_quota(payload, window):
-    keys = {
-        "weekly": ["seven_day"],
-        "five-hour": ["five_hour"],
-        "either": ["five_hour", "seven_day"],
-    }[window]
-    result = {}
-    if not isinstance(payload, dict):
-        raise SelectorError("Claude usage response is not an object")
-    for key in keys:
-        entry = payload.get(key)
-        used = entry.get("utilization") if isinstance(entry, dict) else None
-        if (
-            isinstance(used, bool)
-            or not isinstance(used, (int, float))
-            or not math.isfinite(used)
-            or not 0 <= used <= 100
-        ):
-            raise SelectorError(f"No usable {key} quota")
-        reset = entry.get("resets_at")
-        if reset is not None and not isinstance(reset, str):
-            raise SelectorError("Invalid quota reset timestamp")
-        result[key] = {"remaining": 100 - used, "resets_at": reset}
-    return result
-
-
-def resolve(accounts, name):
-    matches = [a for a in accounts if a.get("name") == name]
-    if (
-        len(matches) != 1
-        or not matches[0].get("auth_index")
-        or type(matches[0].get("disabled")) is not bool
-        or matches[0].get("source") != "file"
-        or matches[0].get("runtime_only")
-    ):
-        raise SelectorError(f"Account not uniquely available: {name}")
-    return matches[0]
-
-
-class NativeClaude:
-    def __init__(self, config):
-        self.ids = {
-            role: config.get("amp_" + role) for role in ("preferred", "fallback")
-        }
-        self.amp = shutil.which("amp")
-        if (
-            not self.amp
-            or not all(isinstance(value, str) and value for value in self.ids.values())
-            or len(set(self.ids.values())) != 2
-        ):
-            raise SelectorError(
-                "Amp sync requires amp and two distinct Claude connection IDs"
-            )
-        self.states()
-
-    def states(self):
-        states = {}
-        for role, connection in self.ids.items():
-            try:
-                entry = json.loads(
-                    command([self.amp, "config", "model-providers", "show", connection])
-                )
-            except ValueError as exc:
-                raise SelectorError("Amp returned invalid connection JSON") from exc
-            if (
-                not isinstance(entry, dict)
-                or entry.get("id") != connection
-                or entry.get("type") != "model_provider_claude_sub"
-                or type(entry.get("active")) is not bool
-            ):
-                raise SelectorError(
-                    "Amp sync requires Claude subscription connection IDs, not list indexes"
-                )
-            states[role] = entry["active"]
-        return states
-
-    def select(self, selected):
-        other = "fallback" if selected == "preferred" else "preferred"
-        states = self.states()
-        # Claude activation replaces the active subscription of the same type.
-        if not states[selected]:
-            command(
-                [self.amp, "config", "model-providers", "activate", self.ids[selected]]
-            )
-        states = self.states()
-        if not states[selected]:
-            raise SelectorError("Amp Claude activation verification failed")
-        if states[other]:
-            command(
-                [
-                    self.amp,
-                    "config",
-                    "model-providers",
-                    "deactivate",
-                    self.ids[other],
-                    "--yes",
-                ]
-            )
-        states = self.states()
-        if not states[selected] or states[other]:
-            raise SelectorError("Amp Claude account selection verification failed")
-
-
-def switch(api, config, selected):
-    # Preflight native connections before changing either proxy credential.
-    native = (
-        NativeClaude(config)
-        if any(config.get("amp_" + role) for role in ("preferred", "fallback"))
-        else None
-    )
-    accounts = api.accounts()
-    preferred = resolve(accounts, config["preferred"])
-    fallback = resolve(accounts, config["fallback"])
-    if {a["name"] for a in accounts} != {preferred["name"], fallback["name"]}:
-        raise SelectorError(
-            "Unexpected Claude credentials; selection would not be exclusive"
-        )
-    target = preferred if selected == "preferred" else fallback
-    other = fallback if selected == "preferred" else preferred
-    # Fail closed: never briefly make both company and personal eligible.
-    # A failed enable may leave no eligible account; do not silently restore it.
-    if not other["disabled"]:
-        api.disable(other, True)
-    if target["disabled"]:
-        api.disable(target, False)
-    after = api.accounts()
-    if (
-        {a["name"] for a in after} != {target["name"], other["name"]}
-        or resolve(after, target["name"])["disabled"]
-        or not resolve(after, other["name"])["disabled"]
-    ):
-        raise SelectorError("Account selection verification failed")
-    if native:
-        try:
-            native.select(selected)
-        except (SelectorError, ValueError, TypeError) as exc:
-            raise SelectorError(
-                "Proxy selected account, but Amp sync failed; accounts may be out of sync. Retry run or paused use."
-            ) from exc
-
-
-def check(api, config):
-    accounts = api.accounts()
-    quotas = {
-        role: api.quota(resolve(accounts, config[role]), config["window"])
-        for role in ("preferred", "fallback")
-    }
-    preferred_available = all(
-        q["remaining"] > config["threshold"] for q in quotas["preferred"].values()
-    )
-    selected = "preferred" if preferred_available else "fallback"
-    switch(api, config, selected)
-    return {
-        "selected": selected,
-        "quotas": quotas,
-        "reason": "preferred subscription still has remaining quota"
-        if preferred_available
-        else "preferred subscription is at or below the remaining quota threshold",
-    }
-
-
-def record(result):
-    result["timestamp"] = dt.datetime.now(dt.timezone.utc).isoformat()
-    save(STATE / "last-run.json", result)
-    with (STATE / "selector.log").open("a") as stream:
-        os.chmod(STATE / "selector.log", 0o600)
-        stream.write(f"{result['timestamp']} {result['result']}: {result['reason']}\n")
-
-
-def agent_loaded():
-    result = subprocess.run(
-        ["launchctl", "print", f"gui/{os.getuid()}/{LABEL}"],
-        capture_output=True,
-        text=True,
-        check=False,
-        timeout=15,
-    )
-    if result.returncode == 0:
-        return True
-    if "Could not find service" in result.stderr + result.stdout:
-        return False
-    raise SelectorError("Could not inspect LaunchAgent state")
-
-
-def bootout():
-    if agent_loaded():
-        command(["launchctl", "bootout", f"gui/{os.getuid()}/{LABEL}"])
-
-
-def bootstrap():
-    command(["launchctl", "bootstrap", f"gui/{os.getuid()}", str(AGENT)])
-
-
-def schedule(config):
-    python = str(Path(sys.executable).resolve())
-    script = str(Path(__file__).resolve())
-    plist = {
-        "Label": LABEL,
-        "ProgramArguments": [python, script, "run"],
-        "StartInterval": config["interval"],
-        "RunAtLoad": True,
-        "EnvironmentVariables": {
-            "HOME": str(Path.home()),
-            "PATH": os.environ.get("PATH", ""),
-            "AMP_CLAUDE_SELECTOR_STATE_DIR": str(STATE),
-        },
-        "StandardOutPath": "/dev/null",
-        "StandardErrorPath": "/dev/null",
-    }
-    AGENT.parent.mkdir(parents=True, exist_ok=True)
-    with AGENT.open("wb") as stream:
-        os.chmod(AGENT, 0o600)
-        plistlib.dump(plist, stream)
-
-
-def setup_management(args):
-    # Update only the reviewed remote-management block, never print config.
-    runtime = Path(args.runtime).expanduser()
-    path = runtime / "config.yaml"
-    original = path.read_text()
-    pattern = r"(?m)^remote-management:\n(?:(?:[ \t]+[^\n]*|[ \t]*)\n)*"
-    blocks = re.findall(pattern, original)
-    if len(blocks) != 1 or not re.search(r"(?m)^  allow-remote: false\s*$", blocks[0]):
-        raise SelectorError(
-            "Expected one local-only remote-management block; review config manually"
-        )
-    value = secret()
-    hashed = (
-        command(["/usr/sbin/htpasswd", "-niBC", "12", "selector"], value + "\n")
-        .strip()
-        .split(":", 1)[1]
-    )
-    block, count = re.subn(
-        r"(?m)^  secret-key:.*$", "  secret-key: " + json.dumps(hashed), blocks[0]
-    )
-    if count != 1:
-        raise SelectorError("Expected one management secret-key field")
-    replacement = original.replace(blocks[0], block, 1)
-    temp = path.with_name("config.yaml.selector-tmp")
-    try:
-        with temp.open("w") as stream:
-            os.chmod(temp, 0o600)
-            stream.write(replacement)
-        temp.replace(path)
-    finally:
-        temp.unlink(missing_ok=True)
-    print(
-        "Management key hash configured; restart the proxy to enable it. Remote management remains disabled."
-    )
-
-
-def positive(value):
-    number = int(value)
-    if number <= 0:
-        raise argparse.ArgumentTypeError("Must be positive")
-    return number
-
-
-def percent(value):
-    number = float(value)
-    if not math.isfinite(number) or not 0 <= number <= 100:
-        raise argparse.ArgumentTypeError("Must be between 0 and 100")
-    return number
-
-
-def format_interval(seconds):
-    for size, unit in ((3600, "hour"), (60, "minute"), (1, "second")):
-        if seconds >= size and seconds % size == 0:
-            count = seconds // size
-            return f"{count} {unit}{'s' if count != 1 else ''}"
-
-
-def format_timestamp(timestamp, offset=0):
-    if timestamp == "never":
-        return timestamp
-    try:
-        value = dt.datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
-        if value.tzinfo is None:
-            return "unknown"
-        value = (value + dt.timedelta(seconds=offset)).astimezone(
-            dt.timezone(dt.timedelta(hours=7))
-        )
-        return value.strftime("%Y-%m-%d %H:%M:%S UTC+7")
-    except (ValueError, TypeError, AttributeError):
-        return "unknown"
-
-
-def status_report(config):
-    last = (
-        json.loads((STATE / "last-run.json").read_text())
-        if (STATE / "last-run.json").exists()
-        else {}
-    )
-    state = (
-        "paused"
-        if (STATE / "paused").exists()
-        else "scheduled"
-        if agent_loaded()
-        else "not scheduled"
-    )
-    timestamp = last.get("timestamp", "never")
-    next_check = (
-        state
-        if state != "scheduled"
-        else "awaiting first check"
-        if timestamp == "never"
-        else format_timestamp(timestamp, config["interval"])
-    )
-    selected = last.get("selected", "none")
-    labels = {
-        "preferred": f"company ({config['preferred']})",
-        "fallback": f"personal ({config['fallback']})",
-    }
-    reason = last.get("reason", "selector has not run yet")
-    if reason == "Selected account has capacity":
-        reason = (
-            "preferred subscription still has remaining quota"
-            if selected == "preferred"
-            else "preferred subscription is at or below the remaining quota threshold"
-        )
-    windows = {
-        "weekly": [("seven_day", "weekly")],
-        "five-hour": [("five_hour", "five-hour")],
-        "either": [("five_hour", "five-hour"), ("seven_day", "weekly")],
-    }[config["window"]]
-
-    def remaining(role):
-        quota = last.get("quotas", {}).get(role, {})
-        parts = []
-        for key, label in windows:
-            value = quota.get(key, {}).get("remaining")
-            text = (
-                f"{value:g}%"
-                if isinstance(value, (int, float))
-                and not isinstance(value, bool)
-                and math.isfinite(value)
-                and 0 <= value <= 100
-                else "unknown"
-            )
-            parts.append(f"{label} {text}")
-        return "; ".join(parts)
-
-    result = last.get("result", "never run")
-    print(f"Preferred: {labels['preferred']}")
-    print(f"Fallback: {labels['fallback']}")
-    print(f"Threshold: {config['threshold']:g}% remaining")
-    print(f"Interval: {format_interval(config['interval'])}")
-    print(f"Background check: {state}")
-    print(f"Last check: {format_timestamp(timestamp)}")
-    print(f"Next check: {next_check}")
-    print(f"Result: {'never run' if result == 'never-run' else result}")
-    print(f"Selected: {labels.get(selected, selected)}")
-    print(f"Preferred remaining: {remaining('preferred')}")
-    print(f"Fallback remaining: {remaining('fallback')}")
-    print(f"Reason: {reason}")
-    if config.get("amp_preferred"):
-        print(
-            f"Amp connections: company {config['amp_preferred']}; personal {config['amp_fallback']}"
-        )
-
-
-USAGE_LABEL = "com.ampcode.claude-work-usage"
-
-
-def usage_account(api, config):
-    account = resolve(api.accounts(), config["preferred"])
-    email = account.get("email", "")
-    if (
-        not isinstance(email, str)
-        or not email.endswith("@holistics.io")
-        or not account["name"].endswith("-" + email + ".json")
-    ):
-        raise SelectorError(
-            "Work credential email is not verified by the provider account list"
-        )
-    return {
-        "name": account["name"],
-        "email": email,
-        "auth_index": account["auth_index"],
-    }
-
-
-def usage_database():
-    database = sqlite3.connect(STATE / "work-usage.sqlite")
-    database.execute("pragma synchronous=full")
-    database.execute(
-        "create table if not exists requests (request_key text primary key, payload text not null)"
-    )
-    os.chmod(STATE / "work-usage.sqlite", 0o600)
-    return database
-
-
-def usage_row(record, account):
-    # Never save raw queue payloads: they include API keys and response headers.
-    if not isinstance(record, dict):
-        return None
-    if (
-        record.get("provider") != "claude"
-        or record.get("auth_index") != account["auth_index"]
-    ):
-        return None
-    breakdown = record.get("token_breakdown", {})
-    if breakdown.get("schema_version") != 2 or breakdown.get("quality") != "complete":
-        raise SelectorError("Work usage has no complete v2 token breakdown")
-    timestamp = record.get("timestamp")
-    parsed = dt.datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
-    if parsed.tzinfo is None:
-        raise SelectorError("Work usage timestamp has no timezone")
-    model = record.get("model")
-    request_id = record.get("request_id")
-    if (
-        not isinstance(model, str)
-        or not model
-        or not isinstance(request_id, str)
-        or not request_id
-    ):
-        raise SelectorError("Work usage is missing model or request identity")
-    counts = {
-        "uncached_input": breakdown["input"]["uncached_tokens"],
-        "output": breakdown["output"]["total_tokens"],
-        "cache_read": breakdown["input"]["cache_read_tokens"],
-        "cache_write": breakdown["input"]["cache_write_tokens"],
-    }
-    if any(type(value) is not int or value < 0 for value in counts.values()):
-        raise SelectorError("Work usage token counts are invalid")
-    if sum(counts.values()) != breakdown.get("total_tokens"):
-        raise SelectorError("Work usage token breakdown is inconsistent")
-    if type(record.get("failed")) is not bool:
-        raise SelectorError("Work usage outcome is missing")
-    return {
-        "timestamp": timestamp,
-        "model": model,
-        "request_id": request_id,
-        "account": account,
-        "failed": record["failed"],
-        "tokens": counts,
-    }
-
-
-def collect_usage(api, config):
-    binding = json.loads((STATE / "work-usage-account.json").read_text())
-    account = usage_account(api, config)
-    if account != binding:
-        raise SelectorError(
-            "Work account identity changed; review before reinstalling tracking"
-        )
-    if (
-        api.call("GET", "usage-statistics-enabled").get("usage-statistics-enabled")
-        is not True
-    ):
-        raise SelectorError("Proxy usage statistics are disabled")
-    stored = excluded = rejected = 0
-    with usage_database() as database:
-        while True:
-            records = api.call("GET", "usage-queue?count=1000")
-            for item in records:
-                try:
-                    row = usage_row(item, account)
-                except (SelectorError, KeyError, TypeError, ValueError, AttributeError):
-                    rejected += 1
-                    continue
-                if row is None:
-                    excluded += 1
-                    continue
-                # A request can have multiple provider attempts; timestamp and
-                # model distinguish those while identical redeliveries deduplicate.
-                payload = json.dumps(row, sort_keys=True)
-                key = hashlib.sha256(payload.encode()).hexdigest()
-                stored += database.execute(
-                    "insert or ignore into requests values (?, ?)", (key, payload)
-                ).rowcount
-            database.commit()
-            if len(records) < 1000:
-                break
-    result = {
-        "collected_at": dt.datetime.now(dt.timezone.utc).isoformat(),
-        "stored": stored,
-        "excluded": excluded,
-        "rejected": rejected,
-    }
-    save(STATE / "work-usage-last.json", result)
-    if rejected:
-        raise SelectorError(
-            "Rejected malformed work usage; inspect work-usage-last.json for count"
-        )
-    return result
-
-
-def usage_report(details=False):
-    if not (STATE / "work-usage.sqlite").exists():
-        raise SelectorError("No durable work history; run usage-install first")
-    with usage_database() as database:
-        rows = [
-            json.loads(row[0])
-            for row in database.execute("select payload from requests")
-        ]
-    totals = dict.fromkeys(("uncached_input", "output", "cache_read", "cache_write"), 0)
-    for row in rows:
-        for name, value in row["tokens"].items():
-            totals[name] += value
-    result = {
-        "requests": len(rows),
-        "tokens": totals,
-        "scope": "verified work credentials only",
-    }
-    if details:
-        result["history"] = sorted(rows, key=lambda row: row["timestamp"])
-    last = STATE / "work-usage-last.json"
-    result["last_collection"] = json.loads(last.read_text()) if last.exists() else None
-    print(json.dumps(result, indent=2))
-
-
-def restart_usage(api, config):
-    collect_usage(api, config)
-    command([config["docker"], "restart", config["container"]])
-    for attempt in range(12):
-        try:
-            collect_usage(api, config)
-            return
-        except SelectorError:
-            if attempt == 11:
-                raise
-            time.sleep(2)
-
-
-def install_usage(api, config, runtime):
-    account = usage_account(api, config)
-    binding_path = STATE / "work-usage-account.json"
-    if binding_path.exists() and json.loads(binding_path.read_text()) != account:
-        raise SelectorError(
-            "Existing work binding differs; explicit history migration required"
-        )
-    save(binding_path, account)
-    # Keep the bind-mounted inode: atomic replacement would leave Docker reading
-    # the old config. Do not print, copy or export any existing secret values.
-    path = Path(runtime).expanduser() / "config.yaml"
-    original = path.read_text()
-    replacement = original
-    for name, value in (
-        ("usage-statistics-enabled", "true"),
-        ("redis-usage-queue-retention-seconds", "3600"),
-    ):
-        pattern = rf"(?m)^{name}:.*$"
-        if len(re.findall(pattern, replacement)) > 1:
-            raise SelectorError(
-                "Duplicate usage config setting; review config manually"
-            )
-        replacement = (
-            re.sub(pattern, f"{name}: {value}", replacement)
-            if re.search(pattern, replacement)
-            else replacement.rstrip() + f"\n{name}: {value}\n"
-        )
-    if (
-        api.call("GET", "usage-statistics-enabled").get("usage-statistics-enabled")
-        is True
-    ):
-        collect_usage(api, config)
-    with path.open("r+") as stream:
-        stream.write(replacement)
-        stream.truncate()
-        stream.flush()
-        os.fsync(stream.fileno())
-    # Restart only the existing container, never pull the moving latest tag.
-    command([config["docker"], "restart", config["container"]])
-    for attempt in range(12):
-        try:
-            collect_usage(api, config)
-            break
-        except SelectorError:
-            if attempt == 11:
-                raise
-            time.sleep(2)
-    agent = AGENT.with_name(USAGE_LABEL + ".plist")
-    plist = {
-        "Label": USAGE_LABEL,
-        "ProgramArguments": [str(Path(__file__).resolve()), "usage-collect"],
-        "StartInterval": 15,
-        "RunAtLoad": True,
-        "EnvironmentVariables": {
-            "HOME": str(Path.home()),
-            "PATH": os.environ.get("PATH", ""),
-            "AMP_CLAUDE_SELECTOR_STATE_DIR": str(STATE),
-        },
-        "StandardOutPath": "/dev/null",
-        "StandardErrorPath": "/dev/null",
-    }
-    domain = f"gui/{os.getuid()}"
-    if agent.exists():
-        command(["launchctl", "bootout", domain, str(agent)])
-    agent.parent.mkdir(parents=True, exist_ok=True)
-    with agent.open("wb") as stream:
-        os.chmod(agent, 0o600)
-        plistlib.dump(plist, stream)
-    command(["launchctl", "bootstrap", domain, str(agent)])
-    print("Work-only usage collector installed; routing unchanged")
-
-
-def parser():
-    root = argparse.ArgumentParser(description=__doc__)
-    commands = root.add_subparsers(dest="action", required=True)
-    setup = commands.add_parser(
-        "setup-management", help="Configure a local-only hashed management key"
-    )
-    setup.add_argument(
-        "--runtime", default=str(Path.home() / ".local/share/amp-cliproxy")
-    )
-    install = commands.add_parser("install")
-    install.add_argument(
-        "--preferred", required=True, help="Company Claude auth filename"
-    )
-    install.add_argument(
-        "--fallback", required=True, help="Personal Claude auth filename"
-    )
-    install.add_argument("--container", default="amp-cliproxyapi")
-    for action in (install, commands.add_parser("configure")):
-        action.add_argument(
-            "--amp-preferred", help="Native Amp work Claude connection UUID"
-        )
-        action.add_argument(
-            "--amp-fallback", help="Native Amp personal Claude connection UUID"
-        )
-        action.add_argument(
-            "--window",
-            choices=["weekly", "five-hour", "either"],
-            default="weekly" if action is install else None,
-        )
-        action.add_argument(
-            "--threshold", type=percent, default=40 if action is install else None
-        )
-        action.add_argument(
-            "--interval", type=positive, default=3600 if action is install else None
-        )
-    accounts = commands.add_parser(
-        "accounts", help="List credentials before or after install"
-    )
-    accounts.add_argument("--container", default="amp-cliproxyapi")
-    usage_install = commands.add_parser(
-        "usage-install", help="Enable work-only durable tracking and restart proxy"
-    )
-    usage_install.add_argument(
-        "--runtime", default=str(Path.home() / ".local/share/amp-cliproxy")
-    )
-    commands.add_parser(
-        "usage-collect", help="Drain usage queue into sanitized work history"
-    )
-    commands.add_parser(
-        "usage-restart",
-        help="Drain history, restart existing proxy and verify collection",
-    )
-    report = commands.add_parser(
-        "usage-report", help="Report only durable, verified work history"
-    )
-    report.add_argument("--details", action="store_true")
-    for name in ("run", "status", "pause", "resume", "uninstall"):
-        commands.add_parser(name)
-    use = commands.add_parser(
-        "use", help="Explicit selection; requires paused automation"
-    )
-    use.add_argument("account", choices=["company", "personal"])
-    return root
-
-
-def main():
-    args = parser().parse_args()
-    os.umask(0o077)
-    STATE.mkdir(parents=True, exist_ok=True, mode=0o700)
-    os.chmod(STATE, 0o700)
-    needs_key = args.action in {
-        "setup-management",
-        "install",
-        "accounts",
-        "use",
-        "run",
-        "usage-install",
-        "usage-collect",
-        "usage-restart",
-    }
-    if args.action == "run" and (STATE / "paused").exists():
-        needs_key = False
-    if needs_key and KEY_VARIABLE not in os.environ:
-        resolver = shutil.which("agent-secrets")
-        if not resolver:
-            raise SelectorError("agent-secrets is not installed; run sync-skills.sh")
-        # Resolve before taking the lock: the approved child takes the same lock.
-        result = subprocess.run(
-            [
-                resolver,
-                "run",
-                "--strict-service-account",
-                "--bundle",
-                "amp-claude-selector",
-                "--",
-                str(Path(__file__).resolve()),
-                *sys.argv[1:],
-            ],
-            check=False,
-        )
-        # Resolver failures use exit 1. The selector child uses exit 2 and has
-        # already recorded its specific failure while holding the selector lock.
-        if args.action == "run" and result.returncode == 1:
-            record(
-                {
-                    "result": "failed",
-                    "selected": "unknown",
-                    "reason": "Agent-secrets resolution failed",
-                }
-            )
-        raise SystemExit(result.returncode)
-    with (STATE / "selector.lock").open("a") as lock:
-        try:
-            # RunAtLoad can start before install/resume releases its lock.
-            # Let that check wait rather than lose the first evaluation.
-            mode = (
-                fcntl.LOCK_EX if args.action == "run" else fcntl.LOCK_EX | fcntl.LOCK_NB
-            )
-            fcntl.flock(lock, mode)
-        except BlockingIOError as exc:
-            raise SelectorError("Another selector operation is running") from exc
-        if args.action == "setup-management":
-            setup_management(args)
-            return
-        if args.action == "accounts" and not (STATE / "config.json").exists():
-            config = {
-                "container": args.container,
-                "docker": shutil.which("docker") or "docker",
-            }
-            for account in API(config).accounts():
-                print(
-                    f"{account['name']}: {'disabled' if account['disabled'] else 'enabled'}"
-                )
-            return
-        if args.action == "install":
-            if args.preferred == args.fallback:
-                raise SelectorError("Preferred and fallback must differ")
-            docker = shutil.which("docker")
-            if not docker:
-                raise SelectorError("Docker is not installed")
-            config = {
-                "preferred": args.preferred,
-                "fallback": args.fallback,
-                "container": args.container,
-                "docker": docker,
-                "window": args.window,
-                "threshold": args.threshold,
-                "interval": args.interval,
-            }
-            if args.amp_preferred is not None or args.amp_fallback is not None:
-                config.update(
-                    amp_preferred=args.amp_preferred, amp_fallback=args.amp_fallback
-                )
-                NativeClaude(config)
-            api = API(config)
-            # Validate both quota payloads before installing an active scheduler.
-            accounts = api.accounts()
-            if {a["name"] for a in accounts} != {
-                config["preferred"],
-                config["fallback"],
-            }:
-                raise SelectorError("Exactly two Claude credentials are required")
-            for role in ("preferred", "fallback"):
-                api.quota(resolve(accounts, config[role]), config["window"])
-            bootout()
-            save(STATE / "config.json", config)
-            schedule(config)
-            (STATE / "paused").touch(mode=0o600)
-            bootstrap()
-            (STATE / "paused").unlink()
-            print("Installed Claude subscription selector")
-            return
-        if args.action == "uninstall":
-            bootout()
-            AGENT.unlink(missing_ok=True)
-            (STATE / "paused").touch(mode=0o600)
-            print("Uninstalled scheduler; account selection unchanged")
-            return
-        config = load()
-        config.pop("management_key_ref", None)
-        if args.action == "usage-install":
-            install_usage(API(config), config, args.runtime)
-        elif args.action == "usage-collect":
-            print(json.dumps(collect_usage(API(config), config)))
-        elif args.action == "usage-restart":
-            restart_usage(API(config), config)
-            print("Proxy restarted; durable work history retained")
-        elif args.action == "usage-report":
-            usage_report(args.details)
-        elif args.action == "configure":
-            fields = (
-                "window",
-                "threshold",
-                "interval",
-                "amp_preferred",
-                "amp_fallback",
-            )
-            if all(getattr(args, field) is None for field in fields):
-                raise SelectorError("Provide a policy option or Amp connection IDs")
-            for field in fields:
-                if getattr(args, field) is not None:
-                    config[field] = getattr(args, field)
-            if config.get("amp_preferred") or config.get("amp_fallback"):
-                NativeClaude(config)
-            loaded = agent_loaded()
-            bootout()
-            (STATE / "paused").touch(mode=0o600)
-            save(STATE / "config.json", config)
-            schedule(config)
-            if loaded:
-                bootstrap()
-                (STATE / "paused").unlink()
-            print("Policy updated")
-        elif args.action == "pause":
-            bootout()
-            (STATE / "paused").touch(mode=0o600)
-            print("Paused; account selection unchanged")
-        elif args.action == "resume":
-            if not AGENT.exists():
-                raise SelectorError("Scheduler is not installed")
-            if not agent_loaded():
-                bootstrap()
-            (STATE / "paused").unlink(missing_ok=True)
-            print("Resumed")
-        elif args.action == "status":
-            status_report(config)
-        elif args.action == "accounts":
-            for account in API(config).accounts():
-                print(
-                    f"{account['name']}: {'disabled' if account['disabled'] else 'enabled'}"
-                )
-        elif args.action == "use":
-            if not (STATE / "paused").exists() or agent_loaded():
-                raise SelectorError("Run pause before explicit account selection")
-            switch(
-                API(config),
-                config,
-                "preferred" if args.account == "company" else "fallback",
-            )
-            print(f"Selected {args.account}")
-        elif args.action == "run":
-            if (STATE / "paused").exists():
-                raise SelectorError("Selector is paused; run resume first")
-            try:
-                result = check(API(config), config)
-                record({"result": "ok", **result})
-                print(result["reason"])
-            except SelectorError as exc:
-                record({"result": "failed", "selected": "unknown", "reason": str(exc)})
-                raise
-
-
-if __name__ == "__main__":
-    try:
-        main()
-    except (
-        SelectorError,
-        OSError,
-        ValueError,
-        KeyError,
-        TypeError,
-        sqlite3.Error,
-    ) as error:
-        # Avoid emitting potentially sensitive malformed API/config contents.
-        message = (
-            str(error)
-            if isinstance(error, SelectorError)
-            else "Invalid configuration or local operation failed"
-        )
-        print(f"amp-claude-selector: {message}", file=sys.stderr)
-        sys.exit(2)
+#!/usr/bin/env bash
+# Select Claude OAuth credentials through a local CLIProxyAPI v7 Management API.
+# Compatible with macOS /bin/bash 3.2. Requires jq; usage tracking also requires sqlite3 and shasum.
+set -Eeuo pipefail
+export LC_ALL=C
+
+label=com.ampcode.claude-subscription-selector
+usage_label=com.ampcode.claude-work-usage
+state_dir="${AMP_CLAUDE_SELECTOR_STATE_DIR:-$HOME/.local/state/amp-claude-subscription-selector}"
+agent_path="$HOME/Library/LaunchAgents/$label.plist"
+usage_agent_path="$HOME/Library/LaunchAgents/$usage_label.plist"
+launchctl_command="${AMP_CLAUDE_SELECTOR_LAUNCHCTL:-/bin/launchctl}"
+plutil_command="${AMP_CLAUDE_SELECTOR_PLUTIL:-/usr/bin/plutil}"
+lockf_command="${AMP_CLAUDE_SELECTOR_LOCKF:-/usr/bin/lockf}"
+htpasswd_command="${AMP_CLAUDE_SELECTOR_HTPASSWD:-/usr/sbin/htpasswd}"
+sleep_command="${AMP_CLAUDE_SELECTOR_SLEEP:-sleep}"
+curl_image=curlimages/curl:8.12.1
+generic_error='Invalid configuration or local operation failed'
+recording_run=
+
+usage() {
+	cat <<'EOF'
+Usage:
+  amp-claude-selector setup-management [--runtime DIR]
+  amp-claude-selector install --preferred FILE --fallback FILE [--container NAME]
+      [--amp-preferred ID] [--amp-fallback ID] [--window weekly|five-hour|either]
+      [--threshold PERCENT] [--interval SECONDS]
+  amp-claude-selector configure [--amp-preferred ID] [--amp-fallback ID]
+      [--window weekly|five-hour|either] [--threshold PERCENT] [--interval SECONDS]
+  amp-claude-selector accounts [--container NAME]
+  amp-claude-selector run | status | pause | resume | uninstall
+  amp-claude-selector use company|personal
+  amp-claude-selector usage-install [--runtime DIR]
+  amp-claude-selector usage-collect | usage-restart
+  amp-claude-selector usage-report [--details]
+
+Select Claude OAuth credentials through a local CLIProxyAPI v7 Management API.
+EOF
+}
+
+# Errors exit 2: agent-secrets reports its own resolution failures with exit 1.
+# Only the top-level shell reports; subshells exit quietly and their caller decides.
+fail() {
+	trap - ERR
+	if [ "$BASH_SUBSHELL" -eq 0 ]; then
+		if [ -n "$recording_run" ]; then
+			recording_run=
+			record_result "$(jq -nc --arg reason "$*" '{result: "failed", selected: "unknown", reason: $reason}')"
+		fi
+		# Never echo tool output: it can contain credentials, OAuth URLs or response bodies.
+		printf 'amp-claude-selector: %s\n' "$*" >&2
+	fi
+	exit 2
+}
+trap 'fail "$generic_error"' ERR
+
+usage_error() {
+	printf 'amp-claude-selector: %s\n' "$*" >&2
+	usage >&2
+	exit 2
+}
+
+jq_lib='
+def fail($message): error({selector: $message});
+def truthy: . != null and . != false and . != "" and . != 0 and . != [] and . != {};
+def finite_number: type == "number" and (isinfinite | not) and (isnan | not);
+def rstrip: explode | until(length == 0 or ((.[-1] | IN(32, 9, 10, 11, 12, 13)) | not); .[:-1]) | implode;
+def pyjson($sort):
+	if type == "object" then
+		"{" + ((if $sort then to_entries | sort_by(.key) else to_entries end)
+			| map((.key | tojson) + ": " + (.value | pyjson($sort))) | join(", ")) + "}"
+	elif type == "array" then "[" + (map(pyjson($sort)) | join(", ")) + "]"
+	else tojson end;
+def parse_quota($window):
+	({weekly: ["seven_day"], "five-hour": ["five_hour"], either: ["five_hour", "seven_day"]}[$window]) as $keys
+	| if type != "object" then fail("Claude usage response is not an object") else . end
+	| . as $payload
+	| reduce $keys[] as $key ({};
+		($payload[$key]) as $entry
+		| (if ($entry | type) == "object" then $entry.utilization else null end) as $used
+		| if ($used | finite_number) and $used >= 0 and $used <= 100 then . else fail("No usable \($key) quota") end
+		| ($entry.resets_at) as $reset
+		| if $reset != null and ($reset | type) != "string" then fail("Invalid quota reset timestamp") else . end
+		| .[$key] = {remaining: (100 - $used), resets_at: $reset});
+def rate_limit_delay($attempt):
+	(5 * pow(2; $attempt)) as $delay
+	| .header as $headers
+	| if ($headers | type) != "object" then $delay else
+		([$headers | to_entries[] | select(.key | ascii_downcase == "retry-after") | .value][0]) as $value
+		| (if ($value | type) == "array" then $value[0] else $value end) as $value
+		| if ($value | type) != "string" then $delay
+		elif ($value | test("^[[:space:]]*[+-]?[0-9]+[[:space:]]*$")) then
+			[$delay, ($value | gsub("[[:space:]+]"; "") | tonumber)] | max
+		else
+			([try ($value | strptime("%a, %d %b %Y %H:%M:%S GMT") | mktime - now) catch empty] | .[0]) as $seconds
+			| if $seconds == null then $delay else [$delay, $seconds] | max end
+		end
+	end;
+def resolve($name):
+	[.[] | select(.name == $name)] as $matches
+	| if ($matches | length) != 1
+		or ($matches[0].auth_index | truthy | not)
+		or ($matches[0].disabled | type) != "boolean"
+		or $matches[0].source != "file"
+		or ($matches[0].runtime_only | truthy)
+	then fail("Account not uniquely available: \($name)") else $matches[0] end;
+def iso_timestamp_pattern:
+	"^[0-9]{4}-[0-9]{2}-[0-9]{2}[T ][0-9]{2}(:[0-9]{2}(:[0-9]{2}([.,][0-9]+)?)?)?(Z|[+-][0-9]{2}(:?[0-9]{2}(:?[0-9]{2}([.][0-9]+)?)?)?)$";
+def usage_row($account):
+	(if has("token_breakdown") then .token_breakdown else {} end) as $breakdown
+	| if ($breakdown | type) != "object" or $breakdown.schema_version != 2 or $breakdown.quality != "complete"
+		then error("incomplete breakdown") else . end
+	| if (.timestamp | type) != "string" or (.timestamp | test(iso_timestamp_pattern) | not)
+		then error("invalid timestamp") else . end
+	| if (.model | type) != "string" or .model == "" or (.request_id | type) != "string" or .request_id == ""
+		then error("missing identity") else . end
+	| {
+		uncached_input: $breakdown.input.uncached_tokens,
+		output: $breakdown.output.total_tokens,
+		cache_read: $breakdown.input.cache_read_tokens,
+		cache_write: $breakdown.input.cache_write_tokens
+	} as $tokens
+	| if all($tokens[]; type == "number" and . >= 0 and . == floor and (isinfinite | not)) | not
+		then error("invalid counts") else . end
+	| if ($tokens | add) != $breakdown.total_tokens then error("inconsistent counts") else . end
+	| if (.failed | type) != "boolean" then error("missing outcome") else . end
+	| {timestamp, model, request_id, account: $account, failed, tokens: $tokens};
+# Never keep raw queue payloads: they include API keys and response headers.
+def usage_line($account):
+	if type != "object" or .provider != "claude" or .auth_index != $account.auth_index then "E"
+	else (try ("S\t" + (usage_row($account) | pyjson(true))) catch "R") end;
+def timestamp_epoch:
+	capture("^(?<date>[0-9]{4}-[0-9]{2}-[0-9]{2})[T ](?<time>[0-9]{2}:[0-9]{2}:[0-9]{2})([.][0-9]+)?(?<zone>Z|[+-][0-9]{2}:[0-9]{2})$") as $m
+	| ("\($m.date)T\($m.time)Z" | strptime("%Y-%m-%dT%H:%M:%SZ") | mktime)
+		- (if $m.zone == "Z" then 0 else
+			(if $m.zone[0:1] == "-" then -1 else 1 end) * (($m.zone[1:3] | tonumber) * 3600 + ($m.zone[4:6] | tonumber) * 60)
+		end);
+def format_timestamp($offset):
+	if . == "never" then .
+	else ([try (timestamp_epoch + $offset + 25200 | strftime("%Y-%m-%d %H:%M:%S UTC+7")) catch empty] | .[0]) // "unknown" end;
+def management_blocks:
+	split("\n") as $lines | ($lines | length) as $count
+	| [range(0; $count - 1) | select($lines[.] == "remote-management:") | . as $start
+		| {lines: $lines, start: $start, end: (first(range($start + 1; $count - 1)
+			| select($lines[.] | test("^([ \t]+.*|[ \t]*)$") | not)) // ($count - 1))}];
+def management_block_ok:
+	management_blocks
+	| length == 1 and (.[0] as $block | any($block.lines[$block.start:$block.end][]; test("^  allow-remote: false[[:space:]]*$")));
+def management_replace($hash):
+	if management_block_ok | not then fail("Expected one local-only remote-management block; review config manually") else . end
+	| management_blocks[0] as $block
+	| [range($block.start; $block.end) | select($block.lines[.] | test("^  secret-key:"))] as $hits
+	| if ($hits | length) != 1 then fail("Expected one management secret-key field") else . end
+	| {text: ($block.lines | .[$hits[0]] = "  secret-key: " + $hash | join("\n"))};
+def usage_settings:
+	reduce (["usage-statistics-enabled", "true"], ["redis-usage-queue-retention-seconds", "3600"]) as [$name, $value] (.;
+		split("\n") as $lines
+		| ([$lines[] | select(startswith($name + ":"))] | length) as $count
+		| if $count > 1 then fail("Duplicate usage config setting; review config manually")
+		elif $count == 1 then $lines | map(if startswith($name + ":") then "\($name): \($value)" else . end) | join("\n")
+		else (rstrip + "\n\($name): \($value)\n") end)
+	| {text: .};
+'
+
+# jqx INPUT [-r] PROGRAM [JQ_OPTIONS...] runs PROGRAM with jq_lib and stores its output
+# in jq_out. A fail("...") in the program exits with that message.
+jqx() {
+	local input="$1" raw= program output message
+	shift
+	if [ "$1" = -r ]; then
+		raw=-r
+		shift
+	fi
+	program="$1"
+	shift
+	output="$(printf '%s' "$input" | jq -c $raw "$@" "$jq_lib try ($program) catch (if type == \"object\" and has(\"selector\") then {__selector_error: .selector} else {__selector_error: null} end)")" || fail "$generic_error"
+	case "$output" in
+		'{"__selector_error":'*)
+			message="$(printf '%s' "$output" | jq -r '.__selector_error // empty')"
+			fail "${message:-$generic_error}"
+			;;
+	esac
+	jq_out="$output"
+}
+
+# Run a tool with input on stdin and a 90-second limit. The lock descriptor and
+# tool output stay private; callers report only the tool name and exit status.
+run_cmd() {
+	local input="$1" name="${2##*/}" status=0
+	shift
+	cmd_output="$(
+		trap - ERR
+		set +e
+		printf '%s' "$input" | "$@" 9>&- 2>/dev/null &
+		pid=$!
+		(
+			trap 'kill "${sleeper:-}" 2>/dev/null; exit 0' TERM
+			/bin/sleep 90 &
+			sleeper=$!
+			wait "$sleeper"
+			kill -TERM "$pid" 2>/dev/null
+		) >/dev/null 2>&1 9>&- &
+		watchdog=$!
+		wait "$pid"
+		status=$?
+		kill -TERM "$watchdog" 2>/dev/null
+		wait "$watchdog" 2>/dev/null
+		exit "$status"
+	)" || status=$?
+	case "$status" in
+		0) return 0 ;;
+		126|127) cmd_error="Could not execute $name" ;;
+		*) cmd_error="$name failed (exit $status)" ;;
+	esac
+	return 1
+}
+
+# Run a function in a subshell with errexit; its status lands in isolated_status.
+# Call it as a plain statement: if, && and || would disable errexit inside it.
+run_isolated() {
+	trap - ERR
+	set +e
+	(
+		set -e
+		trap 'fail "$generic_error"' ERR
+		"$@"
+	)
+	isolated_status=$?
+	set -e
+	trap 'fail "$generic_error"' ERR
+}
+
+script_path() {
+	local path="${BASH_SOURCE[0]}" directory link
+	while [ -L "$path" ]; do
+		directory="$(cd -P "$(dirname "$path")" && pwd)"
+		link="$(readlink "$path")"
+		case "$link" in
+			/*) path="$link" ;;
+			*) path="$directory/$link" ;;
+		esac
+	done
+	directory="$(cd -P "$(dirname "$path")" && pwd)"
+	printf '%s/%s\n' "$directory" "$(basename "$path")"
+}
+
+expand_user() {
+	case "$1" in
+		'~') printf '%s\n' "$HOME" ;;
+		'~/'*) printf '%s/%s\n' "$HOME" "${1#\~/}" ;;
+		*) printf '%s\n' "$1" ;;
+	esac
+}
+
+save_json() {
+	local path="$1" json="$2" temporary
+	mkdir -p "$(dirname "$path")"
+	temporary="$path.tmp.$$"
+	if ! printf '%s' "$json" | jq . > "$temporary"; then
+		rm -f "$temporary"
+		fail "$generic_error"
+	fi
+	chmod 600 "$temporary"
+	mv -f "$temporary" "$path"
+}
+
+record_result() {
+	local result timestamp line
+	timestamp="$(date -u '+%Y-%m-%dT%H:%M:%S+00:00')"
+	result="$(printf '%s' "$1" | jq -c --arg timestamp "$timestamp" '. + {timestamp: $timestamp}')"
+	save_json "$state_dir/last-run.json" "$result"
+	line="$(printf '%s' "$result" | jq -r '"\(.timestamp) \(.result): \(.reason)"')"
+	touch "$state_dir/selector.log"
+	chmod 600 "$state_dir/selector.log"
+	printf '%s\n' "$line" >> "$state_dir/selector.log"
+}
+
+parse_percent() {
+	local value="$1"
+	[[ "$value" =~ ^[[:space:]]*[+-]?([0-9]+[.]?[0-9]*|[.][0-9]+)([eE][+-]?[0-9]+)?[[:space:]]*$ ]] || usage_error "--threshold: Must be between 0 and 100"
+	parsed="$(jq -n --arg value "$value" '$value | gsub("[[:space:]+]"; "") | tonumber | if . >= 0 and . <= 100 then . else empty end' 2>/dev/null)" || parsed=
+	[ -n "$parsed" ] || usage_error "--threshold: Must be between 0 and 100"
+}
+
+parse_positive() {
+	local value="$1" digits
+	[[ "$value" =~ ^[[:space:]]*[+]?([0-9]+)[[:space:]]*$ ]] || usage_error "--interval: Must be positive"
+	digits="${BASH_REMATCH[1]}"
+	[ "${#digits}" -le 15 ] || usage_error "--interval: Must be positive"
+	parsed=$((10#$digits))
+	[ "$parsed" -gt 0 ] || usage_error "--interval: Must be positive"
+}
+
+parse_args() {
+	local allowed name value has_value
+	[ "$#" -gt 0 ] || usage_error 'a command is required'
+	action="$1"
+	shift
+	case "$action" in
+		-h|--help|help) usage; exit 0 ;;
+		setup-management|usage-install) allowed=' runtime ' ;;
+		install) allowed=' preferred fallback container amp-preferred amp-fallback window threshold interval ' ;;
+		configure) allowed=' amp-preferred amp-fallback window threshold interval ' ;;
+		accounts) allowed=' container ' ;;
+		usage-report) allowed=' details ' ;;
+		usage-collect|usage-restart|run|status|pause|resume|uninstall|use) allowed=' ' ;;
+		*) usage_error "unknown command: $action" ;;
+	esac
+	opt_runtime="$HOME/.local/share/amp-cliproxy"
+	opt_container=amp-cliproxyapi
+	opt_preferred= opt_fallback= opt_account= opt_details=
+	opt_amp_preferred= opt_amp_fallback= opt_window= opt_threshold= opt_interval=
+	set_amp_preferred= set_amp_fallback=
+	while [ "$#" -gt 0 ]; do
+		case "$1" in
+			-h|--help) usage; exit 0 ;;
+			--*=*) name="${1%%=*}"; name="${name#--}"; value="${1#*=}"; has_value=1; shift ;;
+			--*) name="${1#--}"; value=; has_value=; shift ;;
+			*)
+				[ "$action" = use ] && [ -z "$opt_account" ] || usage_error "unrecognized argument: $1"
+				case "$1" in
+					company|personal) opt_account="$1" ;;
+					*) usage_error "account must be company or personal" ;;
+				esac
+				shift
+				continue
+				;;
+		esac
+		case "$allowed" in
+			*" $name "*) ;;
+			*) usage_error "unrecognized argument: --$name" ;;
+		esac
+		if [ "$name" = details ]; then
+			[ -z "$has_value" ] || usage_error '--details takes no value'
+			opt_details=1
+			continue
+		fi
+		if [ -z "$has_value" ]; then
+			[ "$#" -gt 0 ] || usage_error "--$name requires a value"
+			value="$1"
+			shift
+		fi
+		case "$name" in
+			runtime) opt_runtime="$value" ;;
+			preferred) opt_preferred="$value" ;;
+			fallback) opt_fallback="$value" ;;
+			container) opt_container="$value" ;;
+			amp-preferred) opt_amp_preferred="$value"; set_amp_preferred=1 ;;
+			amp-fallback) opt_amp_fallback="$value"; set_amp_fallback=1 ;;
+			window)
+				case "$value" in
+					weekly|five-hour|either) opt_window="$value" ;;
+					*) usage_error '--window must be weekly, five-hour or either' ;;
+				esac
+				;;
+			threshold) parse_percent "$value"; opt_threshold="$parsed" ;;
+			interval) parse_positive "$value"; opt_interval="$parsed" ;;
+		esac
+	done
+	if [ "$action" = install ]; then
+		[ -n "$opt_preferred" ] || usage_error '--preferred is required'
+		[ -n "$opt_fallback" ] || usage_error '--fallback is required'
+		[ -n "$opt_window" ] || opt_window=weekly
+		[ -n "$opt_threshold" ] || opt_threshold=40
+		[ -n "$opt_interval" ] || opt_interval=3600
+	fi
+	if [ "$action" = use ] && [ -z "$opt_account" ]; then
+		usage_error 'account is required: company or personal'
+	fi
+	return 0
+}
+
+set_config_vars() {
+	local assignments
+	assignments="$(printf '%s' "$config_json" | jq -r '
+		def text: if type == "string" then . else "" end;
+		def truthy: . != null and . != false and . != "" and . != 0 and . != [] and . != {};
+		@sh "cfg_preferred=\(.preferred | text)",
+		@sh "cfg_fallback=\(.fallback | text)",
+		@sh "cfg_container=\(.container | text)",
+		@sh "cfg_docker=\(.docker | text)",
+		@sh "cfg_window=\(.window | text)",
+		"cfg_threshold=\(.threshold | tojson | @sh)",
+		"cfg_interval=\(.interval | tojson | @sh)",
+		@sh "cfg_amp_preferred=\(.amp_preferred | text)",
+		@sh "cfg_amp_fallback=\(.amp_fallback | text)",
+		"cfg_amp_any=\([.amp_preferred, .amp_fallback] | any(.[]; truthy))",
+		"cfg_amp_valid=\((.amp_preferred | type) == "string" and (.amp_fallback | type) == "string"
+			and .amp_preferred != "" and .amp_fallback != "" and .amp_preferred != .amp_fallback)"
+	')" || fail "$generic_error"
+	eval "$assignments"
+}
+
+load_config() {
+	config_json="$(jq -ce 'if type == "object" then del(.management_key_ref) else error end' "$state_dir/config.json" 2>/dev/null)" || fail 'Not configured; run install first'
+	set_config_vars
+}
+
+require_key() {
+	[ -n "$management_key" ] || fail 'Management key is empty or contains a newline'
+	case "$management_key" in
+		*$'\n'*|*$'\r'*) fail 'Management key is empty or contains a newline' ;;
+	esac
+	# Built with builtins and a pipe, so the key never appears in any process arguments.
+	auth_header_json="$(printf 'Authorization: Bearer %s' "$management_key" | jq -Rs .)"
+}
+
+# Share only the proxy's network namespace. The key travels on stdin,
+# never in Docker arguments, environment, config files or logs.
+api_call() {
+	local method="$1" endpoint="$2" payload="${3-}" options data kind
+	options="silent
+show-error
+fail-with-body
+max-time = 45
+url = \"http://127.0.0.1:8317/v0/management/$endpoint\"
+request = \"$method\"
+header = $auth_header_json"
+	if [ -n "$payload" ]; then
+		data="$(printf '%s' "$payload" | jq -Rs .)"
+		options="$options
+header = \"Content-Type: application/json\"
+data = $data"
+	fi
+	run_cmd "$options
+" "$cfg_docker" run --rm -i --network "container:$cfg_container" "$curl_image" --config - || fail "$cmd_error"
+	kind="$(printf '%s' "$cmd_output" | jq -rs 'if length == 1 then .[0] | type else error end' 2>/dev/null)" || fail 'Management API returned invalid JSON'
+	case "$endpoint" in
+		usage-queue\?*) [ "$kind" = array ] || fail 'Management API returned an invalid usage queue' ;;
+		*) [ "$kind" = object ] || fail 'Management API response is not an object' ;;
+	esac
+	api_response="$cmd_output"
+}
+
+api_accounts() {
+	api_call GET auth-files
+	jqx "$api_response" 'if (.files | type) != "array" then fail("Management API returned an invalid account list")
+		elif any(.files[]; type != "object") then fail("Management API returned an invalid account entry")
+		else [.files[] | select(.provider == "claude")] end'
+	accounts_json="$jq_out"
+}
+
+resolve_account() {
+	jqx "$accounts_json" 'resolve($name)' --arg name "$1"
+	account_json="$jq_out"
+}
+
+response_status() {
+	jqx "$api_response" -r '.status_code | if type == "number" then tostring else "none" end'
+	status_code="$jq_out"
+}
+
+api_quota() {
+	local account="$1" window="$2" request attempt detail
+	jqx "$account" '{
+		auth_index,
+		method: "GET",
+		url: "https://api.anthropic.com/api/oauth/usage",
+		header: {
+			Authorization: "Bearer $TOKEN$",
+			"anthropic-beta": "oauth-2025-04-20",
+			"Content-Type": "application/json",
+			"User-Agent": "claude-cli/2.1.280 (external, cli)"
+		}
+	}'
+	request="$jq_out"
+	api_call POST api-call "$request"
+	response_status
+	if [ "$status_code" = 401 ]; then
+		jqx "$account" '{name, auth_index}'
+		api_call POST auth-files/refresh "$jq_out"
+		# One retry only, including for disabled credentials with expired tokens.
+		api_call POST api-call "$request"
+		response_status
+	fi
+	for attempt in 0 1; do
+		[ "$status_code" = 429 ] || break
+		jqx "$api_response" -r "rate_limit_delay($attempt) | if . > 60 then \"stop\" else tostring end"
+		[ "$jq_out" != stop ] || break
+		"$sleep_command" "$jq_out" 9>&-
+		api_call POST api-call "$request"
+		response_status
+	done
+	if [ "$status_code" != 200 ]; then
+		detail=
+		[ "$status_code" = none ] || detail=" (HTTP $status_code)"
+		if [ "$status_code" = 429 ]; then
+			jqx "$api_response" -r 'rate_limit_delay(0) | ceil | tostring'
+			detail="$detail; retry after $jq_out seconds"
+		fi
+		fail "Claude usage request failed$detail"
+	fi
+	jqx "$api_response" '(.body | if type == "string" then (try fromjson catch fail("Claude usage response is invalid"))
+		else fail("Claude usage response is invalid") end) | parse_quota($window)' --arg window "$window"
+	quota_json="$jq_out"
+}
+
+api_disable() {
+	jqx "$1" '{name, auth_index, disabled: $disabled}' --argjson disabled "$2"
+	api_call PATCH auth-files/status "$jq_out"
+	jqx "$api_response" 'if .status == "ok" and .disabled == $disabled then true
+		else fail("Credential status update was not confirmed") end' --argjson disabled "$2"
+}
+
+native_load() {
+	native_amp="$(command -v amp || true)"
+	if [ -z "$native_amp" ] || [ "$cfg_amp_valid" != true ]; then
+		fail 'Amp sync requires amp and two distinct Claude connection IDs'
+	fi
+	native_states
+}
+
+native_state() {
+	local id="$1" state
+	run_cmd '' "$native_amp" config model-providers show "$id" || fail "$cmd_error"
+	state="$(printf '%s' "$cmd_output" | jq -rs --arg id "$id" 'if length != 1 then "invalid" else .[0]
+		| if type == "object" and .id == $id and .type == "model_provider_claude_sub" and (.active | type) == "boolean"
+			then .active | tostring else "unsupported" end end' 2>/dev/null)" || state=invalid
+	case "$state" in
+		true|false) native_active="$state" ;;
+		unsupported) fail 'Amp sync requires Claude subscription connection IDs, not list indexes' ;;
+		*) fail 'Amp returned invalid connection JSON' ;;
+	esac
+}
+
+native_states() {
+	native_state "$cfg_amp_preferred"
+	native_preferred_active="$native_active"
+	native_state "$cfg_amp_fallback"
+	native_fallback_active="$native_active"
+}
+
+native_roles() {
+	native_states
+	if [ "$1" = preferred ]; then
+		selected_active="$native_preferred_active" other_active="$native_fallback_active"
+	else
+		selected_active="$native_fallback_active" other_active="$native_preferred_active"
+	fi
+}
+
+native_select() {
+	local selected="$1" selected_id="$cfg_amp_fallback" other_id="$cfg_amp_preferred"
+	if [ "$selected" = preferred ]; then
+		selected_id="$cfg_amp_preferred" other_id="$cfg_amp_fallback"
+	fi
+	native_roles "$selected"
+	# Claude activation replaces the active subscription of the same type.
+	if [ "$selected_active" != true ]; then
+		run_cmd '' "$native_amp" config model-providers activate "$selected_id" || fail "$cmd_error"
+	fi
+	native_roles "$selected"
+	[ "$selected_active" = true ] || fail 'Amp Claude activation verification failed'
+	if [ "$other_active" = true ]; then
+		run_cmd '' "$native_amp" config model-providers deactivate "$other_id" --yes || fail "$cmd_error"
+	fi
+	native_roles "$selected"
+	if [ "$selected_active" != true ] || [ "$other_active" != false ]; then
+		fail 'Amp Claude account selection verification failed'
+	fi
+}
+
+selector_switch() {
+	local selected="$1" preferred_account fallback_account target other target_name other_name
+	# Preflight native connections before changing either proxy credential.
+	if [ "$cfg_amp_any" = true ]; then
+		native_load
+	fi
+	api_accounts
+	resolve_account "$cfg_preferred"
+	preferred_account="$account_json"
+	resolve_account "$cfg_fallback"
+	fallback_account="$account_json"
+	jqx "$accounts_json" 'if ([.[].name] | unique) == ([$a, $b] | unique) then true
+		else fail("Unexpected Claude credentials; selection would not be exclusive") end' --arg a "$cfg_preferred" --arg b "$cfg_fallback"
+	if [ "$selected" = preferred ]; then
+		target="$preferred_account" other="$fallback_account" target_name="$cfg_preferred" other_name="$cfg_fallback"
+	else
+		target="$fallback_account" other="$preferred_account" target_name="$cfg_fallback" other_name="$cfg_preferred"
+	fi
+	# Fail closed: never briefly make both company and personal eligible.
+	# A failed enable may leave no eligible account; do not silently restore it.
+	jqx "$other" -r '.disabled | tostring'
+	if [ "$jq_out" != true ]; then
+		api_disable "$other" true
+	fi
+	jqx "$target" -r '.disabled | tostring'
+	if [ "$jq_out" = true ]; then
+		api_disable "$target" false
+	fi
+	api_accounts
+	jqx "$accounts_json" 'if ([.[].name] | unique) != ([$t, $o] | unique) or resolve($t).disabled or (resolve($o).disabled | not)
+		then fail("Account selection verification failed") else true end' --arg t "$target_name" --arg o "$other_name"
+	if [ "$cfg_amp_any" = true ]; then
+		run_isolated native_select "$selected"
+		if [ "$isolated_status" -ne 0 ]; then
+			fail 'Proxy selected account, but Amp sync failed; accounts may be out of sync. Retry run or paused use.'
+		fi
+	fi
+}
+
+selector_check() {
+	local preferred_quota fallback_quota selected reason
+	api_accounts
+	resolve_account "$cfg_preferred"
+	api_quota "$account_json" "$cfg_window"
+	preferred_quota="$quota_json"
+	resolve_account "$cfg_fallback"
+	api_quota "$account_json" "$cfg_window"
+	fallback_quota="$quota_json"
+	jqx "$preferred_quota" -r 'all(.[]; .remaining > $threshold) | tostring' --argjson threshold "$cfg_threshold"
+	if [ "$jq_out" = true ]; then
+		selected=preferred reason='preferred subscription still has remaining quota'
+	else
+		selected=fallback reason='preferred subscription is at or below the remaining quota threshold'
+	fi
+	selector_switch "$selected"
+	check_result="$(jq -nc --arg selected "$selected" --argjson preferred "$preferred_quota" \
+		--argjson fallback "$fallback_quota" --arg reason "$reason" \
+		'{selected: $selected, quotas: {preferred: $preferred, fallback: $fallback}, reason: $reason}')"
+}
+
+agent_loaded() {
+	local output status=0
+	output="$("$launchctl_command" print "gui/$(id -u)/$label" 9>&- 2>&1 </dev/null)" || status=$?
+	[ "$status" -ne 0 ] || return 0
+	case "$output" in
+		*'Could not find service'*) return 1 ;;
+	esac
+	fail 'Could not inspect LaunchAgent state'
+}
+
+bootout() {
+	if agent_loaded; then
+		run_cmd '' "$launchctl_command" bootout "gui/$(id -u)/$label" || fail "$cmd_error"
+	fi
+}
+
+bootstrap() {
+	run_cmd '' "$launchctl_command" bootstrap "gui/$(id -u)" "$agent_path" || fail "$cmd_error"
+}
+
+xml_string() {
+	printf '\t\t<string>%s</string>\n' "$(printf '%s' "$1" | sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g' -e 's/"/\&quot;/g')"
+}
+
+write_plist() {
+	local path="$1" job="$2" interval="$3" temporary argument
+	shift 3
+	mkdir -p "$(dirname "$path")"
+	temporary="$path.tmp.$$"
+	{
+		printf '%s\n' '<?xml version="1.0" encoding="UTF-8"?>' \
+			'<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">' \
+			'<plist version="1.0">' '<dict>'
+		printf '\t<key>Label</key>\n'
+		xml_string "$job"
+		printf '\t<key>ProgramArguments</key>\n\t<array>\n'
+		for argument in "$@"; do
+			xml_string "$argument"
+		done
+		printf '\t</array>\n\t<key>EnvironmentVariables</key>\n\t<dict>\n'
+		printf '\t\t<key>HOME</key>\n'
+		xml_string "$HOME"
+		printf '\t\t<key>PATH</key>\n'
+		xml_string "${PATH-}"
+		printf '\t\t<key>AMP_CLAUDE_SELECTOR_STATE_DIR</key>\n'
+		xml_string "$state_dir"
+		printf '\t</dict>\n\t<key>RunAtLoad</key>\n\t<true/>\n'
+		printf '\t<key>StartInterval</key>\n\t<integer>%s</integer>\n' "$interval"
+		printf '\t<key>StandardOutPath</key>\n'
+		xml_string /dev/null
+		printf '\t<key>StandardErrorPath</key>\n'
+		xml_string /dev/null
+		printf '%s\n' '</dict>' '</plist>'
+	} > "$temporary"
+	chmod 600 "$temporary"
+	if ! "$plutil_command" -lint "$temporary" >/dev/null 2>&1; then
+		rm -f "$temporary"
+		fail 'Generated LaunchAgent failed validation'
+	fi
+	mv -f "$temporary" "$path"
+}
+
+schedule() {
+	write_plist "$agent_path" "$label" "$cfg_interval" "$(script_path)" run
+}
+
+touch_paused() {
+	touch "$state_dir/paused"
+	chmod 600 "$state_dir/paused"
+}
+
+read_file() {
+	file_text="$(cat "$1" && printf .)" || fail "$generic_error"
+	file_text="${file_text%.}"
+}
+
+setup_management() {
+	local path replacement hashed hash_json temporary
+	path="$(expand_user "$opt_runtime")/config.yaml"
+	read_file "$path"
+	# Update only the reviewed remote-management block, never print config.
+	if ! printf '%s' "$file_text" | jq -Rse "$jq_lib management_block_ok" >/dev/null 2>&1; then
+		fail 'Expected one local-only remote-management block; review config manually'
+	fi
+	require_key
+	run_cmd "$management_key
+" "$htpasswd_command" -niBC 12 selector || fail "$cmd_error"
+	hashed="$(printf '%s' "$cmd_output" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+	case "$hashed" in
+		*:*) hashed="${hashed#*:}" ;;
+		*) fail "$generic_error" ;;
+	esac
+	hash_json="$(printf '%s' "$hashed" | jq -Rs .)"
+	HASH_JSON="$hash_json" jqx "$file_text" 'management_replace($ENV.HASH_JSON)' -Rs
+	replacement="$(printf '%s' "$jq_out" | jq -j .text && printf .)" || fail "$generic_error"
+	replacement="${replacement%.}"
+	temporary="$(dirname "$path")/config.yaml.selector-tmp"
+	if ! printf '%s' "$replacement" > "$temporary" || ! chmod 600 "$temporary" || ! mv -f "$temporary" "$path"; then
+		rm -f "$temporary"
+		fail "$generic_error"
+	fi
+	printf '%s\n' 'Management key hash configured; restart the proxy to enable it. Remote management remains disabled.'
+}
+
+status_report() {
+	local last='{}' state lines threshold interval preferred_spec fallback_spec
+	local -a values
+	if [ -e "$state_dir/last-run.json" ]; then
+		last="$(jq -c . "$state_dir/last-run.json")" || fail "$generic_error"
+	fi
+	if [ -e "$state_dir/paused" ]; then
+		state=paused
+	elif agent_loaded; then
+		state=scheduled
+	else
+		state='not scheduled'
+	fi
+	lines="$(jq -nr --argjson c "$config_json" --argjson l "$last" --arg state "$state" "$jq_lib"'
+		def get($key; $default): if has($key) then .[$key] else $default end;
+		def remaining($role; $windows):
+			[$windows[] as $w | ([try $l.quotas[$role][$w[0]].remaining catch null] | .[0]) as $v
+				| "\($w[1])=\(if ($v | finite_number) and $v >= 0 and $v <= 100 then $v | tostring else "unknown" end)"]
+			| join(";");
+		({weekly: [["seven_day", "weekly"]], "five-hour": [["five_hour", "five-hour"]],
+			either: [["five_hour", "five-hour"], ["seven_day", "weekly"]]}[$c.window]) as $windows
+		| ($l | get("timestamp"; "never")) as $timestamp
+		| ($l | get("selected"; "none") | tostring) as $selected
+		| ($l | get("result"; "never run") | tostring) as $result
+		| {preferred: "company (\($c.preferred))", fallback: "personal (\($c.fallback))"} as $labels
+		| ($l | get("reason"; "selector has not run yet") | tostring) as $reason
+		| $labels.preferred,
+			$labels.fallback,
+			($c.threshold | tostring),
+			($c.interval | tostring),
+			($timestamp | format_timestamp(0)),
+			(if $state != "scheduled" then $state
+				elif $timestamp == "never" then "awaiting first check"
+				else $timestamp | format_timestamp($c.interval) end),
+			(if $result == "never-run" then "never run" else $result end),
+			($labels[$selected] // $selected),
+			remaining("preferred"; $windows),
+			remaining("fallback"; $windows),
+			(if $reason == "Selected account has capacity" then
+				(if $selected == "preferred" then "preferred subscription still has remaining quota"
+				else "preferred subscription is at or below the remaining quota threshold" end)
+				else $reason end),
+			(if $c.amp_preferred | truthy then "Amp connections: company \($c.amp_preferred); personal \($c.amp_fallback)" else "" end),
+			"end"
+	')" || fail "$generic_error"
+	values=()
+	while IFS= read -r line; do
+		values+=("$line")
+	done <<EOF
+$lines
+EOF
+	[ "${#values[@]}" -eq 13 ] && [ "${values[12]}" = end ] || fail "$generic_error"
+	printf 'Preferred: %s\n' "${values[0]}"
+	printf 'Fallback: %s\n' "${values[1]}"
+	printf 'Threshold: %g%% remaining\n' "${values[2]}"
+	printf 'Interval: %s\n' "$(format_interval "${values[3]}")"
+	printf 'Background check: %s\n' "$state"
+	printf 'Last check: %s\n' "${values[4]}"
+	printf 'Next check: %s\n' "${values[5]}"
+	printf 'Result: %s\n' "${values[6]}"
+	printf 'Selected: %s\n' "${values[7]}"
+	printf 'Preferred remaining: %s\n' "$(format_remaining "${values[8]}")"
+	printf 'Fallback remaining: %s\n' "$(format_remaining "${values[9]}")"
+	printf 'Reason: %s\n' "${values[10]}"
+	[ -z "${values[11]}" ] || printf '%s\n' "${values[11]}"
+}
+
+format_remaining() {
+	local spec="$1" part output= window value
+	local IFS=';'
+	for part in $spec; do
+		window="${part%%=*}" value="${part#*=}"
+		[ -z "$output" ] || output="$output; "
+		if [ "$value" = unknown ]; then
+			output="$output$window unknown"
+		else
+			output="$output$window $(printf '%g' "$value")%"
+		fi
+	done
+	printf '%s\n' "$output"
+}
+
+format_interval() {
+	local seconds="$1" size unit count
+	for size in 3600 60 1; do
+		case "$size" in
+			3600) unit=hour ;;
+			60) unit=minute ;;
+			*) unit=second ;;
+		esac
+		if [ "$seconds" -ge "$size" ] && [ $((seconds % size)) -eq 0 ]; then
+			count=$((seconds / size))
+			if [ "$count" -eq 1 ]; then
+				printf '1 %s\n' "$unit"
+			else
+				printf '%s %ss\n' "$count" "$unit"
+			fi
+			return 0
+		fi
+	done
+	printf '%s seconds\n' "$seconds"
+}
+
+usage_account() {
+	api_accounts
+	resolve_account "$cfg_preferred"
+	jqx "$account_json" '(if has("email") then .email else "" end) as $email
+		| if ($email | type) == "string" and ($email | endswith("@holistics.io"))
+			and (.name | type) == "string" and (.name | endswith("-" + $email + ".json"))
+		then {name, email: $email, auth_index}
+		else fail("Work credential email is not verified by the provider account list") end'
+	usage_account_json="$jq_out"
+}
+
+sqlite() {
+	sqlite3 -batch -bail -init /dev/null "$state_dir/work-usage.sqlite" "$@" 2>/dev/null
+}
+
+usage_database() {
+	command -v sqlite3 >/dev/null || fail 'sqlite3 is required for work usage tracking'
+	printf '%s\n' 'pragma synchronous=full;' \
+		'create table if not exists requests (request_key text primary key, payload text not null);' \
+		| sqlite >/dev/null || fail "$generic_error"
+	chmod 600 "$state_dir/work-usage.sqlite"
+}
+
+usage_statistics_enabled() {
+	api_call GET usage-statistics-enabled
+	jqx "$api_response" -r '."usage-statistics-enabled" == true | tostring'
+	statistics_enabled="$jq_out"
+}
+
+# Store one queue batch in one transaction. Returns the rows actually inserted.
+store_usage_batch() {
+	local lines="$1" scratch line count=0 index hash quote="'" changes
+	stored_batch=0
+	scratch="$(mktemp -d "$state_dir/usage-batch.XXXXXX")"
+	while IFS= read -r line; do
+		case "$line" in
+			E) excluded=$((excluded + 1)) ;;
+			R) rejected=$((rejected + 1)) ;;
+			S$'\t'*)
+				count=$((count + 1))
+				printf '%s' "${line#S$'\t'}" > "$scratch/$count"
+				;;
+		esac
+	done <<EOF
+$lines
+EOF
+	if [ "$count" -gt 0 ]; then
+		# A request can have multiple provider attempts; timestamp and model
+		# distinguish those while identical redeliveries deduplicate.
+		changes="$(
+			{
+				printf '%s\n' 'pragma synchronous=full;' 'begin;'
+				index=0
+				(cd "$scratch" && shasum -a 256 $(seq 1 "$count")) | while read -r hash _; do
+					index=$((index + 1))
+					line="$(cat "$scratch/$index")"
+					printf "insert or ignore into requests values ('%s', '%s');\n" "$hash" "${line//$quote/$quote$quote}"
+				done
+				printf '%s\n' 'commit;' 'select total_changes();'
+			} | sqlite
+		)" || { rm -rf "$scratch"; fail "$generic_error"; }
+		stored_batch="$changes"
+	fi
+	rm -rf "$scratch"
+}
+
+collect_usage() {
+	local binding result lines size
+	binding="$(jq -c . "$state_dir/work-usage-account.json")" || fail "$generic_error"
+	usage_account
+	jqx "$usage_account_json" 'if . == $binding then true
+		else fail("Work account identity changed; review before reinstalling tracking") end' --argjson binding "$binding"
+	usage_statistics_enabled
+	[ "$statistics_enabled" = true ] || fail 'Proxy usage statistics are disabled'
+	stored=0 excluded=0 rejected=0
+	usage_database
+	while :; do
+		api_call GET 'usage-queue?count=1000'
+		size="$(printf '%s' "$api_response" | jq length)"
+		lines="$(printf '%s' "$api_response" | jq -r --argjson account "$usage_account_json" "$jq_lib .[] | usage_line(\$account)")" || fail "$generic_error"
+		store_usage_batch "$lines"
+		stored=$((stored + stored_batch))
+		[ "$size" -ge 1000 ] || break
+	done
+	result="$(jq -nc --arg at "$(date -u '+%Y-%m-%dT%H:%M:%S+00:00')" --argjson stored "$stored" \
+		--argjson excluded "$excluded" --argjson rejected "$rejected" \
+		'{collected_at: $at, stored: $stored, excluded: $excluded, rejected: $rejected}')"
+	save_json "$state_dir/work-usage-last.json" "$result"
+	if [ "$rejected" -gt 0 ]; then
+		fail 'Rejected malformed work usage; inspect work-usage-last.json for count'
+	fi
+	collect_result="$result"
+}
+
+collect_until_ready() {
+	local attempt
+	for attempt in 1 2 3 4 5 6 7 8 9 10 11; do
+		run_isolated collect_usage
+		[ "$isolated_status" -ne 0 ] || return 0
+		"$sleep_command" 2 9>&-
+	done
+	collect_usage
+}
+
+usage_report() {
+	local rows last=null
+	[ -e "$state_dir/work-usage.sqlite" ] || fail 'No durable work history; run usage-install first'
+	usage_database
+	rows="$(sqlite 'select payload from requests;')" || fail "$generic_error"
+	if [ -e "$state_dir/work-usage-last.json" ]; then
+		last="$(jq -c . "$state_dir/work-usage-last.json")" || fail "$generic_error"
+	fi
+	printf '%s\n' "$rows" | jq -s --argjson details "$( [ -n "$opt_details" ] && echo true || echo false )" --argjson last "$last" '
+		{
+			requests: length,
+			tokens: (reduce (.[].tokens | to_entries[]) as $entry
+				({uncached_input: 0, output: 0, cache_read: 0, cache_write: 0}; .[$entry.key] += $entry.value)),
+			scope: "verified work credentials only"
+		}
+		+ (if $details then {history: sort_by(.timestamp)} else {} end)
+		+ {last_collection: $last}' || fail "$generic_error"
+}
+
+restart_usage() {
+	collect_usage
+	run_cmd '' "$cfg_docker" restart "$cfg_container" || fail "$cmd_error"
+	collect_until_ready
+}
+
+install_usage() {
+	local binding_path="$state_dir/work-usage-account.json" binding path replacement
+	usage_account
+	if [ -e "$binding_path" ]; then
+		binding="$(jq -c . "$binding_path")" || fail "$generic_error"
+		jqx "$usage_account_json" 'if . == $binding then true
+			else fail("Existing work binding differs; explicit history migration required") end' --argjson binding "$binding"
+	fi
+	save_json "$binding_path" "$usage_account_json"
+	# Keep the bind-mounted inode: atomic replacement would leave Docker reading
+	# the old config. Do not print, copy or export any existing secret values.
+	path="$(expand_user "$opt_runtime")/config.yaml"
+	read_file "$path"
+	jqx "$file_text" usage_settings -Rs
+	replacement="$(printf '%s' "$jq_out" | jq -j .text && printf .)" || fail "$generic_error"
+	replacement="${replacement%.}"
+	usage_statistics_enabled
+	if [ "$statistics_enabled" = true ]; then
+		collect_usage
+	fi
+	printf '%s' "$replacement" > "$path" || fail "$generic_error"
+	sync
+	# Restart only the existing container, never pull the moving latest tag.
+	run_cmd '' "$cfg_docker" restart "$cfg_container" || fail "$cmd_error"
+	collect_until_ready
+	if [ -e "$usage_agent_path" ]; then
+		run_cmd '' "$launchctl_command" bootout "gui/$(id -u)" "$usage_agent_path" || fail "$cmd_error"
+	fi
+	write_plist "$usage_agent_path" "$usage_label" 15 "$(script_path)" usage-collect
+	run_cmd '' "$launchctl_command" bootstrap "gui/$(id -u)" "$usage_agent_path" || fail "$cmd_error"
+	printf '%s\n' 'Work-only usage collector installed; routing unchanged'
+}
+
+print_accounts() {
+	api_accounts
+	printf '%s' "$accounts_json" | jq -r '.[] | "\(.name): \(if .disabled then "disabled" else "enabled" end)"'
+}
+
+install_selector() {
+	[ "$opt_preferred" != "$opt_fallback" ] || fail 'Preferred and fallback must differ'
+	local docker
+	docker="$(command -v docker || true)"
+	[ -n "$docker" ] || fail 'Docker is not installed'
+	config_json="$(jq -nc --arg preferred "$opt_preferred" --arg fallback "$opt_fallback" \
+		--arg container "$opt_container" --arg docker "$docker" --arg window "$opt_window" \
+		--argjson threshold "$opt_threshold" --argjson interval "$opt_interval" \
+		'{preferred: $preferred, fallback: $fallback, container: $container, docker: $docker,
+			window: $window, threshold: $threshold, interval: $interval}')"
+	if [ -n "$set_amp_preferred" ] || [ -n "$set_amp_fallback" ]; then
+		config_json="$(printf '%s' "$config_json" | jq -c \
+			--arg ap "$opt_amp_preferred" --arg af "$opt_amp_fallback" \
+			--arg sp "$set_amp_preferred" --arg sf "$set_amp_fallback" \
+			'. + {amp_preferred: (if $sp == "" then null else $ap end), amp_fallback: (if $sf == "" then null else $af end)}')"
+		set_config_vars
+		native_load
+	fi
+	set_config_vars
+	require_key
+	# Validate both quota payloads before installing an active scheduler.
+	api_accounts
+	jqx "$accounts_json" 'if ([.[].name] | unique) == ([$a, $b] | unique) then true
+		else fail("Exactly two Claude credentials are required") end' --arg a "$cfg_preferred" --arg b "$cfg_fallback"
+	resolve_account "$cfg_preferred"
+	api_quota "$account_json" "$cfg_window"
+	resolve_account "$cfg_fallback"
+	api_quota "$account_json" "$cfg_window"
+	bootout
+	save_json "$state_dir/config.json" "$config_json"
+	schedule
+	touch_paused
+	bootstrap
+	rm -f "$state_dir/paused"
+	printf '%s\n' 'Installed Claude subscription selector'
+}
+
+configure_selector() {
+	local loaded=false
+	if [ -z "$opt_window$opt_threshold$opt_interval$set_amp_preferred$set_amp_fallback" ]; then
+		fail 'Provide a policy option or Amp connection IDs'
+	fi
+	config_json="$(printf '%s' "$config_json" | jq -c \
+		--arg window "$opt_window" --arg threshold "$opt_threshold" --arg interval "$opt_interval" \
+		--arg ap "$opt_amp_preferred" --arg af "$opt_amp_fallback" \
+		--arg sp "$set_amp_preferred" --arg sf "$set_amp_fallback" '
+		(if $window != "" then .window = $window else . end)
+		| (if $threshold != "" then .threshold = ($threshold | tonumber) else . end)
+		| (if $interval != "" then .interval = ($interval | tonumber) else . end)
+		| (if $sp != "" then .amp_preferred = $ap else . end)
+		| (if $sf != "" then .amp_fallback = $af else . end)')"
+	set_config_vars
+	if [ "$cfg_amp_any" = true ]; then
+		native_load
+	fi
+	if agent_loaded; then
+		loaded=true
+	fi
+	bootout
+	touch_paused
+	save_json "$state_dir/config.json" "$config_json"
+	schedule
+	if [ "$loaded" = true ]; then
+		bootstrap
+		rm -f "$state_dir/paused"
+	fi
+	printf '%s\n' 'Policy updated'
+}
+
+run_selector() {
+	[ ! -e "$state_dir/paused" ] || fail 'Selector is paused; run resume first'
+	recording_run=1
+	require_key
+	selector_check
+	recording_run=
+	record_result "$(printf '%s' "$check_result" | jq -c '{result: "ok"} + .')"
+	printf '%s' "$check_result" | jq -r .reason
+}
+
+main() {
+	local resolver status=0
+	parse_args "$@"
+	command -v jq >/dev/null || fail 'jq is required'
+	umask 077
+	mkdir -p "$state_dir"
+	chmod 700 "$state_dir"
+	needs_key=false
+	case "$action" in
+		setup-management|install|accounts|use|run|usage-install|usage-collect|usage-restart) needs_key=true ;;
+	esac
+	if [ "$action" = run ] && [ -e "$state_dir/paused" ]; then
+		needs_key=false
+	fi
+	if [ "$needs_key" = true ] && [ -z "${CLIPROXY_MANAGEMENT_KEY+set}" ]; then
+		resolver="$(command -v agent-secrets || true)"
+		[ -n "$resolver" ] || fail 'agent-secrets is not installed; run sync-skills.sh'
+		# Resolve before taking the lock: the approved child takes the same lock.
+		"$resolver" run --strict-service-account --bundle amp-claude-selector -- "$(script_path)" "$@" || status=$?
+		# Resolver failures use exit 1. The selector child uses exit 2 and has
+		# already recorded its specific failure while holding the selector lock.
+		if [ "$action" = run ] && [ "$status" -eq 1 ]; then
+			record_result '{"result":"failed","selected":"unknown","reason":"Agent-secrets resolution failed"}'
+		fi
+		exit "$status"
+	fi
+	# Keep the key in this shell only; no child process inherits it or the resolver's credentials.
+	management_key="${CLIPROXY_MANAGEMENT_KEY-}"
+	unset CLIPROXY_MANAGEMENT_KEY OP_SERVICE_ACCOUNT_TOKEN AGENT_SECRET_AUTH
+	exec 9>>"$state_dir/selector.lock"
+	chmod 600 "$state_dir/selector.lock"
+	if [ "$action" = run ]; then
+		# RunAtLoad can start before install or resume releases its lock.
+		# Let that check wait rather than lose the first evaluation.
+		"$lockf_command" -s 9 || fail 'Another selector operation is running'
+	else
+		"$lockf_command" -s -t 0 9 || fail 'Another selector operation is running'
+	fi
+	case "$action" in
+		setup-management) setup_management; return 0 ;;
+		install) install_selector; return 0 ;;
+		uninstall)
+			bootout
+			rm -f "$agent_path"
+			touch_paused
+			printf '%s\n' 'Uninstalled scheduler; account selection unchanged'
+			return 0
+			;;
+		accounts)
+			if [ ! -e "$state_dir/config.json" ]; then
+				config_json="$(jq -nc --arg container "$opt_container" --arg docker "$(command -v docker || echo docker)" \
+					'{container: $container, docker: $docker}')"
+				set_config_vars
+				require_key
+				print_accounts
+				return 0
+			fi
+			;;
+	esac
+	load_config
+	case "$action" in
+		usage-install) require_key; install_usage ;;
+		usage-collect) require_key; collect_usage; printf '%s' "$collect_result" | jq -r "$jq_lib pyjson(false)" ;;
+		usage-restart)
+			require_key
+			restart_usage
+			printf '%s\n' 'Proxy restarted; durable work history retained'
+			;;
+		usage-report) usage_report ;;
+		configure) configure_selector ;;
+		pause)
+			bootout
+			touch_paused
+			printf '%s\n' 'Paused; account selection unchanged'
+			;;
+		resume)
+			[ -e "$agent_path" ] || fail 'Scheduler is not installed'
+			if ! agent_loaded; then
+				bootstrap
+			fi
+			rm -f "$state_dir/paused"
+			printf '%s\n' 'Resumed'
+			;;
+		status) status_report ;;
+		accounts) require_key; print_accounts ;;
+		use)
+			if [ ! -e "$state_dir/paused" ] || agent_loaded; then
+				fail 'Run pause before explicit account selection'
+			fi
+			require_key
+			if [ "$opt_account" = company ]; then
+				selector_switch preferred
+			else
+				selector_switch fallback
+			fi
+			printf 'Selected %s\n' "$opt_account"
+			;;
+		run) run_selector ;;
+	esac
+}
+
+main "$@"

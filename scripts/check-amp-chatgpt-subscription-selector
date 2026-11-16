@@ -77,16 +77,11 @@ cat > "$tmp/bin/plutil" <<'EOF'
 #!/usr/bin/env bash
 [ "${TEST_PLUTIL_FAIL:-0}" = 0 ]
 EOF
+# macOS lockf locks an inherited descriptor; Linux CI uses flock(1) the same way.
 cat > "$tmp/bin/lockf" <<'EOF'
-#!/usr/bin/env python3
-import fcntl
-import sys
-
-fd = int(sys.argv[-1])
-try:
-    fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-except BlockingIOError:
-    raise SystemExit(75)
+#!/usr/bin/env bash
+if [ -x /usr/bin/lockf ]; then exec /usr/bin/lockf "$@"; fi
+exec flock -n "${!#}"
 EOF
 chmod +x "$tmp/bin/"*
 
