@@ -4,20 +4,20 @@ code: "RFC-0017"
 title: "Self-hosted Amp orbs on Docker Cloud Sandboxes"
 slug: "self-hosted-amp-orbs-on-docker-cloud-sandboxes"
 file: "rfc-0017-self-hosted-amp-orbs-on-docker-cloud-sandboxes.md"
-status: "Accepted"
+status: "Implemented"
 summary: "Run Amp orbs as Docker Cloud Sandboxes through a personal self-hosted orb provider on Chinh's Mac, paid by Docker's $250 sign-up credit."
 created: "2026-11-16"
 updated: "2026-11-16"
 amp_thread_id:
   T-01a1d9c3-2570-73ea-9da5-945b146f72af: "planned the setup, compared prices, owns the plan artifact"
-  T-01a1e340-0de7-767d-bfea-eb7767aef04e: "installed sbx, copied the image, wrote and tested dispatch.sh, registered the provider, runs Phase 4"
+  T-01a1e340-0de7-767d-bfea-eb7767aef04e: "installed sbx, copied the image, wrote and tested dispatch.sh, registered the provider, ran Phases 4 and 5"
   T-01a1e43c-88bc-70eb-8e99-5c65906b339b: "wrote this RFC"
 dependency: []
 implementation: []
 inputs:
   - name: "Amp orb provider job"
     kind: "environment variables set by `amp orb provider`"
-    purpose: "ORB_OPERATION (spawn, pause or delete), ORB_ID, and for spawn ORB_TOKEN; AMP_URL only when the server is not ampcode.com."
+    purpose: "ORB_OPERATION (spawn, pause or delete), ORB_ID, and for spawn ORB_TOKEN and ORB_TYPE when the thread has one; AMP_URL only when the server is not ampcode.com."
   - name: "AMP_ORB_* settings"
     kind: "environment variables"
     purpose: "Image, size, time limit and carry-over threshold for dispatch.sh."
@@ -44,15 +44,16 @@ Amp threads started with the `docker-cloud` orb provider run their orbs as Docke
 
 Status on 16 November 2026:
 
-- Phases 1 to 3 are done: Docker account, open-question spike and dispatch script.
-- Phase 4, the end-to-end test with the registered `docker-cloud` provider, is in progress. Spawn, resume, Terminal, portals and a simulated time-limit freeze work. The idle pause, thread deletion and provider-stopped checks are not finished yet.
-- Phase 5, running the provider under launchd with the token in 1Password, has not started. The provider runs in tmux for now.
+- Phases 1 to 5 are done: Docker account, open-question spike, dispatch script, end-to-end test and a launchd service.
+- Every end-to-end check passed after two script fixes. See [Test results](#test-results).
+- The provider runs as the LaunchAgent `com.lelouvincx.amp-orb-provider`. It reads its token from the Amp CLI's own secret storage, so no 1Password item is needed.
+- Tests on Docker credit cost about $0.63 in total, estimated.
 
 Sources:
 
 - [Plan and test results](https://ampcode.com/artifacts/plan-self-hosted-amp-orbs-on-docker-cloud-sandboxes-a07a0d8c-e93c-47b8-8c18-9b442efdba7c), the main record, including the full script and every test.
 - [Planning thread](https://ampcode.com/threads/T-01a1d9c3-2570-73ea-9da5-945b146f72af), including the price comparison.
-- [Install and test thread](https://ampcode.com/threads/T-01a1e340-0de7-767d-bfea-eb7767aef04e), where Phase 4 continues.
+- [Install and test thread](https://ampcode.com/threads/T-01a1e340-0de7-767d-bfea-eb7767aef04e), which ran Phases 1 to 5.
 
 ## Context
 
@@ -68,14 +69,14 @@ Guides:
 
 ## Decision
 
-- Run one personal orb provider named `docker-cloud` on Chinh's Mac.
-- Create Medium sandboxes (4 CPU, 8 GiB) from the public copy `docker.io/lelouvincx/amp-orb:latest`, refreshed weekly by a LaunchAgent.
+- Run one personal orb provider named `docker-cloud` on Chinh's Mac, as a LaunchAgent.
+- Size each sandbox from the thread's orb type, `a1.tiny` to `a1.xxlarge`, with Medium (4 CPU, 8 GiB) as the default. Create sandboxes from the public copy `docker.io/lelouvincx/amp-orb:latest`, refreshed weekly by a LaunchAgent.
 - Give each sandbox a 30-minute time limit that stops it, as a safety net when a pause job is missed.
 - Carry the disk over to a new sandbox before Docker's 24-hour cap, using templates.
 - Ignore Amp project snapshots for now, so every new thread runs `.agents/setup`.
 - Use the credit, then decide whether to keep the setup or return to Amp-hosted orbs. See [Costs](#costs).
 
-`docker-cloud` is not the default orb provider. A thread uses it only when started with `--orb-provider docker-cloud`.
+`docker-cloud` is not the default orb provider. Chinh picks it per thread.
 
 ## Contract
 
@@ -93,19 +94,43 @@ After step 5 the orb talks to Amp directly, so the Mac can sleep while a thread 
 
 | Operation | What `dispatch.sh` does |
 | --- | --- |
-| `spawn` | Creates the sandbox if missing, from the newest carry-over template or else the image. Resumes it if stopped. Carries the disk over if less than `AMP_ORB_CARRY_OVER_BELOW` seconds remain before the 24-hour cap. Then starts `amp orb bootstrap`. |
+| `spawn` | Creates the sandbox if missing, from the newest carry-over template or else the image, sized by `ORB_TYPE`. Resumes it if stopped. Carries the disk over if less than `AMP_ORB_CARRY_OVER_BELOW` seconds remain before the 24-hour cap. Then starts `amp orb bootstrap`. |
 | `pause` | Runs `sbx --cloud stop`, which keeps memory and disk. Does nothing if the sandbox is missing, stopped or stopping. |
 | `delete` | Removes the sandbox, then every `$ORB_ID-disk-*` template. |
 
 Every operation is safe to repeat and has fitted Amp's 5-minute job limit in tests. The slowest case seen was 199 s, a carry-over right after a pause.
+
+Amp sets these variables:
+
+- `ORB_OPERATION` and `ORB_ID` for every job
+- `ORB_TOKEN` for spawn, minted for one spawn and valid for 15 minutes
+- `ORB_TYPE` for spawn when the thread has an orb type
+- `ORB_SNAPSHOT_ID` sometimes, which `dispatch.sh` ignores
+- `AMP_URL` only when the server is not ampcode.com, so it is unset for normal use
+
+`dispatch.sh` passes `AMP_URL` into the sandbox only when it is set. A missing `ORB_OPERATION`, `ORB_ID` or `ORB_TOKEN` exits 1.
+
+### Orb types
+
+The orb types registered on `docker-cloud` match Amp's size names. Amp sends them with hyphens, such as `ORB_TYPE=a1-small`, so `dispatch.sh` accepts both `a1-small` and `a1.small`.
+
+| Orb type | CPUs | Memory |
+| --- | --- | --- |
+| `a1.tiny` | 1 | 2 GiB |
+| `a1.small` | 2 | 4 GiB |
+| `a1.medium` (default) | 4 | 8 GiB |
+| `a1.large` | 8 | 16 GiB |
+| `a1.xxlarge` | 16 | 32 GiB |
+
+The type applies only when a sandbox is created. Resumes and carry-overs keep the size. Without `ORB_TYPE`, spawn uses `AMP_ORB_CPUS` and `AMP_ORB_MEMORY`. Any other type exits 1 and creates nothing.
 
 ### Settings
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
 | `AMP_ORB_IMAGE_REF` | `docker.io/lelouvincx/amp-orb:latest` | Image for new sandboxes |
-| `AMP_ORB_CPUS` | `4` | CPUs (Medium) |
-| `AMP_ORB_MEMORY` | `8g` | Memory (Medium) |
+| `AMP_ORB_CPUS` | `4` | CPUs when `ORB_TYPE` is unset (Medium) |
+| `AMP_ORB_MEMORY` | `8g` | Memory when `ORB_TYPE` is unset (Medium) |
 | `AMP_ORB_TTL` | `30m` | Time limit per run |
 | `AMP_ORB_CARRY_OVER_BELOW` | `7200` | Seconds before the 24-hour cap at which spawn carries the disk over |
 
@@ -114,13 +139,21 @@ Every operation is safe to repeat and has fitted Amp's 5-minute job limit in tes
 | Path | Purpose |
 | --- | --- |
 | `~/Developer/amp-orb-docker/dispatch.sh` | Dispatch script, the only copy |
-| `~/Developer/amp-orb-docker/provider.log` | Provider and dispatch log, appended by `tee` |
-| tmux session `amp-orb-provider` | Runs the provider |
+| `~/Library/LaunchAgents/com.lelouvincx.amp-orb-provider.plist` | LaunchAgent that runs the provider |
+| `~/Developer/amp-orb-docker/provider.log` | Provider and dispatch log, the LaunchAgent's stdout and stderr |
 | `~/Developer/amp-orb-docker/refresh-image.sh` | Weekly image refresh script, the only copy |
 | `~/Library/LaunchAgents/com.lelouvincx.amp-orb-refresh.plist` | LaunchAgent that runs the refresh on Mondays at 10:00 local time |
 | `~/Developer/amp-orb-docker/refresh-image.log` | Refresh log, one timestamped line per step |
 
-`amp orb provider` reads the provider token from the Amp CLI's own secret storage, where provider registration saved it. Neither the start command nor any file in this repository holds it.
+The LaunchAgent runs `/Users/lelouvincx/.amp/bin/amp orb provider /Users/lelouvincx/Developer/amp-orb-docker/dispatch.sh` with:
+
+- `RunAtLoad` and `KeepAlive`, so it starts at login and restarts after a crash
+- `ThrottleInterval` 10 s, so a crash loop does not hammer ampcode.com
+- `HOME` set, and `PATH` = `~/.amp/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin`
+
+### Provider token
+
+`amp orb provider` reads the provider token from the Amp CLI's own secret storage, `~/.local/share/amp/secrets.json`. `manage_amp orb_providers create` saved it there when the provider was registered, and the LaunchAgent can read it. The plist, the start command and this repository hold no token. This replaces the earlier plan to resolve the token from 1Password.
 
 ## Behavior
 
@@ -161,9 +194,17 @@ Each sandbox is created with `--ttl 30m --on-timeout stop`:
 - Each resume starts a new 30-minute limit.
 - `sbx --cloud ttl +30m <name>` extends a running sandbox.
 
-In Phase 4, a simulated freeze mid-turn (`sbx --cloud stop` while the agent waited on tool calls) recovered on its own. The thread showed "Reconnecting to orb". About 2 minutes later Amp sent a new spawn, the sandbox resumed in 9.4 s, and the original bootstrap reconnected and finished the turn. The second bootstrap exited without conflict. Why it exited was not checked.
+A freeze mid-turn does not lose the turn:
 
-A missed pause, for example while the Mac sleeps, costs at most 30 minutes of Medium: $0.14.
+1. The thread shows "Reconnecting to orb".
+2. About 2 minutes later, Amp sends a new spawn on its own.
+3. `dispatch.sh` resumes the sandbox in about 9 s.
+4. The original `amp orb bootstrap` is still running, reconnects, and the stalled tool calls finish.
+5. The second bootstrap that spawn started exits, with no conflict.
+
+So a long turn cut by the limit pauses for about 2 minutes and then carries on.
+
+The time limit, not Amp's pause, ends most idle billing. Amp's idle pause arrived 23 to 36 minutes after a thread went idle, so the 30-minute limit often stops the orb first. An idle orb therefore costs up to about $0.14 of Medium per wake. A missed pause, for example while the Mac sleeps, costs the same.
 
 ### 24-hour carry-over
 
@@ -181,25 +222,38 @@ Each carry-over uses a new template name because Docker cannot remove a template
 
 Tested in Phase 3 on the real image: files and checksums survived, the cap was fresh and `amp` started. Not tested: an orb that is not woken before its cap passes. The script then removes the sandbox and recreates it from the newest template, or from the image, but the disk may be lost.
 
-### Phase 4 progress
+### Thread lifecycle in Amp
 
-Done:
+- **Early pause:** soon after a new thread's first spawn (7 s and 11 s in tests), Amp sends a pause with `ORB_SNAPSHOT_ID` set, then a spawn again. That resume took 99 to 104 s, mostly waiting for Docker to finish stopping.
+- **Idle pause:** Amp sends a pause 23 to 36 minutes after a thread goes idle. Often the 30-minute limit has already stopped the orb, and the pause finds it stopped.
+- **Wake:** the next message sends a spawn. After the limit stopped an orb, it resumed in 10 s with files and the same processes, including a running portal server.
+- **Archive:** archiving a thread does not send a delete. The stopped sandbox stays, at no compute cost.
+- **Delete:** deleting a thread sends a delete. It removed the sandbox and its templates in about 6 s.
+- **One job at a time:** the provider runs jobs one after another. A slow resume delays every spawn queued behind it, so busy periods queue spawns.
+- **Provider down:** while the provider is stopped, the 30-minute limit still stops running orbs. After a restart, Amp does not replay jobs it could not deliver.
 
-- registered the personal provider `docker-cloud` and started it in tmux
-- fixed a bug where spawn failed because Amp omits `AMP_URL` for ampcode.com, and the Mac's bash 3.2 then reported exit 0
-- cold create of a Medium sandbox: 26.5 s and 64 s in two threads
-- resume after a pause: 98.7 s, mostly waiting for Docker to finish stopping
-- Terminal and a portal both work, confirmed by Chinh
-- the simulated time-limit freeze recovered, as described above
+### Test results
 
-In progress or not started:
+All tests ran on 16 November 2026. Details are in the plan's "Phase 4 results" and "Phase 5 results" sections.
 
-- check that Amp sends a pause for an idle thread, and that files survive the pause and resume
-- check that deleting a thread removes its sandbox and templates
-- stop the provider and check that the 30-minute limit still stops an idle orb
-- remove test sandboxes and record Phase 4 results and spend in the plan
+| Check | Result |
+| --- | --- |
+| Spawn, cold create | Pass: 27 s and 64 s for Medium, 26 s for `a1.small`, 58 s for `a1.tiny` |
+| Terminal and portal | Pass, opened by Chinh |
+| Pause and resume, files kept | Pass |
+| Freeze mid-turn | Pass: Amp re-spawned after about 2 minutes and the turn finished |
+| Two bootstraps after a re-spawn | No conflict |
+| 30-minute limit with the provider stopped | Pass: the idle orb stopped at its limit |
+| Delete | Pass: sandbox and templates removed |
+| LaunchAgent start and `kickstart -k` restart | Pass: one provider process, `last exit code = 0` |
+| Orb types | Pass: sizes match the table; unknown types exit 1 and create nothing |
 
-Check the [install and test thread](https://ampcode.com/threads/T-01a1e340-0de7-767d-bfea-eb7767aef04e) and the plan for the latest state.
+Two script fixes came out of the tests:
+
+- **`AMP_URL`:** Amp leaves `AMP_URL` unset for ampcode.com. The script required it, and the Mac's bash 3.2 lost the `${VAR:?}` failure status, so the first real spawn exited 0 in 417 ms without creating anything. Amp treated the orb as starting and did not retry. The script now passes `AMP_URL` only when set, checks required variables with an explicit `exit 1`, and keeps the exit code in its `EXIT` trap.
+- **Orb type names:** Amp sends `a1-small`, not `a1.small`. The first typed spawn failed with `unknown orb type 'a1-small'`. The script now accepts both forms.
+
+When the LaunchAgent replaced the tmux provider, Amp still listed the old connection. The new provider logged `Another amp orb provider is connected for this token` and waited about 48 s before `Orb provider started`.
 
 ## Permissions and side effects
 
@@ -213,37 +267,50 @@ Check the [install and test thread](https://ampcode.com/threads/T-01a1e340-0de7-
 
 ## Examples
 
-### Start the provider
+### Operate the provider
 
-Check that no provider is running first, because only one may run per token:
+Check its status:
 
 ```bash
-pgrep -fl 'amp orb provider' || echo none
-tmux has-session -t amp-orb-provider 2>/dev/null && echo "session exists"
+launchctl print gui/$(id -u)/com.lelouvincx.amp-orb-provider | grep -E 'state|pid|last exit'
+pgrep -fl 'amp orb provider'
 ```
 
-Then start it:
+Restart it:
 
 ```bash
-bash -n ~/Developer/amp-orb-docker/dispatch.sh
-tmux new-session -d -s amp-orb-provider -c ~/Developer/amp-orb-docker \
-  "amp orb provider ~/Developer/amp-orb-docker/dispatch.sh 2>&1 | tee -a ~/Developer/amp-orb-docker/provider.log"
+launchctl kickstart -k gui/$(id -u)/com.lelouvincx.amp-orb-provider
 ```
 
-The provider runs `dispatch.sh` fresh for each job, so script edits take effect without a restart.
+The provider finishes running jobs, stops, and starts again about 2 s later. It runs `dispatch.sh` fresh for each job, so script edits take effect without a restart.
 
-### Stop the provider
+Read its log:
 
 ```bash
-tmux kill-session -t amp-orb-provider
-pgrep -fl 'amp orb provider' || echo stopped
+tail -f ~/Developer/amp-orb-docker/provider.log
+```
+
+Disable it, and turn it back on:
+
+```bash
+launchctl bootout gui/$(id -u)/com.lelouvincx.amp-orb-provider
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.lelouvincx.amp-orb-provider.plist
 ```
 
 While the provider is stopped, `docker-cloud` threads cannot start or wake, and running orbs stop at their 30-minute limit.
 
+Run exactly one provider per token. Before running `amp orb provider` by hand for debugging, disable the LaunchAgent.
+
+### Roll back
+
+1. Disable the LaunchAgent and delete `~/Library/LaunchAgents/com.lelouvincx.amp-orb-provider.plist`.
+2. In Amp **Settings → Orbs**, remove `docker-cloud` or rotate its token.
+3. Remove leftover sandboxes and templates listed by `sbx --cloud ls` and `sbx --cloud template ls`.
+4. Optionally disable the image refresh job too. See [Refresh the image](#refresh-the-image).
+
 ### Use it in a thread
 
-Start a thread with `--orb-provider docker-cloud`, as the Phase 4 test threads did.
+Pick `docker-cloud` as the thread's orb provider, and an orb type if Medium is not the right size.
 
 ### Debug
 
@@ -344,7 +411,8 @@ Other costs:
 - Amp charges nothing for self-hosted orbs on Hobby, Individual and Teams plans. Enterprise workspaces would also pay Amp's orb price.
 - The public Docker Hub image and the provider on the Mac cost nothing. Model usage costs the same Amp credits either way.
 - Each carry-over adds about 99 to 199 s of compute, roughly one cent.
-- Phases 2 and 3 used about $0.17 of credit. Phase 4 spend is not recorded yet.
+- Tests used about $0.63 of credit: $0.17 in Phases 2 and 3, $0.45 in Phase 4 and $0.01 in Phase 5. These are estimates, because Docker's usage page lags.
+- Larger orb types cost more per hour. Docker's prices for types other than Small and Medium were not checked.
 
 The $250 credit:
 
@@ -360,12 +428,13 @@ At an assumed 4 hours a day of Medium (about 88 hours a month), Docker costs abo
 ### Known limits and risks
 
 - Amp does not support this setup. It supports only its side of the dispatch contract.
-- Threads cannot start or wake while the Mac is asleep or offline. A missed delete leaves a stopped sandbox behind. Clean up with `sbx --cloud ls` now and then.
+- Threads cannot start or wake while the Mac is asleep or offline. A missed delete leaves a stopped sandbox behind, and so does archiving a thread. Clean up with `sbx --cloud ls` now and then.
+- The provider runs one job at a time, so a slow resume delays other threads' spawns.
+- Amp's idle pause is slow, so each wake usually bills until the 30-minute limit.
 - An orb not woken before its 24-hour cap may lose its disk. This is untested.
 - Without project snapshots, every new thread runs `.agents/setup`, so starts are slower than on Amp-hosted orbs.
 - A resume right after a pause can take about 80 to 100 s while Docker finishes stopping the sandbox. A carry-over in that state took 199 s, about 100 s inside the 5-minute job limit. A larger disk change would make the save slower.
 - `sbx --cloud exec` has no detach flag. The bootstrap command must redirect every file descriptor, or `exec` hangs and exits 125.
-- Under launchd, `PATH` is minimal. `dispatch.sh` adds `/opt/homebrew/bin` for `sbx`, which is not yet tested under launchd.
 - Copying the image as a Docker template from the Mac (`sbx --cloud template load`) failed after 16 minutes at about 1.7 MB/s. Do not rely on that route.
 
 ### Drift risks
@@ -374,15 +443,14 @@ At an assumed 4 hours a day of Medium (about 88 hours a month), Docker costs abo
 - The image copy can be up to a week behind Amp's image. If the refresh fails, for example because the Docker Hub sign-in expires or OrbStack cannot start, it stays behind until someone reads `refresh-image.log`. Nothing alerts on a failed run.
 - `sbx` was tested at v0.53.0. Its flags and states (`stopping`, `hibernating`) may change.
 - Docker's credit terms and prices may change.
+- Amp's orb type names, job timing and pause behaviour may change. Keep the orb type table in `dispatch.sh` and in this RFC in step.
 
-### Phase 5 follow-up
+### Follow-up for Chinh
 
-- Run the provider as a launchd agent with `KeepAlive` instead of tmux.
-- Keep the provider token in 1Password and resolve it at start time.
-- Write the launchd start, log and rollback steps into this RFC.
-- Chinh: set a billing alert or check Docker usage weekly, and decide whether `docker-cloud` becomes the default orb provider.
+- Set a billing alert or check Docker usage weekly, because the usage page lags.
+- `docker-cloud` stays a non-default provider unless Chinh decides otherwise.
 
-When Phase 4 or 5 finishes, update the status, Phase 4 progress and examples here, and keep the detailed results in the plan artifact.
+Keep detailed test results in the plan artifact and update this RFC when the setup changes.
 
 ## Open questions
 
@@ -390,4 +458,3 @@ When Phase 4 or 5 finishes, update the status, Phase 4 progress and examples her
 - Do stored templates cost anything? Docker says it meters only compute and that volumes are free, but templates are not named.
 - Does Chinh's Amp plan include orb hours? If so, Amp-hosted orbs may cost less than the table shows.
 - Network policy: keep the default open egress, set `allow-all` explicitly, or use `balanced` with allow rules?
-- Does Amp pause idle `docker-cloud` orbs on its own, and how soon? Phase 4 is checking.
