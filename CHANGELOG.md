@@ -9,6 +9,7 @@ and this project does not currently use versioned releases.
 
 ### Changed
 
+- Track the Docker Cloud orb provider's dispatch and image-refresh scripts and LaunchAgents under amp/orb-docker, run them from the main checkout with logs in ~/Library/Logs/amp-orb-docker, and update RFC-0017. [#332](https://github.com/lelouvincx/agent-skills/pull/332)
 - Record RFC-0017 Phase 4 and 5 results: mark it implemented, document Amp's orb lifecycle, orb types, the provider LaunchAgent and the AMP_URL and orb-type script fixes. [#331](https://github.com/lelouvincx/agent-skills/pull/331)
 - Add RFC-0017 documenting self-hosted Amp orbs on Docker Cloud Sandboxes: the docker-cloud provider, weekly image refresh, time limits, operations, risks and costs. [#330](https://github.com/lelouvincx/agent-skills/pull/330)
 - Keep mise shims out of the PATH both subscription selectors save in their LaunchAgents, so hourly checks no longer trigger the macOS prompt for mise to access other apps' data. [#329](https://github.com/lelouvincx/agent-skills/pull/329)

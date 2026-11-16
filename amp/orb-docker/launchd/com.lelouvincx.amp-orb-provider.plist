@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.lelouvincx.amp-orb-provider</string>
+    <!-- The provider token comes from the Amp CLI's own secret storage
+         (~/.local/share/amp/secrets.json), which `amp orb provider` reads by default. -->
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/lelouvincx/.amp/bin/amp</string>
+        <string>orb</string>
+        <string>provider</string>
+        <string>/Users/lelouvincx/Developer/agent-skills/amp/orb-docker/dispatch.sh</string>
+    </array>
+    <key>WorkingDirectory</key>
+    <string>/Users/lelouvincx/Library/Logs/amp-orb-docker</string>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/Users/lelouvincx/.amp/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+        <key>HOME</key>
+        <string>/Users/lelouvincx</string>
+    </dict>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <!-- Wait 10 s between restarts so a crash loop doesn't hammer ampcode.com. -->
+    <key>ThrottleInterval</key>
+    <integer>10</integer>
+    <key>StandardOutPath</key>
+    <string>/Users/lelouvincx/Library/Logs/amp-orb-docker/provider.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/lelouvincx/Library/Logs/amp-orb-docker/provider.log</string>
+    <key>ProcessType</key>
+    <string>Background</string>
+</dict>
+</plist>
