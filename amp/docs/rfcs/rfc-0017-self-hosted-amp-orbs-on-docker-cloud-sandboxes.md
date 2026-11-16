@@ -13,7 +13,11 @@ amp_thread_id:
   T-01a1e340-0de7-767d-bfea-eb7767aef04e: "installed sbx, copied the image, wrote and tested dispatch.sh, registered the provider, ran Phases 4 and 5"
   T-01a1e43c-88bc-70eb-8e99-5c65906b339b: "wrote this RFC"
 dependency: []
-implementation: []
+implementation:
+  - path: "../../orb-docker/dispatch.sh"
+  - path: "../../orb-docker/refresh-image.sh"
+  - path: "../../orb-docker/launchd/com.lelouvincx.amp-orb-provider.plist"
+  - path: "../../orb-docker/launchd/com.lelouvincx.amp-orb-refresh.plist"
 inputs:
   - name: "Amp orb provider job"
     kind: "environment variables set by `amp orb provider`"
@@ -134,22 +138,39 @@ The type applies only when a sandbox is created. Resumes and carry-overs keep th
 | `AMP_ORB_TTL` | `30m` | Time limit per run |
 | `AMP_ORB_CARRY_OVER_BELOW` | `7200` | Seconds before the 24-hour cap at which spawn carries the disk over |
 
-### Files on the Mac
+### Files
+
+The scripts and LaunchAgents live in this repository under [`amp/orb-docker/`](../../orb-docker/README.md):
+
+| Repository path | Purpose |
+| --- | --- |
+| [`amp/orb-docker/dispatch.sh`](../../orb-docker/dispatch.sh) | Dispatch script |
+| [`amp/orb-docker/refresh-image.sh`](../../orb-docker/refresh-image.sh) | Weekly image refresh script |
+| [`amp/orb-docker/launchd/com.lelouvincx.amp-orb-provider.plist`](../../orb-docker/launchd/com.lelouvincx.amp-orb-provider.plist) | LaunchAgent that runs the provider |
+| [`amp/orb-docker/launchd/com.lelouvincx.amp-orb-refresh.plist`](../../orb-docker/launchd/com.lelouvincx.amp-orb-refresh.plist) | LaunchAgent that runs the refresh on Mondays at 10:00 local time |
+
+On the Mac:
 
 | Path | Purpose |
 | --- | --- |
-| `~/Developer/amp-orb-docker/dispatch.sh` | Dispatch script, the only copy |
-| `~/Library/LaunchAgents/com.lelouvincx.amp-orb-provider.plist` | LaunchAgent that runs the provider |
-| `~/Developer/amp-orb-docker/provider.log` | Provider and dispatch log, the LaunchAgent's stdout and stderr |
-| `~/Developer/amp-orb-docker/refresh-image.sh` | Weekly image refresh script, the only copy |
-| `~/Library/LaunchAgents/com.lelouvincx.amp-orb-refresh.plist` | LaunchAgent that runs the refresh on Mondays at 10:00 local time |
-| `~/Developer/amp-orb-docker/refresh-image.log` | Refresh log, one timestamped line per step |
+| `~/Library/LaunchAgents/com.lelouvincx.amp-orb-provider.plist` | Installed copy of the provider LaunchAgent |
+| `~/Library/LaunchAgents/com.lelouvincx.amp-orb-refresh.plist` | Installed copy of the refresh LaunchAgent |
+| `~/Library/Logs/amp-orb-docker/provider.log` | Provider and dispatch log, the LaunchAgent's stdout and stderr |
+| `~/Library/Logs/amp-orb-docker/refresh-image.log` | Refresh log, one timestamped line per step |
+| `~/Library/Logs/amp-orb-docker/.refresh-image.lock` | Refresh lock, present only during a run |
 
-The LaunchAgent runs `/Users/lelouvincx/.amp/bin/amp orb provider /Users/lelouvincx/Developer/amp-orb-docker/dispatch.sh` with:
+The live provider and refresh job run the scripts directly from the main checkout, `/Users/lelouvincx/Developer/agent-skills`. There is no separate installed copy. So:
+
+- keep the scripts on `main`, and merge script changes before relying on them
+- do not leave the main checkout on a branch that removes or breaks these files; the provider reads `dispatch.sh` fresh for every job, so a broken branch breaks orbs at once
+- after changing a plist, reinstall it as shown in [Install the LaunchAgents](#install-the-launchagents); script changes need no reinstall or restart
+
+The LaunchAgent runs `/Users/lelouvincx/.amp/bin/amp orb provider /Users/lelouvincx/Developer/agent-skills/amp/orb-docker/dispatch.sh` with:
 
 - `RunAtLoad` and `KeepAlive`, so it starts at login and restarts after a crash
 - `ThrottleInterval` 10 s, so a crash loop does not hammer ampcode.com
 - `HOME` set, and `PATH` = `~/.amp/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin`
+- `WorkingDirectory` `~/Library/Logs/amp-orb-docker`, so nothing it writes lands in the repository
 
 ### Provider token
 
@@ -287,7 +308,7 @@ The provider finishes running jobs, stops, and starts again about 2 s later. It 
 Read its log:
 
 ```bash
-tail -f ~/Developer/amp-orb-docker/provider.log
+tail -f ~/Library/Logs/amp-orb-docker/provider.log
 ```
 
 Disable it, and turn it back on:
@@ -301,12 +322,30 @@ While the provider is stopped, `docker-cloud` threads cannot start or wake, and 
 
 Run exactly one provider per token. Before running `amp orb provider` by hand for debugging, disable the LaunchAgent.
 
+### Install the LaunchAgents
+
+Run this from the main checkout on a new Mac, or after a plist change is merged. Only one provider may run: after the bootstrap, wait for `Orb provider started` in the log, which can take about 48 s while Amp drops the old connection.
+
+```bash
+cd ~/Developer/agent-skills && git switch main && git pull --ff-only
+mkdir -p ~/Library/Logs/amp-orb-docker
+for job in amp-orb-provider amp-orb-refresh; do
+  install -m 644 amp/orb-docker/launchd/com.lelouvincx.$job.plist ~/Library/LaunchAgents/
+  launchctl bootout gui/$(id -u)/com.lelouvincx.$job 2>/dev/null || true
+  launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.lelouvincx.$job.plist
+done
+grep 'Orb provider started' ~/Library/Logs/amp-orb-docker/provider.log | tail -1
+pgrep -fl 'amp orb provider'   # exactly one
+```
+
 ### Roll back
 
-1. Disable the LaunchAgent and delete `~/Library/LaunchAgents/com.lelouvincx.amp-orb-provider.plist`.
+1. Disable both LaunchAgents and delete their plists from `~/Library/LaunchAgents/`.
 2. In Amp **Settings → Orbs**, remove `docker-cloud` or rotate its token.
 3. Remove leftover sandboxes and templates listed by `sbx --cloud ls` and `sbx --cloud template ls`.
-4. Optionally disable the image refresh job too. See [Refresh the image](#refresh-the-image).
+4. Optionally delete `~/Library/Logs/amp-orb-docker/`. The scripts can stay in the repository.
+
+To roll back only a script change, revert it on `main`. The next job uses the reverted script.
 
 ### Use it in a thread
 
@@ -317,8 +356,8 @@ Pick `docker-cloud` as the thread's orb provider, and an orb type if Medium is n
 Read the provider log without tokens:
 
 ```bash
-grep -viE 'aop_live|ORB_TOKEN=' ~/Developer/amp-orb-docker/provider.log | tail -40
-grep -E 'Claimed job|Completed job' ~/Developer/amp-orb-docker/provider.log | tail -20
+grep -viE 'aop_live|ORB_TOKEN=' ~/Library/Logs/amp-orb-docker/provider.log | tail -40
+grep -E 'Claimed job|Completed job' ~/Library/Logs/amp-orb-docker/provider.log | tail -20
 ```
 
 Each job logs `dispatch[<op> <orb id>]: start` and `exit <code>` lines. The provider also logs repeated `Could not answer a spawn log read` and `Could not wait for spawn log reads; retrying` warnings. So far they have not broken any spawn.
@@ -342,7 +381,7 @@ sbx --cloud exec <orb id> bash -c 'ps -eo pid,user,etime,cmd | grep -E "orb boot
 Run one operation by hand with a fake token. Amp rejects the token, which still proves the sandbox and `amp` start:
 
 ```bash
-cd ~/Developer/amp-orb-docker
+cd ~/Developer/agent-skills/amp/orb-docker
 ORB_OPERATION=spawn ORB_ID=amp-manual-test ORB_TOKEN=fake AMP_ORB_CPUS=2 AMP_ORB_MEMORY=4g ./dispatch.sh; echo "exit $?"
 ORB_OPERATION=delete ORB_ID=amp-manual-test ./dispatch.sh; echo "exit $?"
 ```
@@ -359,14 +398,14 @@ sbx --cloud template rm --force <orb id>-disk-<unix time>
 Run the refresh now, either directly or through launchd:
 
 ```bash
-~/Developer/amp-orb-docker/refresh-image.sh
+~/Developer/agent-skills/amp/orb-docker/refresh-image.sh
 launchctl kickstart gui/$(id -u)/com.lelouvincx.amp-orb-refresh
 ```
 
 The script writes only to its log, so check the result there:
 
 ```bash
-tail -5 ~/Developer/amp-orb-docker/refresh-image.log
+tail -5 ~/Library/Logs/amp-orb-docker/refresh-image.log
 launchctl print gui/$(id -u)/com.lelouvincx.amp-orb-refresh | grep -E 'runs|last exit code'
 ```
 
@@ -439,7 +478,7 @@ At an assumed 4 hours a day of Medium (about 88 hours a month), Docker costs abo
 
 ### Drift risks
 
-- `dispatch.sh` and `refresh-image.sh` are not committed anywhere. Copy them into version control before changing them substantially.
+- The live jobs run the scripts from the main checkout. A branch switch in that checkout changes what the provider runs on its next job.
 - The image copy can be up to a week behind Amp's image. If the refresh fails, for example because the Docker Hub sign-in expires or OrbStack cannot start, it stays behind until someone reads `refresh-image.log`. Nothing alerts on a failed run.
 - `sbx` was tested at v0.53.0. Its flags and states (`stopping`, `hibernating`) may change.
 - Docker's credit terms and prices may change.

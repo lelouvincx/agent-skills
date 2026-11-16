@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.lelouvincx.amp-orb-refresh</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>/Users/lelouvincx/Developer/agent-skills/amp/orb-docker/refresh-image.sh</string>
+    </array>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/usr/local/bin:/opt/homebrew/bin:/Users/lelouvincx/.orbstack/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+        <key>HOME</key>
+        <string>/Users/lelouvincx</string>
+    </dict>
+    <!-- Mondays 10:00 local time. A run missed during sleep runs on wake. -->
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Weekday</key>
+        <integer>1</integer>
+        <key>Hour</key>
+        <integer>10</integer>
+        <key>Minute</key>
+        <integer>0</integer>
+    </dict>
+    <!-- The script logs to refresh-image.log itself; this catches failures before it starts. -->
+    <key>StandardOutPath</key>
+    <string>/Users/lelouvincx/Library/Logs/amp-orb-docker/refresh-image.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/lelouvincx/Library/Logs/amp-orb-docker/refresh-image.log</string>
+    <key>ProcessType</key>
+    <string>Background</string>
+</dict>
+</plist>
