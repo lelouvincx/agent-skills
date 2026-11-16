@@ -180,7 +180,7 @@ chmod +x "$bin/"*
 
 run_tool() {
 	env -u CLIPROXY_MANAGEMENT_KEY -u OP_SERVICE_ACCOUNT_TOKEN -u AGENT_SECRET_AUTH \
-		HOME="$tmp/home" PATH="$bin:$PATH" TEST_DIR="$tmp" AMP_CLAUDE_SELECTOR_STATE_DIR="$state" \
+		HOME="$tmp/home" PATH="$bin:$tmp/mise/shims:$PATH:$tmp/mise/shims/" TEST_DIR="$tmp" AMP_CLAUDE_SELECTOR_STATE_DIR="$state" \
 		AMP_CLAUDE_SELECTOR_LAUNCHCTL="$bin/launchctl" AMP_CLAUDE_SELECTOR_PLUTIL="$bin/plutil" \
 		AMP_CLAUDE_SELECTOR_LOCKF="$bin/lockf" AMP_CLAUDE_SELECTOR_HTPASSWD="$bin/htpasswd" \
 		AMP_CLAUDE_SELECTOR_SLEEP="$bin/sleep" "$tool" "$@"
@@ -233,6 +233,12 @@ json_ok "$state/config.json" '.window == "weekly" and .threshold == 40 and .inte
 run" ] || check_failed 'LaunchAgent must run the Bash selector directly'
 grep -Fq '<integer>3600</integer>' "$plist"
 grep -Fq "<string>$state</string>" "$plist"
+plist_path="$(sed -n '/<key>PATH<\/key>/{n;s|.*<string>\(.*\)</string>|\1|p;}' "$plist")"
+case ":$plist_path:" in
+	*/mise/shims*) check_failed "LaunchAgent PATH keeps mise shims: $plist_path" ;;
+	":$bin:"*) ;;
+	*) check_failed "LaunchAgent PATH lost other entries: $plist_path" ;;
+esac
 if grep -Fq fixture-not-a-secret "$plist" || grep -Fq 'op://' "$plist"; then check_failed 'LaunchAgent leaks a key'; fi
 [ "$(mode_of "$plist")" = 600 ] && [ "$(mode_of "$state")" = 700 ] && [ "$(mode_of "$state/config.json")" = 600 ]
 [ -f "$loaded" ] && [ ! -e "$state/paused" ]

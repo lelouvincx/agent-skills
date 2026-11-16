@@ -9,6 +9,7 @@ and this project does not currently use versioned releases.
 
 ### Changed
 
+- Keep mise shims out of the PATH both subscription selectors save in their LaunchAgents, so hourly checks no longer trigger the macOS prompt for mise to access other apps' data. [#329](https://github.com/lelouvincx/agent-skills/pull/329)
 - Port amp-claude-selector from Python to Bash on the macOS system shell, keeping its CLI, state files and usage history format, and replace its Python tests with a Bash contract check. [#328](https://github.com/lelouvincx/agent-skills/pull/328)
 - Allow lelouvincx-bot to publish to lelouvincx/zero-dollar-data-stack. [#327](https://github.com/lelouvincx/agent-skills/pull/327)
 - Register z-no-project and its Amp-hosted project URL in the project registry. [#326](https://github.com/lelouvincx/agent-skills/pull/326)
