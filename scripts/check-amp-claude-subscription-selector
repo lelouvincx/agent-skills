@@ -9,6 +9,7 @@ tool="$repo_root/bin/amp-claude-selector"
 tmp="$(mktemp -d "${TMPDIR:-/tmp}/check-amp-claude-selector.XXXXXX")"
 tmp="$(cd -P "$tmp" && pwd)"
 trap 'rm -rf "$tmp"' EXIT
+trap 'printf "FAIL: check line %s exited %s\\n" "$LINENO" "$?" >&2' ERR
 bin="$tmp/bin"
 mkdir -p "$bin" "$tmp/home"
 agents="$tmp/home/Library/LaunchAgents"
@@ -192,7 +193,8 @@ err_has() { grep -Fq -- "$1" "$tmp/err" || check_failed "error lacks '$1': $(cat
 out_is() { [ "$(cat "$tmp/out")" = "$1" ] || check_failed "output '$(cat "$tmp/out")' is not '$1'"; }
 file_is() { [ "$(cat "$1" 2>/dev/null || true)" = "$2" ] || check_failed "$1 is '$(cat "$1" 2>/dev/null || true)', expected '$2'"; }
 json_ok() { jq -e "$2" "$1" >/dev/null || check_failed "$1 does not satisfy $2: $(cat "$1")"; }
-mode_of() { stat -f %Lp "$1" 2>/dev/null || stat -c %a "$1"; }
+# GNU stat first: on Linux, BSD-style `stat -f` prints filesystem details and then fails.
+mode_of() { stat -c %a "$1" 2>/dev/null || stat -f %Lp "$1"; }
 count() { grep -c -- "$1" "$2" 2>/dev/null || true; }
 
 reset_proxy() {
