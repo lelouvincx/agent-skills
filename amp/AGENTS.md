@@ -7,6 +7,7 @@
 - Load `clear-writing` before answering Chinh. When an explanation did not land, use its technical explanation mode.
 - For plans, separate the actions for the agent and Chinh, then state the expected outcome.
 - Before drafting text that Chinh will send to someone else, including Slack messages and emails, load `clear-writing`.
+- Keep bug reports and feature requests to vendors, such as Amp, short: state the problem in one or two lines, then give raw data such as commands, outputs and setting values. Leave out proposed solutions unless Chinh asks for them.
 - Start every Slack message you send on Chinh's behalf, including DMs, with `[AI] ` so the recipient knows an agent wrote it. This does not apply to text Chinh copies and sends himself.
 - Store screenshots, recordings, and other visual artifacts under `.amp/in/artifacts/`.
 - When creating a subdirectory under `.amp/in/artifacts/`, add a `.thread-metadata` file in that subdirectory containing the current Amp thread ID.
