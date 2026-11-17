@@ -1,0 +1,6 @@
+{
+  "google-analytics": {
+    "command": "bash",
+    "args": ["${AMP_SKILL_DIR}/run-mcp.sh"]
+  }
+}

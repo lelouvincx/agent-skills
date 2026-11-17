@@ -9,6 +9,7 @@ and this project does not currently use versioned releases.
 
 ### Changed
 
+- Add a google-analytics skill that runs Google's official Analytics MCP server on the MacBook and in orbs, with its login resolved through agent-secrets. [#334](https://github.com/lelouvincx/agent-skills/pull/334)
 - Keep bug reports and feature requests to vendors such as Amp short: problem first, then raw data, without proposed solutions. [#333](https://github.com/lelouvincx/agent-skills/pull/333)
 - Track the Docker Cloud orb provider's dispatch and image-refresh scripts and LaunchAgents under amp/orb-docker, run them from the main checkout with logs in ~/Library/Logs/amp-orb-docker, and update RFC-0017. [#332](https://github.com/lelouvincx/agent-skills/pull/332)
 - Record RFC-0017 Phase 4 and 5 results: mark it implemented, document Amp's orb lifecycle, orb types, the provider LaunchAgent and the AMP_URL and orb-type script fixes. [#331](https://github.com/lelouvincx/agent-skills/pull/331)
