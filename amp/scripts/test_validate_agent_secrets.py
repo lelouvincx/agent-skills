@@ -144,6 +144,7 @@ class AgentSecretPolicyValidationTests(unittest.TestCase):
                 "slb-snowflake",
                 "braintrust-export",
                 "anfra-discourse",
+                "google-analytics",
                 "holistics-data-cli",
                 "holistics-data-dbt",
             },

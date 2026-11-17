@@ -129,6 +129,7 @@ Local skills are maintained in this repository. Remote skills are fetched and pr
 | [domain-modeling](skills/domain-modeling/SKILL.md) | Remote | define domain terms, context, and architectural decisions |
 | [email](skills/email/SKILL.md) | Local | read, send, and organize personal and bot email through `gog` |
 | [figma-design-to-code](skills/figma-design-to-code/SKILL.md) | Remote | inspect Figma designs and implement them as code |
+| [google-analytics](skills/google-analytics/SKILL.md) | Local | query and manage GA4 properties through Google's official Analytics MCP server |
 | [govuk-style](skills/govuk-style/SKILL.md) | Local | compatibility alias for `clear-writing` |
 | [grill-me](skills/grill-me/SKILL.md) | Remote | sharpen a plan or design through a focused interview |
 | [grill-with-docs](skills/grill-with-docs/SKILL.md) | Remote | sharpen a plan while recording decisions and domain terms |

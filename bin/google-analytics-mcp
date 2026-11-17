@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+# Starts Google's official Analytics MCP server (stdio) with write tools.
+# Credentials, in order:
+#   1. GA_MCP_ADC_JSON (set by `agent-secrets run --bundle google-analytics`),
+#      passed through a pipe so no plaintext file is written;
+#   2. the local ADC file from the google-analytics skill login;
+#   3. otherwise re-run through agent-secrets to resolve GA_MCP_ADC_JSON.
+set -euo pipefail
+
+serve() {
+	exec uvx analytics-mcp --allow-write
+}
+
+if [[ -n "${GA_MCP_ADC_JSON:-}" ]]; then
+	adc="$GA_MCP_ADC_JSON"
+	unset GA_MCP_ADC_JSON
+	exec 3< <(printf '%s' "$adc")
+	unset adc
+	export GOOGLE_APPLICATION_CREDENTIALS=/dev/fd/3
+	serve
+fi
+
+creds="${GA_MCP_CREDENTIALS:-$HOME/.config/gcloud-analytics/application_default_credentials.json}"
+if [[ -f "$creds" ]]; then
+	export GOOGLE_APPLICATION_CREDENTIALS="$creds"
+	serve
+fi
+
+if [[ -z "${GA_MCP_VIA_AGENT_SECRETS:-}" ]] && command -v agent-secrets >/dev/null 2>&1; then
+	export GA_MCP_VIA_AGENT_SECRETS=1
+	self="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)/$(basename "${BASH_SOURCE[0]}")"
+	exec agent-secrets run --bundle google-analytics -- "$self"
+fi
+
+echo "google-analytics-mcp: no credentials; see the google-analytics skill" >&2
+exit 1

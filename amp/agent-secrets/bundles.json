@@ -48,6 +48,9 @@
     },
     "holistics-data-auth": {
       "executableNames": ["holistics-data-auth"]
+    },
+    "google-analytics-mcp": {
+      "executableNames": ["google-analytics-mcp"]
     }
   },
   "bundles": {
@@ -154,6 +157,13 @@
       "variables": ["DISCOURSE_USER_API_KEY"],
       "compatibleBundles": [],
       "allowedCommandClasses": ["anfra-discourse-mcp"]
+    },
+    "google-analytics": {
+      "audience": "agent",
+      "owner": "lelouvincx/agent-skills",
+      "variables": ["GA_MCP_ADC_JSON"],
+      "compatibleBundles": [],
+      "allowedCommandClasses": ["google-analytics-mcp"]
     },
     "elevenlabs": {
       "audience": "agent",
