@@ -9,6 +9,7 @@ and this project does not currently use versioned releases.
 
 ### Changed
 
+- Register learn-sql in the project registry. [#338](https://github.com/lelouvincx/agent-skills/pull/338)
 - Allow `lelouvincx-bot` to publish `lelouvincx/learn-sql`. [#337](https://github.com/lelouvincx/agent-skills/pull/337)
 - Add a painting-ink-and-wash skill that paints Painter illustrations in Chinh's Ink & Wash style, watercolor over mechanical linework on ivory drafting paper, guided by a bundled style reference. [#336](https://github.com/lelouvincx/agent-skills/pull/336)
 - Adopt Colorfigures as a local skill with its original engine and examples, a Google-style design system, and an interactive visual specimen. [#335](https://github.com/lelouvincx/agent-skills/pull/335)
