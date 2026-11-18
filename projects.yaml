@@ -462,6 +462,17 @@ projects:
       - lookup vocab
     description: English-to-Vietnamese vocabulary app and paired browser extension.
 
+  learn-sql:
+    github: lelouvincx/learn-sql
+    owner: lelouvincx
+    dir: learn-sql
+    aliases:
+      - learn sql
+      - sql lessons
+    description: >-
+      Interactive site that teaches SQL as set theory on an isometric grid,
+      deployed on learn-sql.lelouvincx.com.
+
   wwi-data-platform:
     github: lelouvincx/wwi-data-platform
     owner: lelouvincx
