@@ -9,6 +9,7 @@ and this project does not currently use versioned releases.
 
 ### Changed
 
+- Add a painting-ink-and-wash skill that paints Painter illustrations in Chinh's Ink & Wash style, watercolor over mechanical linework on ivory drafting paper, guided by a bundled style reference. [#336](https://github.com/lelouvincx/agent-skills/pull/336)
 - Adopt Colorfigures as a local skill with its original engine and examples, a Google-style design system, and an interactive visual specimen. [#335](https://github.com/lelouvincx/agent-skills/pull/335)
 - Add a google-analytics skill that runs Google's official Analytics MCP server on the MacBook and in orbs, with its login resolved through agent-secrets. [#334](https://github.com/lelouvincx/agent-skills/pull/334)
 - Keep bug reports and feature requests to vendors such as Amp short: problem first, then raw data, without proposed solutions. [#333](https://github.com/lelouvincx/agent-skills/pull/333)
