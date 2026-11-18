@@ -69,6 +69,7 @@ class AgentSecretPolicyValidationTests(unittest.TestCase):
                 "lelouvincx/dotfiles",
                 "lelouvincx/duty-support",
                 "lelouvincx/holistics-performance-review",
+                "lelouvincx/learn-sql",
                 "lelouvincx/lelouvincx.github.io",
                 "lelouvincx/lms-leitner-material",
                 "lelouvincx/lookup-vocab",
