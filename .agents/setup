@@ -194,7 +194,14 @@ ensure_entire() {
 
 	if ! command -v entire >/dev/null 2>&1; then
 		echo "[agent-skills] installing Entire CLI"
-		curl -fsSL https://entire.com/install.sh | bash </dev/null
+		# Download first: piping into `bash </dev/null` gives bash an empty script.
+		local installer
+		installer="$(mktemp)"
+		if ! curl -fsSL https://entire.com/install.sh -o "$installer" || ! bash "$installer" </dev/null; then
+			rm -f "$installer"
+			return 1
+		fi
+		rm -f "$installer"
 	fi
 
 	if ! command -v entire-agent-amp >/dev/null 2>&1; then
