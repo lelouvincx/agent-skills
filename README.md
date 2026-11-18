@@ -141,6 +141,7 @@ Local skills are maintained in this repository. Remote skills are fetched and pr
 | [modern-web-guidance](skills/modern-web-guidance/SKILL.md) | Remote | check current web platform guidance before frontend work |
 | [motion](skills/motion/SKILL.md) | Remote | use official Motion animation best practices and search free documentation and examples |
 | [notion](skills/notion/SKILL.md) | Remote | manage Notion pages, databases, and comments |
+| [painting-ink-and-wash](skills/painting-ink-and-wash/SKILL.md) | Local | paint conceptual watercolor illustrations on mechanical drafting paper in Chinh's Ink & Wash style |
 | [prototype](skills/prototype/SKILL.md) | Remote | build throwaway logic or UI prototypes to test a design |
 | [proto](skills/proto/SKILL.md) | Local | deploy static sites, SPAs, and images with route-specific preflight and verification |
 | [readai](skills/readai/SKILL.md) | Local | retrieve speaker-attributed Read AI call transcripts |
