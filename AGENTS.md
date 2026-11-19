@@ -32,5 +32,5 @@
 
 ## Completion
 
-- Run every check in the README Validation table that covers the changed paths.
+- Run every check in the `docs/validation.md` table that covers the changed paths.
 - Run the applicable projection command after source changes and confirm that generated artifacts contain only intentional changes.
