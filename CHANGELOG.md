@@ -9,6 +9,7 @@ and this project does not currently use versioned releases.
 
 ### Changed
 
+- Add Proto installation and login instructions to the proto skill. [#340](https://github.com/lelouvincx/agent-skills/pull/340)
 - Register learn-sql in the project registry. [#338](https://github.com/lelouvincx/agent-skills/pull/338)
 - Allow `lelouvincx-bot` to publish `lelouvincx/learn-sql`. [#337](https://github.com/lelouvincx/agent-skills/pull/337)
 - Add a painting-ink-and-wash skill that paints Painter illustrations in Chinh's Ink & Wash style, watercolor over mechanical linework on ivory drafting paper, guided by a bundled style reference. [#336](https://github.com/lelouvincx/agent-skills/pull/336)
