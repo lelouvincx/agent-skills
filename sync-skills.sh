@@ -257,8 +257,8 @@ merge_personal_overlay() {
 	local personal_file="$2"
 	local output="$3"
 	local work_dir="$4"
-	local personal_body="$work_dir/personal-body"
-	local merged_remote="$work_dir/remote-merged"
+	local personal_body="$work_dir/.personal-body"
+	local merged_remote="$work_dir/.remote-merged"
 
 	if [ ! -f "$personal_file" ]; then
 		cp "$remote_file" "$output" || return 1
