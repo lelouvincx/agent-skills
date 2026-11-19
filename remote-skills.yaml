@@ -38,6 +38,10 @@ skills:
     url: https://raw.githubusercontent.com/vercel-labs/agent-browser/main/skills/agent-browser/SKILL.md
     enabled: true
 
+  - name: agent-desktop
+    url: https://raw.githubusercontent.com/vercel-labs/agent-desktop/v1.3.1/skills/agent-desktop/SKILL.md
+    enabled: true
+
   - name: modern-web-guidance
     archive: https://codeload.github.com/GoogleChrome/modern-web-guidance/tar.gz/refs/heads/main
     archive_path: skills/modern-web-guidance

@@ -86,6 +86,8 @@ The helper reuses the hardened bot SSH identity for commits and pushes. Where th
 
 Agent Browser uses a pinned stock release (version in `amp/agent-browser/version`) installed by `sync-skills.sh` under `~/.local/libexec/agent-browser-stock` and wrapped by `bin/agent-browser` (RFC-0013).
 
+Agent Desktop handles native desktop apps alongside the existing browser workflow. Install its CLI on a Mac with `brew install agent-desktop`, then run `agent-desktop status` and `agent-desktop permissions --guide` to check macOS permissions. Sync projects the official skill pinned to v1.3.1; it does not install the CLI or grant Accessibility permission. If the CLI version differs, load its matching guide with `agent-desktop skills get desktop`. Platform and command references are embedded in the binary. No MCP server or desktop VM is configured.
+
 ## Run a background Amp runner
 
 `amp-runner` installs a user LaunchAgent that starts at login, restarts after failure, enables Amp remote terminal control, and keeps the Mac awake on AC power.
@@ -111,6 +113,7 @@ Local skills are maintained in this repository. Remote skills are fetched and pr
 | Skill | Type | Use it to |
 | --- | --- | --- |
 | [agent-browser](skills/agent-browser/SKILL.md) | Remote | automate browser and UI tasks with `agent-browser` |
+| [agent-desktop](skills/agent-desktop/SKILL.md) | Remote | operate native desktop apps through accessibility trees with `agent-desktop` |
 | [anatomy](skills/anatomy/SKILL.md) | Remote | explain technical ideas as detailed interactive isometric objects in SVG, WebGL, or 3D |
 | [bigquery-query](skills/bigquery-query/SKILL.md) | Local | query Google BigQuery with the `bq` CLI |
 | [build-custom-chart](skills/build-custom-chart/SKILL.md) | Remote | create reusable Holistics custom chart definitions |
