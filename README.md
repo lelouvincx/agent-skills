@@ -1,12 +1,12 @@
 # agent-skills
 
-Reusable skills, Amp capabilities, and project helpers from @lelouvincx.
+Chinh's (@lelouvincx) agent skills, Amp plugins and helper scripts, kept in one place and installed on every machine with one command.
 
-Use this repo when you want to:
+Use this repository to:
 
-- install the same skills and Amp plugins on a new machine
-- find the source for a skill or Amp capability
-- resolve spoken project names such as `logseq` or `dbt` to paths and GitHub repositories
+- install the same skills and Amp setup on a new machine
+- find the source of a skill or Amp capability
+- resolve spoken project names, such as `logseq` or `dbt`, to local paths and GitHub repositories
 
 ## Get started
 
@@ -17,23 +17,53 @@ cd agent-skills
 ./sync-skills.sh
 ```
 
-This copies the runtime files into `~/.config/amp` and fetches remote skills.
-It symlinks every skill into `~/.agents/skills` and `~/.claude/skills`. The latter makes the skills available to Claude Desktop local Code sessions and the Claude Code CLI. Claude Desktop Cowork and cloud sessions use skills synced through the claude.ai **Customize** settings instead of local filesystem skills.
-It also symlinks scripts from `bin/` into `~/.local/bin`, so they can be used from any project when `~/.local/bin` is on `PATH`.
+This installs:
 
-In an agent-skills development Orb, run `.agents/sync` to project the current working checkout. It never clones, pulls or resets source. Pass `--remote` only to refresh remote skill payloads as well.
-Setup and resume use their own working checkout without pulling when no source override is supplied. Consuming projects explicitly select infrastructure source; their clean checkouts refresh with `pull --ff-only`, while dirty source is projected without a pull.
-Keep consuming-project customizations after the shared baseline, as SmartClass does in `.agents/project`. Do not put application installation or database work in an explicit runtime sync.
+- Amp runtime files into `~/.config/amp`
+- skills into `~/.agents/skills` and `~/.claude/skills`
+- helper scripts from `bin/` into `~/.local/bin`
 
-### Cursor on the same machine
+After you edit anything here, run `./sync-skills.sh` again. Never edit the installed copies directly.
 
-Cursor discovers the shared skills in `~/.agents/skills` directly; no separate skill copies are needed. Sync also generates an always-applied rule at `~/.cursor/rules/agent-skills.mdc` from `amp/AGENTS.md`, with a short Cursor compatibility note. Edit `amp/AGENTS.md` and run `./sync-skills.sh` to update it. Other Cursor rules are left untouched.
+[Setup and sync](docs/setup.md) explains Claude, Cursor, development orbs, browser automation and background Amp runners.
 
-The existing CLIs remain available through the shell. Check `command -v <tool>` for PATH conflicts; use `~/.local/bin/<tool>` to select the repository helper explicitly. Amp plugins and session-bound helpers are not automatically portable to Cursor, and sync does not register MCP servers in Cursor. These local paths do not configure Cursor Cloud Agents.
+## How it fits together
 
-## Use the project registry
+```diagram
+╭──────────────╮   asks for a change   ╭────────╮   follows   ╭───────────╮
+│ Chinh        │──────────────────────▶│ Agents │────────────▶│ AGENTS.md │
+╰──────────────╯                       ╰───┬────╯             ╰───────────╯
+                                           │ edits the source
+                                           ▼
+╭─────────────────────────────────────────────────────────╮
+│ this repository (source of truth)                       │
+│  skills/          agent skills                          │
+│  remote-skills.yaml  skills fetched from upstream       │
+│  amp/             Amp guidance, plugins and docs        │
+│  bin/             helper scripts                        │
+╰──────────────────────────┬──────────────────────────────╯
+                           │ ./sync-skills.sh
+                           ▼
+╭─────────────────────────────────────────────────────────╮
+│ ~/.config/amp, ~/.agents/skills, ~/.claude/skills,      │
+│ ~/.local/bin   (used by future agent sessions)          │
+╰─────────────────────────────────────────────────────────╯
+```
 
-`projects.yaml` maps short project names to local paths and GitHub repositories.
+## Find a skill
+
+[Skills](docs/skills.md) lists every skill, grouped by purpose:
+
+- writing and documents
+- planning and development practice
+- agent workflow and delivery
+- Holistics and data
+- design, visuals and frontend
+- automation and integrations
+
+## Resolve a project name
+
+`projects.yaml` maps short project names to local paths and GitHub repositories:
 
 ```bash
 project-resolve logseq --path
@@ -41,285 +71,14 @@ project-resolve "log this to logseq" --github
 project-resolve dbt --json
 ```
 
-See [PROJECTS.md](PROJECTS.md) for the generated project list.
+[PROJECTS.md](PROJECTS.md) lists every registered project.
 
-## Run commands with local secret bundles
+## More guides
 
-`agent-secrets` starts registered local commands with only the 1Password-backed capability bundles approved for that command class.
-
-```bash
-agent-secrets run \
-  --bundle amp-runtime \
-  --bundle work \
-  -- /Users/lelouvincx/.amp/bin/amp
-
-agent-secrets run \
-  --bundle lelouvincx-bot \
-  -- gh auth status
-
-agent-secrets doctor
-```
-
-The [agent-secrets guide](amp/agent-secrets/README.md) covers capability policy and private references.
-`./sync-skills.sh` validates and projects them, then links the resolver into `~/.local/bin`.
-The shared GitHub identity policy records the complete repository access expected for bot accounts.
-Each consuming repository separately restricts which targets and operations its automation may use.
-
-Local bundle files belong in `~/.credentials/agent-secrets/` with directory mode `0700` and file mode `0600`.
-They may contain only simple assignments to `op://Agent Secrets/...` references.
-The service-account bootstrap file is separate and is never projected from this repository.
-
-The resolver provides only `run` and `doctor`.
-It does not print, export, evaluate or copy resolved values to the clipboard.
-
-Use `agent-bot-pr` for fast repository maintenance through the approved bot path in approved repositories:
-
-```bash
-agent-bot-pr commit -m "fix: keep agent-secrets hot paths unattended" -- bin/agent-secrets amp/scripts/test_agent_secrets.py
-agent-bot-pr open --title "fix: keep agent-secrets hot paths unattended" --body-file /tmp/pr-body.md
-agent-bot-pr changelog --pr 233 --entry "Keep agent-secrets hot paths unattended."
-agent-bot-pr checks
-agent-bot-pr merge --pr 233
-```
-
-The helper reuses the hardened bot SSH identity for commits and pushes. Where that key is missing, as in orbs, it pushes over HTTPS with the `lelouvincx-bot` bundle token and makes unsigned commits. GitHub writes go through `agent-secrets` and the `lelouvincx-bot` bundle. The approved repository set lives in `amp/agent-secrets/github-identities.json`.
-
-Agent Browser uses a pinned stock release (version in `amp/agent-browser/version`) installed by `sync-skills.sh` under `~/.local/libexec/agent-browser-stock` and wrapped by `bin/agent-browser` (RFC-0013).
-
-Agent Desktop handles native desktop apps alongside the existing browser workflow. Install its CLI on a Mac with `brew install agent-desktop`, then run `agent-desktop status` and `agent-desktop permissions --guide` to check macOS permissions. Sync projects the official skill pinned to v1.3.1; it does not install the CLI or grant Accessibility permission. If the CLI version differs, load its matching guide with `agent-desktop skills get desktop`. Platform and command references are embedded in the binary. No MCP server or desktop VM is configured.
-
-## Run a background Amp runner
-
-`amp-runner` installs a user LaunchAgent that starts at login, restarts after failure, enables Amp remote terminal control, and keeps the Mac awake on AC power.
-
-```bash
-amp-runner install macbook.agent-skills
-amp-runner list
-amp-runner status macbook.agent-skills
-amp-runner restart all
-amp-runner logs macbook.agent-skills
-```
-
-Use `amp-runner-logs` for private runner log rotation, backup and restore.
-
-See the [Amp runner capability guide](amp/docs/tools/amp-runner.md) and [runner log maintenance guide](amp/docs/tools/amp-runner-logs.md) for lifecycle, backup, restore, and safety details.
-
-## Skills
-
-### Repository skills
-
-Local skills are maintained in this repository. Remote skills are fetched and projected by `./sync-skills.sh --remote`.
-
-| Skill | Type | Use it to |
-| --- | --- | --- |
-| [agent-browser](skills/agent-browser/SKILL.md) | Remote | automate browser and UI tasks with `agent-browser` |
-| [agent-desktop](skills/agent-desktop/SKILL.md) | Remote | operate native desktop apps through accessibility trees with `agent-desktop` |
-| [anatomy](skills/anatomy/SKILL.md) | Remote | explain technical ideas as detailed interactive isometric objects in SVG, WebGL, or 3D |
-| [bigquery-query](skills/bigquery-query/SKILL.md) | Local | query Google BigQuery with the `bq` CLI |
-| [build-custom-chart](skills/build-custom-chart/SKILL.md) | Remote | create reusable Holistics custom chart definitions |
-| [build-dashboard](skills/build-dashboard/SKILL.md) | Remote | build and edit Holistics canvas dashboards |
-| [build-dashboard-controls](skills/build-dashboard-controls/SKILL.md) | Remote | add filters, date drills, and comparisons to Holistics dashboards |
-| [build-dashboard-theme](skills/build-dashboard-theme/SKILL.md) | Remote | create and apply Holistics dashboard themes |
-| [build-visualizations](skills/build-visualizations/SKILL.md) | Remote | author Holistics dashboard visualizations and dynamic content |
-| [clear-writing](skills/clear-writing/SKILL.md) | Local | write clear prose, technical documentation, customer-facing messages, and agent-facing instructions |
-| [collaborating-with-claude-design](skills/collaborating-with-claude-design/SKILL.md) | Local | coordinate Claude Design creation, browser verification, and evidence-based iteration |
-| [convert-agent-skill-to-holistics](skills/convert-agent-skill-to-holistics/SKILL.md) | Remote | convert skills between Agent Skills and Holistics AML formats |
-| [create-holistics-skill](skills/create-holistics-skill/SKILL.md) | Remote | author and refine Holistics AML skills |
-| [creating-client-design-systems](skills/creating-client-design-systems/SKILL.md) | Local | create Google DESIGN.md files for client brands and Holistics dashboard themes |
-| [creating-colorfigures](skills/creating-colorfigures/SKILL.md) | Local | create hand-inked interactive isometric objects with working mechanisms and see-through views |
-| [delegating-subagents](skills/delegating-subagents/SKILL.md) | Local | choose direct work, named Claude or Pi specialists, built-in `Task`, or native `create_thread` |
-| [develop-amql](skills/develop-amql/SKILL.md) | Remote | develop Holistics models, datasets, dashboards, and metrics |
-| [diagram-design](skills/diagram-design/SKILL.md) | Remote | create and export branded diagrams as HTML, SVG, or PNG |
-| [domain-modeling](skills/domain-modeling/SKILL.md) | Remote | define domain terms, context, and architectural decisions |
-| [email](skills/email/SKILL.md) | Local | read, send, and organize personal and bot email through `gog` |
-| [figma-design-to-code](skills/figma-design-to-code/SKILL.md) | Remote | inspect Figma designs and implement them as code |
-| [google-analytics](skills/google-analytics/SKILL.md) | Local | query and manage GA4 properties through Google's official Analytics MCP server |
-| [govuk-style](skills/govuk-style/SKILL.md) | Local | compatibility alias for `clear-writing` |
-| [grill-me](skills/grill-me/SKILL.md) | Remote | sharpen a plan or design through a focused interview |
-| [grill-with-docs](skills/grill-with-docs/SKILL.md) | Remote | sharpen a plan while recording decisions and domain terms |
-| [grilling](skills/grilling/SKILL.md) | Remote | stress-test a plan or design through questions |
-| [handoff](skills/handoff/SKILL.md) | Remote | compact a conversation for another agent to continue |
-| [holistics-migrate-power-bi](skills/holistics-migrate-power-bi/SKILL.md) | Remote | migrate Power BI models and reports to Holistics |
-| [impeccable](skills/impeccable/SKILL.md) | Remote | design, review, and improve frontend interfaces |
-| [modern-web-guidance](skills/modern-web-guidance/SKILL.md) | Remote | check current web platform guidance before frontend work |
-| [motion](skills/motion/SKILL.md) | Remote | use official Motion animation best practices and search free documentation and examples |
-| [notion](skills/notion/SKILL.md) | Remote | manage Notion pages, databases, and comments |
-| [painting-ink-and-wash](skills/painting-ink-and-wash/SKILL.md) | Local | paint conceptual watercolor illustrations on mechanical drafting paper in Chinh's Ink & Wash style |
-| [prototype](skills/prototype/SKILL.md) | Remote | build throwaway logic or UI prototypes to test a design |
-| [proto](skills/proto/SKILL.md) | Local | deploy static sites, SPAs, and images with route-specific preflight and verification |
-| [readai](skills/readai/SKILL.md) | Local | retrieve speaker-attributed Read AI call transcripts |
-| [reading-social-posts](skills/reading-social-posts/SKILL.md) | Local | read social posts and inspect all attached media through TikHub |
-| [resolving-projects](skills/resolving-projects/SKILL.md) | Local | resolve spoken project names to paths and GitHub repositories |
-| [search-docs](skills/search-docs/SKILL.md) | Remote | search Holistics documentation |
-| [security-audit](skills/security-audit/SKILL.md) | Remote | review security boundaries and run coverage-led audits with independently verified findings |
-| [shipping-personal-projects](skills/shipping-personal-projects/SKILL.md) | Local | ship approved personal projects through the bot publisher and repository release gates |
-| [show-me](skills/show-me/SKILL.md) | Remote | explain technical topics with concise diagrams, code-shape sketches, and focused HTML artifacts |
-| [syncing-holistics-external-git](skills/syncing-holistics-external-git/SKILL.md) | Local | bootstrap local sync for a new, empty external Git repository connected to Holistics |
-| syncing-obsidian-notes (global User Skills: `syncing-obsidian-notes/`) | Global | read and write the second-brain notes through Obsidian Sync from local threads and orbs |
-| [tdd](skills/tdd/SKILL.md) | Remote | work test-first |
-| [teach](skills/teach/SKILL.md) | Remote | teach a skill or concept in a workspace |
-| [to-questionnaire](skills/to-questionnaire/SKILL.md) | Remote | turn missing stakeholder knowledge into a reusable questionnaire |
-| [to-spec](skills/to-spec/SKILL.md) | Remote | turn a conversation into a specification in the project issue tracker |
-| [write-aql](skills/write-aql/SKILL.md) | Remote | write and run Holistics AQL queries |
-| [writing-essays](skills/writing-essays/SKILL.md) | Local | develop, draft and revise essays and blog posts around one argued idea |
-| [writing-for-agents](skills/writing-for-agents/SKILL.md) | Remote | write documents for agents, including skills and agent instructions |
-| [writing-investigation-docs](skills/writing-investigation-docs/SKILL.md) | Local | write evidence-first investigation and decision docs |
-
-### Motion AI Kit (free)
-
-The [official Motion AI Kit](https://motion.dev/docs/ai-kit) is fetched from
-`motiondivision/ai-kit` at a pinned revision, including its companion guides.
-The global skill links make `/motion` available in Amp and Claude Code.
-Amp loads the skill's `mcp.json`, which allows only `search-motion-docs` from
-https://mcp.motion.dev. No account, API key or Motion+ server is configured.
-The local `PERSONAL.md` limits the upstream instructions to free features.
-
-Claude Code does not load Amp's skill-bundled MCP configuration. Register the
-same free hosted server once per machine:
-
-```bash
-claude mcp add --scope user --transport http motion https://mcp.motion.dev
-claude mcp get motion
-```
-
-For archive-based remote skills, a Git-tracked `mcp.json` is a local override
-and survives remote refreshes, like `PERSONAL.md`. Untracked upstream MCP files
-remain generated payloads.
-
-### Anfra community MCP
-
-The [Anfra Discourse MCP capability](amp/docs/tools/anfra-discourse-mcp.md) documents the TypeScript launcher, workspace registration, 1Password-backed account access, tool catalog and verification. The [MCP source index](amp/mcp-servers/README.md) maps each local implementation to its owning capability contract.
-
-### Amp and plugin skills
-
-These skills are active in Amp but are not maintained by this repository.
-
-| Skill | Source | Use it to |
-| --- | --- | --- |
-| `building-plugins` | Amp | build and maintain Amp plugins |
-| `building-schedules` | Amp | create and manage thread schedules and triggers |
-| `building-skills` | Amp | create, install, move, and publish Agent Skills |
-| `creating-charts` | Amp | render interactive charts in replies |
-| `creating-webhooks` | Amp | create durable webhook handlers in Amp plugins |
-| `orb-setup` | Amp | prepare repositories to run in Amp orbs |
-| `setup-tmux` | Amp | configure tmux for Amp CLI |
-| `holistics-design` | Plugin | create Holistics-branded interfaces and assets |
-| `media-manager` | Plugin | manage files on Media Manager CDN |
-
-## Skill behavior tests
-
-Use [skill-tests](skill-tests/README.md) to improve skills with repeatable fixtures, self-checks and user feedback tags.
-
-Start there when a skill works sometimes but not reliably enough. Add a fixture for the failure mode, run the skill against it, review the output with tags, then update the skill only when the failure generalizes.
-
-## Validation
-
-Use [pre-commit](https://pre-commit.com) as the local entry point for validation.
-
-### Set up once
-
-```bash
-pre-commit install
-pre-commit install --hook-type pre-push
-```
-
-### Run checks
-
-Run fast checks on staged files while you work. Run all integration checks before you push:
-
-```bash
-pre-commit run
-pre-commit run --hook-stage pre-push --all-files
-```
-
-Full pre-push validation requires `uv`/`uvx`, `rsync`, Bun 1.3.14 or newer, and npm. The SDK check uses `npm ci` and the committed lockfile.
-
-### Debug a failed check
-
-Run the relevant repository command directly:
-
-| Check | Command |
+| Guide | Read it to |
 | --- | --- |
-| Test the Amp documentation validator | `python3 -m unittest amp/scripts/test_validate_plugin_docs.py` |
-| Validate Amp capability, issue and experiment docs | `python3 amp/scripts/validate-plugin-docs.py` |
-| Validate Amp RFCs | `python3 amp/scripts/validate-rfcs.py` |
-| Test the agent secret resolver | `uvx --with jsonschema==4.25.1 python -m unittest amp/scripts/test_validate_agent_secrets.py amp/scripts/test_agent_secrets.py amp/scripts/test_agent_secrets_good_outcomes.py` |
-| Test shared agent helper contracts | `amp/scripts/test-agent-secrets-lib.sh` |
-| Test bot publishing controls | `bash amp/scripts/test-agent-bot-pr.sh` |
-| Test shared Orb lifecycle and development sync | `bash scripts/test-orb-setup.sh` |
-| Validate agent secret policy | `uvx --with jsonschema==4.25.1 python amp/scripts/validate-agent-secrets.py` |
-| Test the Anfra Discourse MCP launcher | `bun test scripts/anfra-discourse-mcp.test.ts` |
-| Test the agent-browser wrapper without Chrome | `python3 -m unittest scripts/test_agent_browser_wrapper.py` |
-| Test legacy agent-browser config migration | `python3 -m unittest amp/scripts/test_migrate_agent_browser_config.py` |
-| Test the GitHub thread event validator | `python3 -m unittest amp/scripts/test_validate_github_thread_events.py` |
-| Validate GitHub thread event configuration | `python3 amp/scripts/validate-github-thread-events.py` |
-| Validate the project registry | `scripts/check-project-registry` |
-| Test the project resolver | `scripts/check-project-resolver` |
-| Test the Amp runner launcher | `scripts/check-amp-runner` |
-| Test Amp runner log maintenance | `scripts/check-amp-runner-logs` |
-| Test Amp ChatGPT subscription selection | `scripts/check-amp-chatgpt-subscription-selector` |
-| Test local Claude subscription selection | `scripts/check-amp-claude-subscription-selector` |
-| Validate runtime projection | `scripts/check-projection` |
-| Build Amp plugins | `scripts/check-plugin-builds` |
-| Validate SDK dependencies | `npm ci --prefix sdk` |
-| Test the Slack events Worker | `npm ci --prefix workers/slack-events && (cd workers/slack-events && bun test && npx cf build)` |
-
-## Amp capabilities
-
-| Capability | Type | Where it appears | Use it to |
-| --- | --- | --- | --- |
-| [Amp ChatGPT selector](amp/docs/tools/amp-chatgpt-selector.md) | Local CLI | Shell | switch Amp ChatGPT subscriptions based on Codex quota |
-| [Amp runner](amp/docs/tools/amp-runner.md) | Local CLI | Shell | run named Amp background runners as user LaunchAgents |
-| [Amp runner log maintenance](amp/docs/tools/amp-runner-logs.md) | Local CLI | Shell | rotate, back up, and restore private runner logs |
-| [Anfra Discourse MCP](amp/docs/tools/anfra-discourse-mcp.md) | MCP launcher | Agent via workspace MCP | read, post and reply on community.anfra.ai as Chinh |
-| [Claude Code subagent](amp/docs/tools/claude-code-subagent.md) | Agent tool | Agent | ask Claude Code for read-only advice |
-| [Label skill and plugin usage](amp/docs/tools/label-skill-plugin-usage.md) | Agent tool | Agent | add or correct usage-event labels |
-| [Pi Code subagent](amp/docs/tools/pi-code-subagent.md) | Agent tool | Agent | ask Pi Coding Agent for read-only advice |
-| [Claude Fable 5.1](amp/docs/tools/claude-fable-5-1.md) | Agent mode | Mode picker | run Amp high mode on Claude Fable 5.1 |
-| [Claude Opus 4.7](amp/docs/tools/claude-opus-4-7.md) | Agent mode | Mode picker | run Amp high mode on Claude Opus 4.7 |
-| [Claude Opus 5.5](amp/docs/tools/claude-opus-5-5.md) | Agent mode | Mode picker | run Amp high mode on Claude Opus 5.5 |
-| [Local Claude CLIProxyAPI runtime](amp/docs/tools/local-claude-cliproxy.md) | Command | Command palette | open and review the projected local Claude proxy runtime |
-| Second Brain: Log (global User Plugins: `second-brain-log/`) | Command | Command palette | log the current Amp task into the Obsidian-synced second-brain vault from local and orb threads |
-| [Track event](amp/docs/tools/track-event.md) | Command | Command palette | record skill or plugin usage manually |
-| [Capture skill and plugin magic words](amp/docs/tools/capture-skill-plugin-magic-words.md) | Event handler | Plugin event pipeline | record usage events from trigger phrases |
-| [Holistics MCP error logger](amp/docs/tools/holistics-mcp-errors.md) | Event handler | Plugin event pipeline | log Holistics MCP CLI failures |
-| [Holistics Markdown result renderer](amp/docs/tools/holistics-md.md) | Event handler | Plugin event pipeline | turn selected YAML result blocks into Markdown tables |
-
-## Development and maintenance flow
-
-```diagram
-╭──────────────╮
-│ Chinh / user │
-╰──────┬───────╯
-       │ asks for a skill, capability, or docs update
-       ▼
-╭──────────────╮      follows repo guidance       ╭───────────╮
-│  Agents      │─────────────────────────────────▶│ AGENTS.md │
-╰──────┬───────╯                                  ╰───────────╯
-       │
-       │ edits source-of-truth files in this repo
-       ▼
-╭──────────────────────────────────────────────────────────────╮
-│ agent-skills repo                                            │
-│                                                              │
-│  skills/*/SKILL.md        reusable agent skills              │
-│  remote-skills.yaml       remote skill registry              │
-│  amp/docs/tools/*.md      Amp capability contracts           │
-│  amp/plugins/*.ts         Amp plugin implementations         │
-╰──────┬───────────────────────────────────────────────────────╯
-       │ run ./sync-skills.sh or ./sync-skills.sh --remote
-       ▼
-╭──────────────────────────────────────────────────────────────╮
-│ ~/.config/amp runtime projection                             │
-│                                                              │
-│  AGENTS.md                active personal guidance           │
-│  plugins/                 active local Amp plugins           │
-│  docs/tools/              active capability docs             │
-│  skills/                  active reusable skills             │
-╰──────┬───────────────────────────────────────────────────────╯
-       │ used by future Amp sessions and subagents
-       ▼
-╭────────────────────╮
-│ Maintained workflow│
-╰────────────────────╯
-```
+| [Setup and sync](docs/setup.md) | see what sync installs and set up Claude, Cursor, orbs and runners |
+| [Skills](docs/skills.md) | find a skill and improve one with skill tests |
+| [Amp capabilities](docs/amp-capabilities.md) | find local Amp plugins, CLIs, modes and MCP launchers |
+| [Secrets and bot publishing](docs/secrets-and-publishing.md) | run commands with 1Password-backed secrets and publish as `lelouvincx-bot` |
+| [Validation](docs/validation.md) | run pre-commit checks and debug a failed one |
