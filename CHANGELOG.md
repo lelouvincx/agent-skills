@@ -9,6 +9,7 @@ and this project does not currently use versioned releases.
 
 ### Changed
 
+- Add Proto installation and login instructions to the proto skill. [#340](https://github.com/lelouvincx/agent-skills/pull/340)
 - Install the Entire CLI in orbs again, and stop remote skill sync leaving personal-body and remote-merged files that blocked later setup pulls. [#339](https://github.com/lelouvincx/agent-skills/pull/339)
 - Register learn-sql in the project registry. [#338](https://github.com/lelouvincx/agent-skills/pull/338)
 - Allow `lelouvincx-bot` to publish `lelouvincx/learn-sql`. [#337](https://github.com/lelouvincx/agent-skills/pull/337)

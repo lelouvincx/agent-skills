@@ -9,6 +9,20 @@ Treat every Proto route as a preview-PR workflow with two gates: route-specific 
 
 Use the installed `proto --help` and `proto deploy --help` output as the command contract. Do not infer current flags from this skill.
 
+## Install and log in
+
+If `proto` is not installed, run:
+
+```sh
+curl -fsSL https://docs.pages.holistics.dev/install.sh | sh
+```
+
+Before the first deployment, log in:
+
+```sh
+proto login
+```
+
 ## Establish the contract
 
 Before deploying:
