@@ -9,6 +9,7 @@ and this project does not currently use versioned releases.
 
 ### Changed
 
+- Report claims, decisions and uncertainties in the response summary, and simplify global working-style and delegation guidance. [#344](https://github.com/lelouvincx/agent-skills/pull/344)
 - Split the README into a short front page and focused guides under `docs/`, with skills grouped by purpose. [#343](https://github.com/lelouvincx/agent-skills/pull/343)
 - Require inspected evidence for global agent claims and decisions, with explicit assumptions and unverified status. [#342](https://github.com/lelouvincx/agent-skills/pull/342)
 - Adopt the official agent-desktop v1.3.1 skill for native-app automation, with Homebrew setup and permission guidance, while preserving browser workflows. [#341](https://github.com/lelouvincx/agent-skills/pull/341)
