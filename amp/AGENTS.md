@@ -4,15 +4,13 @@
 
 ## Working style
 
-- Load `clear-writing` before answering Chinh. When an explanation did not land, use its technical explanation mode.
-- For plans, separate the actions for the agent and Chinh, then state the expected outcome.
+- Load `clear-writing` before answering. When an explanation did not land, use its technical explanation mode.
+- For plans, separate the actions for you and me, then state the expected outcome.
 - Before drafting text that Chinh will send to someone else, including Slack messages and emails, load `clear-writing`.
 - Keep bug reports and feature requests to vendors, such as Amp, short: state the problem in one or two lines, then give raw data such as commands, outputs and setting values. Leave out proposed solutions unless Chinh asks for them.
 - Start every Slack message you send on Chinh's behalf, including DMs, with `[AI] ` so the recipient knows an agent wrote it. This does not apply to text Chinh copies and sends himself.
 - Store screenshots, recordings, and other visual artifacts under `.amp/in/artifacts/`.
 - When creating a subdirectory under `.amp/in/artifacts/`, add a `.thread-metadata` file in that subdirectory containing the current Amp thread ID.
-- Enable `--share-network` by default when creating local Amp runners, unless Chinh asks otherwise. For a directory path, run `amp-runner install --workdir <path> macbook.<directory-basename> -- --share-network` and verify it is running with `amp-runner status macbook.<directory-basename>`.
-- Before using the web in an orb, run `amp net route macbook-network`, verify `amp net status` and `amp net ping`, then run `amp orb desktop ensure`. `macbook-network` is the persistent standalone exit node on the Mac; `macbook` runs coding threads. See `conventions/agent-browser.md` for service controls and verification. Use the browser tooling's profile-attachment workflow for browser profiles; `amp sync` mirrors working-tree files, not browsers.
 
 ## Decisions
 
@@ -24,12 +22,14 @@ This section is Chinh's standing request to ask decision questions with `ask_use
 - For each question, put the decision, why it matters and your recommendation in `question`. Pass 2 to 5 concrete `options` with the recommended option first, and set `allowOther` to `true`.
 - Chinh can set the ask level for a thread: `ask: low` means ask only about irreversible or externally visible choices; `ask: high` means ask every judgement call with no cap.
 - Ground every factual claim and decision in evidence you inspected: source files, command output, test results or primary documentation. Name assumptions and user preferences separately. Mark claims without evidence as unverified and state what is unknown.
-- End each response with one "Claims and decisions I made" section. List every factual claim with its evidence or unverified status. For each judgement call you settled alone, give the choice, a one-line reason and the evidence or explicit user preference behind it. Write "None" when there are no entries.
+- End each response with one "Claims, decisions and uncertainties" section covering:
+  - claims: every factual claim, with its evidence or unverified status.
+  - decisions: each judgement call you settled alone, with your choice, a one-line reason and the supporting evidence or explicit user preference.
+  - uncertainties: what remains unknown.
 - When Chinh says a question was unnecessary or a decision should have been asked, add an observation to `amp/docs/experiments/experiment-0001-decision-balance.md` in the `agent-skills` repository.
 
 ## Delegation
 
-- Before non-trivial work, consider whether it contains independent, bounded workstreams. Keep simple reads, exact searches, localized edits, and unresolved product or design decisions in the parent.
 - Delegation, expert consultation, `/subagent`, `|subagent`, `btw` or `|btw`: load `delegating-subagents` before acting; it routes the work and discloses handoff rules.
 
 ## Conventions
