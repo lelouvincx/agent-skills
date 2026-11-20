@@ -8,6 +8,12 @@ Use this repository to:
 - find the source of a skill or Amp capability
 - resolve spoken project names, such as `logseq` or `dbt`, to local paths and GitHub repositories
 
+## Product discovery
+
+- [Merging dotfiles and agent-skills](docs/discovery/merging-dotfiles-and-agent-skills.md) records the current repository and runtime boundaries before problem definition and design.
+- [Preparing execution environments](docs/product/environment-setup.md) records the product problem, settled rationale and active design grill.
+- [Environment setup glossary](CONTEXT.md) defines the shared product language.
+
 ## Get started
 
 ```bash
