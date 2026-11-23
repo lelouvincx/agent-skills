@@ -9,6 +9,7 @@ and this project does not currently use versioned releases.
 
 ### Changed
 
+- Transcribe YouTube videos with OpenRouter's speech-to-text endpoint instead of captions or local Whisper. [#346](https://github.com/lelouvincx/agent-skills/pull/346)
 - Simplify the proto skill for Proto's open-PR deploy model, drop the preflight, secrets, verification and elapsed-time sections, and generalize Proto feedback. [#345](https://github.com/lelouvincx/agent-skills/pull/345)
 - Report claims, decisions and uncertainties in the response summary, and simplify global working-style and delegation guidance. [#344](https://github.com/lelouvincx/agent-skills/pull/344)
 - Split the README into a short front page and focused guides under `docs/`, with skills grouped by purpose. [#343](https://github.com/lelouvincx/agent-skills/pull/343)
