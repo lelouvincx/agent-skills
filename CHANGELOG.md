@@ -9,6 +9,7 @@ and this project does not currently use versioned releases.
 
 ### Changed
 
+- Simplify the proto skill for Proto's open-PR deploy model, drop the preflight, secrets, verification and elapsed-time sections, and generalize Proto feedback. [#345](https://github.com/lelouvincx/agent-skills/pull/345)
 - Report claims, decisions and uncertainties in the response summary, and simplify global working-style and delegation guidance. [#344](https://github.com/lelouvincx/agent-skills/pull/344)
 - Split the README into a short front page and focused guides under `docs/`, with skills grouped by purpose. [#343](https://github.com/lelouvincx/agent-skills/pull/343)
 - Require inspected evidence for global agent claims and decisions, with explicit assumptions and unverified status. [#342](https://github.com/lelouvincx/agent-skills/pull/342)
