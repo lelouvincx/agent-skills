@@ -35,6 +35,7 @@ This section is Chinh's standing request to ask decision questions with `ask_use
 ## Conventions
 
 - Before working with dbx, dbdiagram, dbdocs, or runsql, read `{AMP_CONFIG_DIR:~/.config/amp}/conventions/dbdiagram.md`.
+- Before extracting or transcribing a YouTube video, read `{AMP_CONFIG_DIR:~/.config/amp}/conventions/youtube-transcripts.md`.
 - Browser automation, browser testing or workflow timing: read `{AMP_CONFIG_DIR:~/.config/amp}/conventions/agent-browser.md` before acting.
 - Before any Cloudflare task, read `{AMP_CONFIG_DIR:~/.config/amp}/conventions/cloudflare.md`.
 - Before working with `.aml` files or interpreting Holistics query results, read `{AMP_CONFIG_DIR:~/.config/amp}/conventions/holistics.md`.
