@@ -16,6 +16,7 @@ The source column says where a skill comes from:
 | [govuk-style](../skills/govuk-style/SKILL.md) | Local | compatibility alias for `clear-writing` |
 | [writing-essays](../skills/writing-essays/SKILL.md) | Local | develop, draft and revise essays and blog posts around one argued idea |
 | [writing-for-agents](../skills/writing-for-agents/SKILL.md) | Remote | write documents for agents, including skills and agent instructions |
+| [writing-linkedin-posts](../skills/writing-linkedin-posts/SKILL.md) | Local | turn a post idea into what to implement, a hook, a body and a call to action for first-person proof or debate posts |
 | [writing-investigation-docs](../skills/writing-investigation-docs/SKILL.md) | Local | write evidence-first investigation and decision docs |
 | [to-spec](../skills/to-spec/SKILL.md) | Remote | turn a conversation into a specification in the project issue tracker |
 | [to-questionnaire](../skills/to-questionnaire/SKILL.md) | Remote | turn missing stakeholder knowledge into a reusable questionnaire |
