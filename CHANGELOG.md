@@ -9,6 +9,7 @@ and this project does not currently use versioned releases.
 
 ### Changed
 
+- Add the writing-linkedin-posts skill, which critiques a post idea, works out what to implement, and drafts the hook, body and call to action for first-person proof and debate posts, with style and quality checks. [#348](https://github.com/lelouvincx/agent-skills/pull/348)
 - Register semantic-layer-benchmark, the renamed sl-trust-benchmark repository, and move the semantic layer benchmark alias to it. [#347](https://github.com/lelouvincx/agent-skills/pull/347)
 - Transcribe YouTube videos with OpenRouter's speech-to-text endpoint instead of captions or local Whisper. [#346](https://github.com/lelouvincx/agent-skills/pull/346)
 - Simplify the proto skill for Proto's open-PR deploy model, drop the preflight, secrets, verification and elapsed-time sections, and generalize Proto feedback. [#345](https://github.com/lelouvincx/agent-skills/pull/345)
