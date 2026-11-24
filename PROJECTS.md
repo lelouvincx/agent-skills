@@ -65,6 +65,7 @@ AGENTS_REGISTRY_ENV=vps project-resolve prefect --path
 | `demo-ai` | `holistics` | `~/Developer/holistics/presales/demo-ai` | `holistics/demo-ai` |
 | `embed-presales-demo` | `holistics` | `~/Developer/holistics/presales/embed-presales-demo` | `holistics/embed-presales-demo` |
 | `demo-amql-sl-benchmark` | `holistics` | `~/Developer/holistics/presales/demo-amql-sl-benchmark` | `holistics/demo-amql-sl-benchmark` |
+| `semantic-layer-benchmark` | `holistics` | `~/Developer/holistics/presales/semantic-layer-benchmark` | `holistics/semantic-layer-benchmark` |
 | `demo-open-semantic-layer-sheets` | `holistics` | `~/Developer/holistics/presales/demo-open-semantic-layer-sheets` | `holistics/demo-open-semantic-layer-sheets` |
 | `data-internal` | `holistics` | `~/Developer/holistics/data/data-internal` | `holistics/data-internal` |
 | `internal-anfra-aml` | `holistics` | `~/Developer/holistics/data/internal-anfra-aml` | `holistics/internal-anfra-aml` |

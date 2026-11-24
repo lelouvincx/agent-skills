@@ -233,8 +233,17 @@ projects:
     dir: holistics/presales/demo-amql-sl-benchmark
     aliases:
       - amql semantic layer benchmark
-      - semantic layer benchmark
     description: AMQL and open-source semantic layer AI analytics benchmark.
+
+  semantic-layer-benchmark:
+    github: holistics/semantic-layer-benchmark
+    owner: holistics
+    dir: holistics/presales/semantic-layer-benchmark
+    aliases:
+      - semantic layer benchmark
+      - sl-trust-benchmark
+      - sl trust benchmark
+    description: Reproducible benchmark of AI agents answering business questions through semantic layers.
 
   demo-open-semantic-layer-sheets:
     github: holistics/demo-open-semantic-layer-sheets
