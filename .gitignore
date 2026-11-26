@@ -140,6 +140,15 @@ skills/herdr/.remote-source
 skills/show-me/SKILL.md
 skills/show-me/.remote-source
 
+skills/hyperframes/*
+!skills/hyperframes/PERSONAL.md
+skills/hyperframes-cli/*
+!skills/hyperframes-cli/PERSONAL.md
+skills/hyperframes-registry/*
+!skills/hyperframes-registry/PERSONAL.md
+skills/media-use/*
+!skills/media-use/PERSONAL.md
+
 # Amp runtime/source mirror: keep only intentional source artifacts under amp/.
 # Do not commit local runtime state, logs, MCP configs, or write metadata.
 .amp/*
