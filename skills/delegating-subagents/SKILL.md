@@ -37,4 +37,4 @@ Before creating or managing a child thread, read the [native-thread contract](..
 2. Require either a done report with evidence or a blocked report naming the smallest missing input. Tell the child to surface uncertainty; ask the human when only they can provide the answer.
 3. Inspect the returned evidence or diff against every success criterion. Integrate the result and run combined validation. Resolve gaps directly or with a focused follow-up before reporting completion to the user.
 
-A subagent that needs a browser uses its own session with the parent's `AB_THREAD` and a unique `AB_AGENT=<suffix>`; work in a logged-in named profile stays with the parent.
+A subagent that needs a browser uses its own agent-browser `--session` name; work in a logged-in profile stays with the parent.

@@ -103,13 +103,6 @@ repos:
         pass_filenames: false
         files: ^(?:bin/agent-bot-pr|amp/scripts/test-agent-bot-pr\.sh|amp/agent-secrets/|\.pre-commit-config\.yaml)
 
-      - id: test-agent-browser-wrapper
-        name: Test the agent-browser wrapper and config migration
-        entry: python3 -m unittest scripts/test_agent_browser_wrapper.py amp/scripts/test_migrate_agent_browser_config.py
-        language: system
-        pass_filenames: false
-        files: ^(?:bin/agent-browser$|amp/agent-browser/|scripts/test_agent_browser_wrapper\.py$|amp/scripts/(?:migrate-agent-browser-config|test_migrate_agent_browser_config)\.py$)
-
       - id: check-amp-runner
         name: Test Amp runner LaunchAgent manager
         entry: scripts/check-amp-runner

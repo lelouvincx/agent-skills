@@ -40,8 +40,6 @@ Run the matching command directly:
 | Test shared Orb lifecycle and development sync | `bash scripts/test-orb-setup.sh` |
 | Validate agent secret policy | `uvx --with jsonschema==4.25.1 python amp/scripts/validate-agent-secrets.py` |
 | Test the Anfra Discourse MCP launcher | `bun test scripts/anfra-discourse-mcp.test.ts` |
-| Test the agent-browser wrapper without Chrome | `python3 -m unittest scripts/test_agent_browser_wrapper.py` |
-| Test legacy agent-browser config migration | `python3 -m unittest amp/scripts/test_migrate_agent_browser_config.py` |
 | Test the GitHub thread event validator | `python3 -m unittest amp/scripts/test_validate_github_thread_events.py` |
 | Validate GitHub thread event configuration | `python3 amp/scripts/validate-github-thread-events.py` |
 | Validate the project registry | `scripts/check-project-registry` |

@@ -1,6 +1,6 @@
 # Browser conventions
 
-Choose the workflow for the executor: Amp Desktop Chrome in an orb, or the policy wrapper on the Mac. Load the applicable browser skill before page commands.
+Choose the workflow for the executor: Amp Desktop Chrome in an orb, or stock agent-browser on the Mac. Load the applicable browser skill before page commands.
 
 ## Orbs: Amp-managed Chrome profiles
 
@@ -10,7 +10,7 @@ For website tasks, load `browser-use` and `using-agent-browser`. Use the existin
 2. Select the intended profile with `manage_amp` operation `use` or `amp profile use <name>`. Check the current selection with `amp profile status`. Selecting a profile restarts Chrome; select before attaching automation, not during a login flow. Use only profiles the user allows the agent to select. Keep multiplayer disabled unless explicitly authorized.
 3. Route through the user's network with `amp net route macbook-network`, then verify `amp net status` and `amp net ping`. If unavailable, report the blocker rather than silently switching to direct Internet. See the network exit-node runbook below.
 4. Run `amp orb desktop ensure` and use its reported CDP endpoint. `amp sync` synchronizes repository changes, not browser sessions; `amp sync browser` is not a browser setup step.
-5. Attach the orb's installed stock `agent-browser` to Desktop Chrome with a thread-specific namespace, named session, and `--pin-tab`. Check `type -a agent-browser` if the Mac policy wrapper shadows it. In that case, use the orb binary at `/usr/local/bin/agent-browser`; do not launch a separate browser or change the wrapper.
+5. Attach the orb's installed stock `agent-browser` to Desktop Chrome with a thread-specific namespace, named session, and `--pin-tab`. Do not launch a separate browser.
 
 Example, replacing the namespace with this thread's identity and the port with the reported endpoint:
 
@@ -21,7 +21,7 @@ $AB set viewport 1280 633 2
 $AB snapshot -i
 ```
 
-Repeat the same `AB` definition in every shell call. `AB_PROFILE`, `AB_HEADED`, and `AB_THREAD` configure the Mac wrapper, not Amp's orb profile selection. Another agent must use its own session and tab; it must not drive the parent's tab or change the attached Chrome profile.
+Repeat the same `AB` definition in every shell call. Another agent must use its own session and tab; it must not drive the parent's tab or change the attached Chrome profile.
 
 ### Mac network exit node
 
@@ -67,57 +67,19 @@ Verify the intended account and revisit an authenticated page before reporting s
 
 At each turn's end, stop any recording and run `close` through the same attached session. This disconnects the automation daemon; Desktop Chrome and its login remain. Leave human-only steps open in the Desktop tab and follow `browser-use` for the handoff. Do not export browser state or copy login caches into project snapshots.
 
-## Mac: policy-wrapper session identity
+## Mac: stock agent-browser
 
-Use `agent-browser`, the policy wrapper, with the `agent-browser` skill for page commands. The wrapper keeps one browser session across shell calls and fixes its launch settings.
+On the Mac, `agent-browser` is the stock CLI that mise installs (`npm:agent-browser`). No wrapper or repository config sits in front of it. Use it with the `agent-browser` skill.
 
-Set the identity on every session command:
+Give each thread its own session with `--session <thread-specific-name>`, and repeat the flag in every shell call. A subagent uses a different session name; it does not drive the parent's session.
 
-```bash
-AB_THREAD=<actual-Amp-thread-ID> agent-browser open https://example.com
-```
+For a login that must survive closing the browser, pass `--profile <directory>` with a persistent profile directory and `--headed` so Chinh can complete human-only steps such as passkeys, OTPs or password managers. Tick "Remember me" when the site offers it. Never capture, export or log credentials, one-time codes, passkeys or cookies.
 
-Each shell tool call starts a fresh shell. Prefix every command, or `export` the variables within the same shell call. Amp does not provide the thread ID as an environment variable.
+A failed selector, stale reference or wait timeout is a normal page failure: take a new snapshot and retry. After an ambiguous consequential action, such as submit, payment or delete, inspect page and server-visible state before repeating it.
 
-Use these optional variables only when needed:
+Stock agent-browser silently starts a new browser at `about:blank` when the session's daemon has died or its launch options change. If a command unexpectedly lands on `about:blank`, treat page state and login as lost and reopen explicitly.
 
-- `AB_AGENT=<short-suffix>` gives a subagent its own ephemeral session.
-- `AB_PROFILE=<site-account-env>` selects a named profile, for example `holistics-us-support`.
-- `AB_HEADED=1` starts a headed session. Headless is the default.
-
-Keep the session open across turns. Do not close it between page commands or conversational turns. After choosing the intended tab, use `--pin-tab` so a missing tab fails instead of selecting another tab.
-
-One agent owns each session and each logged-in profile. Subagents use their own ephemeral sessions with `AB_AGENT`; they do not drive the parent's session or named profile.
-
-### Manual login
-
-Use a named profile whenever a login must survive session closure:
-
-1. Start headed Chrome with `AB_THREAD`, `AB_PROFILE` and `AB_HEADED=1`.
-2. Drive the page yourself. Pause only when Chinh must use a password manager, Touch ID, OTP or passkey.
-3. Verify the signed-in account before continuing.
-4. Keep driving the page after the human-only step.
-5. To return to headless mode, run `close` with the same headed identity. Reopen with the same `AB_THREAD` and `AB_PROFILE`, without `AB_HEADED`.
-
-A login survives `close` only when the site sets a persistent cookie. Tick the site's "Remember me" option before sign-in; session-only cookies are dropped whenever the browser closes or expires.
-
-Never capture, export or log credentials, one-time codes, passkeys or cookies.
-
-## Failures and recovery
-
-A failed selector, stale reference or wait timeout is a normal page failure. Take a new snapshot, inspect the current page and retry the page command. Do not replace the browser session.
-
-After an ambiguous consequential action, such as submit, payment or delete, inspect page and server-visible state before repeating it. The wrapper does not promise exactly-once execution.
-
-On the Mac, wrapper policy failures use these exit codes:
-
-- exit 3: another thread owns the session or profile. Use a different profile or ask the owner to close it.
-- exit 4: the session is not running. Page state is lost; reopen it explicitly with `open`.
-- exit 5: the live session uses the other display mode. Run `close`, then reopen with the intended mode.
-
-On the Mac, run `close` at the end of the task. Closure is complete when it exits 0. Never use `close --all`. Never launch Chrome directly or pass launch flags; the wrapper owns and rejects those flags.
-
-Enable the stream or dashboard only when the task needs a live view. The dashboard requires an explicit port.
+Run `close` with the same `--session` at the end of the task. Never use `close --all`, which closes other threads' sessions. Run `agent-browser doctor` when the install or launch misbehaves.
 
 ## Testing
 

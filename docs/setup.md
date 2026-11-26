@@ -63,7 +63,7 @@ Keep consuming-project customizations after the shared baseline, as SmartClass d
 
 ## Browser and desktop automation
 
-Agent Browser uses a pinned stock release. The version lives in `amp/agent-browser/version`. Sync installs it under `~/.local/libexec/agent-browser-stock`, and `bin/agent-browser` wraps it (RFC-0013).
+Agent Browser is the stock CLI, installed outside this repository (on Chinh's Mac through mise as `npm:agent-browser`). Sync does not install, pin or wrap it.
 
 Agent Desktop automates native desktop apps alongside the browser workflow. Sync projects the official skill pinned to v1.3.1, but it does not install the CLI or grant Accessibility permission. To set it up on a Mac:
 
