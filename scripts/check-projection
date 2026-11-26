@@ -15,21 +15,6 @@ mkdir -p "$tmp_home/.config/amp/github-thread-events/policies"
 touch "$tmp_home/.config/amp/github-thread-events/policies/stale.json"
 mkdir -p "$tmp_home/.config/amp/agent-secrets"
 touch "$tmp_home/.config/amp/agent-secrets/stale.json"
-# Last commit containing the retired lifecycle and annotation projections.
-legacy_commit=d5038c908dec29b5b9c2381bc1653e48ec0d2c22
-if ! git -C "$REPO_DIR" cat-file -e "$legacy_commit^{commit}" 2>/dev/null; then
-	git -C "$REPO_DIR" fetch --quiet --depth=1 origin "$legacy_commit"
-fi
-mkdir -p "$tmp_home/.config/amp/agent-browser-lifecycle"
-for file in README.md process_identity.py reference.md retired_cleanup.py schema.json; do
-	git -C "$REPO_DIR" show "$legacy_commit:amp/agent-browser-lifecycle/$file" \
-		> "$tmp_home/.config/amp/agent-browser-lifecycle/$file"
-done
-mkdir -p "$tmp_home/.config/amp/agent-browser-annotations"
-for file in README.md annotation.schema.json toolkit-core.js toolkit.js; do
-	git -C "$REPO_DIR" show "$legacy_commit:amp/agent-browser-annotations/$file" \
-		> "$tmp_home/.config/amp/agent-browser-annotations/$file"
-done
 mkdir -p "$tmp_home/.config/amp/conventions"
 touch "$tmp_home/.config/amp/conventions/stale.md"
 mkdir -p "$tmp_home/.cursor/rules"
@@ -40,76 +25,23 @@ mkdir -p "$tmp_home/.local/share/amp-cliproxy/auth"
 printf '%s\n' 'pre-existing-api-key' > "$tmp_home/.local/share/amp-cliproxy/api-key.txt"
 printf '%s\n' 'pre-existing-config' > "$tmp_home/.local/share/amp-cliproxy/config.yaml"
 printf '%s\n' 'pre-existing-auth' > "$tmp_home/.local/share/amp-cliproxy/auth/claude-existing.json"
-mkdir -p "$tmp_home/.agent-browser"
 mkdir -p "$tmp_home/.local/bin"
-ln -s "$REPO_DIR/bin/agent-browser-lifecycle" "$tmp_home/.local/bin/agent-browser-lifecycle"
 ln -s "$REPO_DIR/bin/definitely-retired" "$tmp_home/.local/bin/owned-broken-link"
-ln -s /tmp/foreign-plugin "$tmp_home/.local/bin/agent-browser-plugin-onepassword"
-printf '%s\n' 'foreign regular file' > "$tmp_home/.local/bin/agent-browser-credential-response"
-mkdir -p "$tmp_home/.local/libexec/agent-browser-rfc0011/agent-browser"
-mkdir -p "$tmp_home/.local/libexec/agent-browser-rfc0011/skill-data"
-touch "$tmp_home/.local/libexec/agent-browser-rfc0011/build-input.sha256"
-touch "$tmp_home/.local/libexec/agent-browser-rfc0011/skill-data.sha256"
-cat > "$tmp_home/.agent-browser/config.json" <<'JSON'
-{
-  "headed": false,
-  "plugins": [
-    {
-      "name": "unrelated",
-      "command": "/usr/bin/true",
-      "capabilities": ["command.run"]
-    },
-    {
-      "name": "onepassword",
-      "command": "HOME_PLACEHOLDER/.local/bin/agent-browser-plugin-onepassword",
-      "capabilities": ["credential.read"]
-    }
-  ]
-}
-JSON
-python3 - "$tmp_home/.agent-browser/config.json" "$tmp_home" <<'PY'
-import pathlib, sys
-path = pathlib.Path(sys.argv[1])
-path.write_text(path.read_text().replace("HOME_PLACEHOLDER", sys.argv[2]))
-PY
+ln -s /tmp/foreign-target "$tmp_home/.local/bin/foreign-broken-link"
 
 HOME="$tmp_home" \
 	AMP_CONFIG_DIR="$tmp_home/.config/amp" \
-	AGENT_SKILLS_SKIP_AGENT_BROWSER_INSTALL=1 \
 	"$REPO_DIR/sync-skills.sh" 2>"$tmp_home/first-sync.stderr"
 
-for path in \
-	"$tmp_home/.local/bin/agent-browser-lifecycle" \
-	"$tmp_home/.local/bin/owned-broken-link" \
-	"$tmp_home/.config/amp/agent-browser-lifecycle" \
-	"$tmp_home/.config/amp/agent-browser-annotations" \
-	"$tmp_home/.local/libexec/agent-browser-rfc0011"; do
-	if [ -e "$path" ] || [ -L "$path" ]; then
-		echo "error: migration did not remove owned legacy path $path" >&2
-		exit 1
-	fi
-done
-if [ ! -L "$tmp_home/.local/bin/agent-browser-plugin-onepassword" ] \
-	|| [ "$(readlink "$tmp_home/.local/bin/agent-browser-plugin-onepassword")" != /tmp/foreign-plugin ]; then
-	echo "error: migration changed a foreign legacy symlink" >&2
+if [ -e "$tmp_home/.local/bin/owned-broken-link" ] || [ -L "$tmp_home/.local/bin/owned-broken-link" ]; then
+	echo "error: projection did not remove a broken link to a retired bin script" >&2
 	exit 1
 fi
-if [ ! -f "$tmp_home/.local/bin/agent-browser-credential-response" ] \
-	|| [ "$(cat "$tmp_home/.local/bin/agent-browser-credential-response")" != "foreign regular file" ]; then
-	echo "error: migration changed a foreign legacy regular file" >&2
+if [ ! -L "$tmp_home/.local/bin/foreign-broken-link" ]; then
+	echo "error: projection removed a broken link it does not own" >&2
 	exit 1
 fi
-python3 - "$tmp_home/.agent-browser/config.json" <<'PY'
-import json
-import sys
 
-config = json.load(open(sys.argv[1]))
-assert config["headed"] is False
-assert [plugin["name"] for plugin in config["plugins"]] == ["unrelated"]
-PY
-
-agent_browser_config_once="$tmp_home/agent-browser-config.once"
-cp "$tmp_home/.agent-browser/config.json" "$agent_browser_config_once"
 cliproxy_api_key_once="$tmp_home/cliproxy-api-key.once"
 cliproxy_config_once="$tmp_home/cliproxy-config.once"
 cliproxy_auth_once="$tmp_home/cliproxy-auth.once"
@@ -117,44 +49,9 @@ cp "$tmp_home/.local/share/amp-cliproxy/api-key.txt" "$cliproxy_api_key_once"
 cp "$tmp_home/.local/share/amp-cliproxy/config.yaml" "$cliproxy_config_once"
 cp "$tmp_home/.local/share/amp-cliproxy/auth/claude-existing.json" "$cliproxy_auth_once"
 
-mkdir -p "$tmp_home/.config/amp/agent-browser-lifecycle"
-git -C "$REPO_DIR" show "$legacy_commit":amp/agent-browser-lifecycle/README.md \
-	> "$tmp_home/.config/amp/agent-browser-lifecycle/README.md"
-printf '%s\n' modified >> "$tmp_home/.config/amp/agent-browser-lifecycle/README.md"
-mkdir -p "$tmp_home/.config/amp/agent-browser-annotations"
-git -C "$REPO_DIR" show "$legacy_commit":amp/agent-browser-annotations/README.md \
-	> "$tmp_home/.config/amp/agent-browser-annotations/README.md"
-touch "$tmp_home/.config/amp/agent-browser-annotations/extra-file"
-mkdir -p "$tmp_home/.local/libexec/agent-browser-rfc0011/agent-browser"
-mkdir -p "$tmp_home/.local/libexec/agent-browser-rfc0011/skill-data"
-touch "$tmp_home/.local/libexec/agent-browser-rfc0011/build-input.sha256"
-touch "$tmp_home/.local/libexec/agent-browser-rfc0011/skill-data.sha256"
-touch "$tmp_home/.local/libexec/agent-browser-rfc0011/extra-file"
-
 HOME="$tmp_home" \
 	AMP_CONFIG_DIR="$tmp_home/.config/amp" \
-	AGENT_SKILLS_SKIP_AGENT_BROWSER_INSTALL=1 \
 	"$REPO_DIR/sync-skills.sh" >/dev/null 2>"$tmp_home/second-sync.stderr"
-
-for path in \
-	"$tmp_home/.config/amp/agent-browser-lifecycle/README.md" \
-	"$tmp_home/.config/amp/agent-browser-annotations/extra-file" \
-	"$tmp_home/.local/libexec/agent-browser-rfc0011/extra-file"; do
-	if [ ! -e "$path" ]; then
-		echo "error: migration removed modified legacy path $path" >&2
-		exit 1
-	fi
-done
-if ! grep -q 'preserving modified or unrecognized legacy directory' "$tmp_home/second-sync.stderr" \
-	|| ! grep -q 'preserving modified legacy directory' "$tmp_home/second-sync.stderr"; then
-	echo "error: migration did not warn about preserved legacy directories" >&2
-	exit 1
-fi
-
-if ! cmp -s "$agent_browser_config_once" "$tmp_home/.agent-browser/config.json"; then
-	echo "error: projection changed serialized agent-browser configuration on repeated sync" >&2
-	exit 1
-fi
 
 if ! cmp -s "$cliproxy_api_key_once" "$tmp_home/.local/share/amp-cliproxy/api-key.txt"; then
 	echo "error: projection changed an existing CLIProxyAPI key on repeated sync" >&2
@@ -332,12 +229,6 @@ fi
 agent_secrets="$tmp_home/.local/bin/agent-secrets"
 if [ ! -L "$agent_secrets" ] || [ "$(readlink "$agent_secrets")" != "$REPO_DIR/bin/agent-secrets" ] || [ ! -x "$agent_secrets" ]; then
 	echo "error: projection did not create an executable agent-secrets link" >&2
-	exit 1
-fi
-
-agent_browser="$tmp_home/.local/bin/agent-browser"
-if [ ! -L "$agent_browser" ] || [ "$(readlink "$agent_browser")" != "$REPO_DIR/bin/agent-browser" ] || [ ! -x "$agent_browser" ]; then
-	echo "error: projection did not create the agent-browser wrapper link" >&2
 	exit 1
 fi
 

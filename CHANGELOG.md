@@ -9,6 +9,7 @@ and this project does not currently use versioned releases.
 
 ### Changed
 
+- Remove the agent-browser policy wrapper, pinned stock install, migration code and their tests and CI job, so the Mac uses stock agent-browser from mise; withdraw RFC-0013. [#351](https://github.com/lelouvincx/agent-skills/pull/351)
 - Add the HyperFrames core skills (hyperframes, hyperframes-cli, hyperframes-registry, media-use) as pinned remote archive skills. [#350](https://github.com/lelouvincx/agent-skills/pull/350)
 - Teach the writing-linkedin-posts skill to earn clicks, not just reach: news-led hooks add what the news doesn't say, link calls to action name what's unique there and are flagged in the first two lines, and images tease rather than give away the result. [#349](https://github.com/lelouvincx/agent-skills/pull/349)
 - Add the writing-linkedin-posts skill, which critiques a post idea, works out what to implement, and drafts the hook, body and call to action for first-person proof and debate posts, with style and quality checks. [#348](https://github.com/lelouvincx/agent-skills/pull/348)

@@ -25,7 +25,6 @@ jobs:
     name: Select validation jobs
     runs-on: ubuntu-latest
     outputs:
-      agent_browser: ${{ steps.paths.outputs.agent_browser }}
       amp: ${{ steps.paths.outputs.amp }}
       plugins: ${{ steps.paths.outputs.plugins }}
       projection: ${{ steps.paths.outputs.projection }}
@@ -39,14 +38,6 @@ jobs:
         uses: dorny/paths-filter@d1c1ffe0248fe513906c8e24db8ea791d46f8590 # v3
         with:
           filters: |
-            agent_browser:
-              - "amp/agent-browser/**"
-              - "bin/agent-browser"
-              - "scripts/test_agent_browser_wrapper.py"
-              - "amp/scripts/migrate-agent-browser-config.py"
-              - "amp/scripts/test_migrate_agent_browser_config.py"
-              - "sync-skills.sh"
-              - ".github/workflows/ci.yml"
             amp:
               - "amp/agent-secrets/**"
               - "amp/github-thread-events/**"
@@ -180,36 +171,6 @@ jobs:
       - name: Validate Amp RFC docs
         run: python amp/scripts/validate-rfcs.py
 
-  validate-agent-browser:
-    name: Validate pinned stock agent-browser
-    needs: select-checks
-    if: needs.select-checks.outputs.agent_browser == 'true'
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-
-      - name: Install and verify pinned stock agent-browser
-        run: |
-          version="$(cat amp/agent-browser/version)"
-          npm install --prefix "$RUNNER_TEMP/ab" "agent-browser@$version"
-          stock="$RUNNER_TEMP/ab/node_modules/.bin/agent-browser"
-          test "$(AB_WRAPPER_STOCK="$stock" bin/agent-browser --version)" = "agent-browser $version"
-          export AB_WRAPPER_STOCK="$stock"
-          bin/agent-browser skills list
-          bin/agent-browser skills get core > /dev/null
-
-      - name: Test wrapper and legacy config migration
-        run: python3 -m unittest scripts/test_agent_browser_wrapper.py amp/scripts/test_migrate_agent_browser_config.py
-
   validate-project-registry:
     name: Validate project registry
     needs: select-checks
@@ -305,7 +266,6 @@ jobs:
     if: always()
     needs:
       - select-checks
-      - validate-agent-browser
       - validate-amp-artifacts
       - validate-project-registry
       - validate-projection
@@ -317,8 +277,6 @@ jobs:
       - name: Require successful applicable checks
         env:
           SELECT_RESULT: ${{ needs.select-checks.result }}
-          AGENT_BROWSER_SELECTED: ${{ needs.select-checks.outputs.agent_browser }}
-          AGENT_BROWSER_RESULT: ${{ needs.validate-agent-browser.result }}
           AMP_SELECTED: ${{ needs.select-checks.outputs.amp }}
           AMP_RESULT: ${{ needs.validate-amp-artifacts.result }}
           REGISTRY_SELECTED: ${{ needs.select-checks.outputs.registry }}
@@ -351,7 +309,6 @@ jobs:
             fi
           }
 
-          check_result "Agent Browser validation" "$AGENT_BROWSER_SELECTED" "$AGENT_BROWSER_RESULT"
           check_result "Amp validation" "$AMP_SELECTED" "$AMP_RESULT"
           check_result "Registry validation" "$REGISTRY_SELECTED" "$REGISTRY_RESULT"
           check_result "Projection validation" "$PROJECTION_SELECTED" "$PROJECTION_RESULT"

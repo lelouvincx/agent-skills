@@ -4,21 +4,15 @@ code: "RFC-0013"
 title: "Stock agent-browser sessions"
 slug: "stock-agent-browser-sessions"
 file: "rfc-0013-stock-agent-browser-sessions.md"
-status: "Accepted"
+status: "Withdrawn"
 summary: "Use pinned stock agent-browser behind a policy wrapper that fixes session identity, ownership, launch options and cleanup."
 created: "2026-09-26"
-updated: "2026-09-26"
+updated: "2026-11-26"
 amp_thread_id:
   T-01a0dc15-4c50-75eb-8ad4-f89d2ceaecbb: "researched 29 lifecycle threads, ran stock 0.38.1 E2E suite with Oracle, decided and implemented the replacement"
+  T-01a212b9-d82f-73b7-9203-fa1af76d62a0: "withdrew the wrapper and returned the Mac to plain stock agent-browser"
 dependency: []
-implementation:
-  - path: "../../../bin/agent-browser"
-  - path: "../../agent-browser/config.json"
-  - path: "../../agent-browser/version"
-  - path: "../../../sync-skills.sh"
-  - path: "../../conventions/agent-browser.md"
-  - path: "../../../scripts/test_agent_browser_wrapper.py"
-  - path: "../../scripts/migrate-agent-browser-config.py"
+implementation: []
 inputs:
   - name: "browser command"
     kind: "agent-browser CLI arguments and explicit Amp identity"
@@ -47,6 +41,8 @@ tags:
 # RFC-0013: Stock agent-browser sessions
 
 ## Summary
+
+Withdrawn on 26 November 2026. Chinh no longer needs the wrapper. The repository removed `bin/agent-browser`, the pinned stock install, its tests and its CI job. The Mac now runs plain stock agent-browser from mise, with no wrapper or config overrides. The rest of this RFC is kept as history.
 
 Replace the custom agent-browser build and lifecycle controller with stock agent-browser 0.38.1 behind a small policy wrapper. The wrapper gives each Amp thread a stable session, fixed launch options, exclusive ownership and explicit cleanup without changing stock page-command behavior.
 
