@@ -210,6 +210,26 @@ skills:
     url: https://raw.githubusercontent.com/humanlayer/skills/main/plugins/show-me/skills/show-me/SKILL.md
     enabled: true
 
+  - name: hyperframes
+    archive: https://codeload.github.com/heygen-com/hyperframes/tar.gz/a3c190dffe2a7361fcbebfe3ad6e75fc182b2c14
+    archive_path: skills/hyperframes
+    enabled: true
+
+  - name: hyperframes-cli
+    archive: https://codeload.github.com/heygen-com/hyperframes/tar.gz/a3c190dffe2a7361fcbebfe3ad6e75fc182b2c14
+    archive_path: skills/hyperframes-cli
+    enabled: true
+
+  - name: hyperframes-registry
+    archive: https://codeload.github.com/heygen-com/hyperframes/tar.gz/a3c190dffe2a7361fcbebfe3ad6e75fc182b2c14
+    archive_path: skills/hyperframes-registry
+    enabled: true
+
+  - name: media-use
+    archive: https://codeload.github.com/heygen-com/hyperframes/tar.gz/a3c190dffe2a7361fcbebfe3ad6e75fc182b2c14
+    archive_path: skills/media-use
+    enabled: true
+
   # Add more remote skills here:
   # - name: example-skill
   #   url: https://raw.githubusercontent.com/user/repo/main/skills/example/SKILL.md
